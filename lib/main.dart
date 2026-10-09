@@ -1,0 +1,47 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:get/get.dart';
+
+import 'app/app.dart';
+import 'app/navigation/app_navigator.dart';
+import 'core/analytics/analytics_service.dart';
+import 'core/bootstrap/app_bootstrap.dart';
+import 'core/network/api_client.dart';
+import 'features/main_shell/main_controller.dart';
+
+typedef DependencyBootstrapper = Future<AppDependencies> Function();
+typedef AppRunner = void Function(Widget app);
+typedef OrientationLocker = Future<void> Function();
+
+Future<void> main() => startHandaPeso();
+
+Future<void> startHandaPeso({
+  DependencyBootstrapper bootstrap = AppBootstrap.initialize,
+  AppRunner runApplication = runApp,
+  OrientationLocker lockOrientation = _lockPortrait,
+}) async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    CrashReporter.record(details.exception, details.stack ?? StackTrace.current);
+  };
+
+  await lockOrientation();
+  final dependencies = await bootstrap();
+
+  Get.put<AppDependencies>(dependencies, permanent: true);
+  Get.put<ApiClient>(dependencies.apiClient, permanent: true);
+  AppNavigator.mainTabSelector = (index) {
+    if (Get.isRegistered<MainController>()) {
+      Get.find<MainController>().selectTab(index);
+    }
+  };
+
+  AnalyticsService.logEvent(AppEvents.appOpen);
+  runApplication(HandaPesoApp(dependencies: dependencies));
+}
+
+Future<void> _lockPortrait() {
+  return SystemChrome.setPreferredOrientations(const [DeviceOrientation.portraitUp]);
+}
