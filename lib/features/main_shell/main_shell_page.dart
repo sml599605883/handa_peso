@@ -12,9 +12,24 @@ class MainShellPage extends GetView<MainController> {
   const MainShellPage({super.key});
 
   static const _tabs = <_ShellTab>[
-    _ShellTab(id: 'home', label: 'Home', icon: Icons.home_rounded),
-    _ShellTab(id: 'orders', label: 'Orders', icon: Icons.receipt_long_rounded),
-    _ShellTab(id: 'mine', label: 'Account', icon: Icons.person_rounded),
+    _ShellTab(
+      id: 'home',
+      label: 'Home',
+      activeIcon: 'assets/tab_home_active.png',
+      inactiveIcon: 'assets/tab_home_inactive.png',
+    ),
+    _ShellTab(
+      id: 'loan',
+      label: 'Loan',
+      activeIcon: 'assets/tab_loan_active.png',
+      inactiveIcon: 'assets/tab_loan_inactive.png',
+    ),
+    _ShellTab(
+      id: 'mine',
+      label: 'Mine',
+      activeIcon: 'assets/tab_mine_active.png',
+      inactiveIcon: 'assets/tab_mine_inactive.png',
+    ),
   ];
 
   @override
@@ -36,11 +51,17 @@ class MainShellPage extends GetView<MainController> {
 }
 
 class _ShellTab {
-  const _ShellTab({required this.id, required this.label, required this.icon});
+  const _ShellTab({
+    required this.id,
+    required this.label,
+    required this.activeIcon,
+    required this.inactiveIcon,
+  });
 
   final String id;
   final String label;
-  final IconData icon;
+  final String activeIcon;
+  final String inactiveIcon;
 }
 
 class _ShellNavigationBar extends StatelessWidget {
@@ -49,6 +70,23 @@ class _ShellNavigationBar extends StatelessWidget {
     required this.selectedIndex,
     required this.onSelected,
   });
+
+  /// Content height above the home-indicator safe area (design block_6).
+  static const double _contentHeight = 56;
+
+  /// Tab icon is a 90x90 @3x slice rendered at 30dp.
+  static const double _iconSize = 30;
+
+  /// Vertical breathing room above the icon row, below the top tick.
+  static const double _topPadding = AppSpacing.xs;
+  static const double _bottomPadding = 2;
+
+  /// Optical gap between icon and label (design uses a 2px offset).
+  static const double _iconLabelGap = 2;
+
+  /// Active-tab tick at the very top edge of the bar.
+  static const double _indicatorWidth = 12;
+  static const double _indicatorHeight = 2;
 
   final List<_ShellTab> tabs;
   final int selectedIndex;
@@ -60,23 +98,52 @@ class _ShellNavigationBar extends StatelessWidget {
     return DecoratedBox(
       decoration: const BoxDecoration(
         color: AppColors.surface,
-        border: Border(top: BorderSide(color: AppColors.divider)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
       ),
       child: Padding(
         padding: EdgeInsets.only(bottom: bottomInset),
         child: SizedBox(
-          height: 56,
-          child: Row(
-            children: [
-              for (var index = 0; index < tabs.length; index++)
-                Expanded(
-                  child: InkWell(
-                    key: Key('tab-${tabs[index].id}'),
-                    onTap: () => onSelected(index),
-                    child: _TabItem(tab: tabs[index], selected: index == selectedIndex),
+          height: _contentHeight,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final tabWidth = constraints.maxWidth / tabs.length;
+              final indicatorLeft =
+                  tabWidth * selectedIndex + (tabWidth - _indicatorWidth) / 2;
+              return Stack(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: _topPadding, bottom: _bottomPadding),
+                    child: Row(
+                      children: [
+                        for (var index = 0; index < tabs.length; index++)
+                          Expanded(
+                            child: InkWell(
+                              key: Key('tab-${tabs[index].id}'),
+                              onTap: () => onSelected(index),
+                              child: _TabItem(
+                                tab: tabs[index],
+                                selected: index == selectedIndex,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
-                ),
-            ],
+                  Positioned(
+                    top: 0,
+                    left: indicatorLeft,
+                    child: Container(
+                      width: _indicatorWidth,
+                      height: _indicatorHeight,
+                      decoration: const BoxDecoration(
+                        color: AppColors.tabActive,
+                        borderRadius: BorderRadius.vertical(top: Radius.circular(1)),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -92,15 +159,24 @@ class _TabItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? AppColors.primary : AppColors.textMuted;
+    final color = selected ? AppColors.tabActive : AppColors.tabInactive;
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(tab.icon, size: 24, color: color),
-        const SizedBox(height: AppSpacing.xxs),
+        Image.asset(
+          selected ? tab.activeIcon : tab.inactiveIcon,
+          width: _ShellNavigationBar._iconSize,
+          height: _ShellNavigationBar._iconSize,
+        ),
+        const SizedBox(height: _ShellNavigationBar._iconLabelGap),
         Text(
           tab.label,
-          style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w500),
+          style: TextStyle(
+            fontSize: 10,
+            height: 1.4,
+            color: color,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+          ),
         ),
       ],
     );

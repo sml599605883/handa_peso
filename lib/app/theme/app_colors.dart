@@ -34,6 +34,10 @@ abstract final class AppColors {
   static const danger = Color(0xFFE0483C);
   static const info = Color(0xFF2F80ED);
 
+  // Bottom navigation (design 02-01 tabbar)
+  static const tabActive = Color(0xFF7F4209);
+  static const tabInactive = Color(0xFF716F5F);
+
   // Effects
   static const shadow = Color(0x140F2B25);
   static const barrier = Color(0x66000000);
