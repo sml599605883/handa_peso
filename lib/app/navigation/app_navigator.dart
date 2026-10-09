@@ -1,6 +1,8 @@
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:get/get.dart';
 
+import '../../core/network/api_client.dart';
+import '../../core/session/session_store.dart';
 import '../routes/app_routes.dart';
 
 /// Navigation and feedback helpers shared by feature controllers.
@@ -10,8 +12,25 @@ import '../routes/app_routes.dart';
 abstract final class AppNavigator {
   static void Function(int index)? mainTabSelector;
 
-  static Future<void>? toLogin({String? redirect}) {
-    return Get.offAllNamed<void>(AppRoutes.login, arguments: redirect);
+  /// Pushes the login route on top of the current screen.
+  ///
+  /// Login is demand-driven: guests can browse the shell and are only asked to
+  /// authenticate when an action needs a session. Resolves to `true` when the
+  /// user completes sign-in.
+  static Future<bool> toLogin({String? redirect}) async {
+    final result = await Get.toNamed<bool>(AppRoutes.login, arguments: redirect);
+    return result ?? false;
+  }
+
+  /// Ensures a session exists, opening login if needed.
+  ///
+  /// Returns `true` when the caller may proceed with an authenticated action.
+  static Future<bool> requireSession({String? redirect}) async {
+    final store = _sessionStore();
+    if (store != null && (await store.sessionId()).isNotEmpty) {
+      return true;
+    }
+    return toLogin(redirect: redirect);
   }
 
   static Future<void>? toMain() => Get.offAllNamed<void>(AppRoutes.main);
@@ -43,4 +62,11 @@ abstract final class AppNavigator {
   static void showToast(String message) => EasyLoading.showToast(message);
 
   static void showError(String message) => EasyLoading.showError(message);
+
+  static SessionStore? _sessionStore() {
+    if (Get.isRegistered<ApiClient>()) {
+      return Get.find<ApiClient>().config.sessionStore;
+    }
+    return null;
+  }
 }

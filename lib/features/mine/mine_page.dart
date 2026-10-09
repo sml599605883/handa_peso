@@ -13,13 +13,19 @@ class MinePage extends GetView<MainController> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Account')),
-      body: ListView(
-        padding: const EdgeInsets.all(AppSpacing.screenPadding),
-        children: [
-          _ProfileHeader(phone: controller.phoneNumber.value),
-          const SizedBox(height: AppSpacing.md),
+    return Obx(() {
+      final signedIn = controller.phoneNumber.value.isNotEmpty;
+      return Scaffold(
+        appBar: AppBar(title: const Text('Account')),
+        body: ListView(
+          padding: const EdgeInsets.all(AppSpacing.screenPadding),
+          children: [
+            _ProfileHeader(phone: controller.phoneNumber.value, signedIn: signedIn),
+            if (!signedIn) ...[
+              const SizedBox(height: AppSpacing.sm),
+              const _SignInCard(),
+            ],
+            const SizedBox(height: AppSpacing.md),
           _MenuGroup(
             items: [
               _MenuItem(
@@ -62,34 +68,38 @@ class MinePage extends GetView<MainController> {
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.sm),
-          _MenuGroup(
-            items: [
-              _MenuItem(
-                icon: Icons.delete_outline_rounded,
-                label: 'Delete account',
-                onTap: () => Get.toNamed<void>(AppRoutes.accountDeletion),
+            if (signedIn) ...[
+              const SizedBox(height: AppSpacing.sm),
+              _MenuGroup(
+                items: [
+                  _MenuItem(
+                    icon: Icons.delete_outline_rounded,
+                    label: 'Delete account',
+                    onTap: () => Get.toNamed<void>(AppRoutes.accountDeletion),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.md),
+              OutlinedButton(
+                key: const Key('mine-sign-out'),
+                onPressed: controller.logout,
+                child: const Text('Sign out'),
               ),
             ],
-          ),
-          const SizedBox(height: AppSpacing.md),
-          OutlinedButton(
-            key: const Key('mine-sign-out'),
-            onPressed: controller.logout,
-            child: const Text('Sign out'),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          const Center(child: _VersionLabel()),
-        ],
-      ),
-    );
+            const SizedBox(height: AppSpacing.sm),
+            const Center(child: _VersionLabel()),
+          ],
+        ),
+      );
+    });
   }
 }
 
 class _ProfileHeader extends StatelessWidget {
-  const _ProfileHeader({required this.phone});
+  const _ProfileHeader({required this.phone, required this.signedIn});
 
   final String phone;
+  final bool signedIn;
 
   @override
   Widget build(BuildContext context) {
@@ -111,17 +121,47 @@ class _ProfileHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Handa Peso member',
+                'Handa Peso',
                 style: TextStyle(color: AppColors.textOnPrimary, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: AppSpacing.xxs),
               Text(
-                phone.isEmpty ? 'Not signed in' : phone,
+                signedIn ? phone : 'Browsing as guest',
                 style: const TextStyle(color: AppColors.onPrimaryMuted, fontSize: 13),
               ),
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SignInCard extends StatelessWidget {
+  const _SignInCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.cardPadding),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Sign in for the full experience', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'View your orders, track repayment and manage your account.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            FilledButton(
+              key: const Key('mine-sign-in'),
+              onPressed: () => AppNavigator.toLogin(),
+              child: const Text('Sign in'),
+            ),
+          ],
+        ),
       ),
     );
   }

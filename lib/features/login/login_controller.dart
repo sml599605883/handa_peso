@@ -8,6 +8,7 @@ import '../../core/network/api_client.dart';
 import '../../core/network/api_endpoints.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/session/session_store.dart';
+import '../main_shell/main_controller.dart';
 
 /// Drives the phone + SMS login flow.
 class LoginController extends GetxController {
@@ -92,7 +93,14 @@ class LoginController extends GetxController {
       await sessionStore.savePhone(phone.value);
       AnalyticsService.setUserId(phone.value);
       AnalyticsService.logEvent(AppEvents.loginSuccess);
-      await AppNavigator.toMain();
+      if (Get.isRegistered<MainController>()) {
+        await Get.find<MainController>().onSessionStarted(phone.value);
+      }
+      if (Get.key.currentState?.canPop() ?? false) {
+        Get.back<bool>(result: true);
+      } else {
+        await AppNavigator.toMain();
+      }
     } on ApiException catch (error) {
       errorText.value = error.message;
       CrashReporter.record(error, StackTrace.current);

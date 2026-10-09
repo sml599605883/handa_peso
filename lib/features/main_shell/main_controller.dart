@@ -56,8 +56,18 @@ class MainController extends GetxController {
 
   Future<void> refreshHome() => loadHome(force: true);
 
+  /// Re-syncs guest state after a successful sign-in from any screen.
+  Future<void> onSessionStarted(String phone) async {
+    phoneNumber.value = phone;
+    _loadedOnce = false;
+    await loadHome(force: true);
+  }
+
   Future<void> applyNow(String productId) async {
     AnalyticsService.logEvent(AppEvents.applyNowTapped, {'product_id': productId});
+    if (!await AppNavigator.requireSession(redirect: productId)) {
+      return;
+    }
     final profileComplete = await sessionStore.profileComplete();
     if (!profileComplete) {
       await AppNavigator.toCertification();
@@ -74,7 +84,10 @@ class MainController extends GetxController {
     } finally {
       await sessionStore.clear();
       AnalyticsService.setUserId(null);
-      await AppNavigator.toLogin();
+      homeData.value = null;
+      phoneNumber.value = '';
+      _loadedOnce = false;
+      await loadHome(force: true);
     }
   }
 

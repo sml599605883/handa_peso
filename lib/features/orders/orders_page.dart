@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
+import '../../app/navigation/app_navigator.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/network/api_client.dart';
 import '../../core/network/api_endpoints.dart';
@@ -25,6 +26,7 @@ class _OrdersPageState extends State<OrdersPage> {
   List<OrderItem>? _orders;
   String? _error;
   bool _loading = true;
+  bool _needsLogin = false;
 
   @override
   void initState() {
@@ -38,6 +40,15 @@ class _OrdersPageState extends State<OrdersPage> {
       _error = null;
     });
     try {
+      final sessionId = await _apiClient.config.sessionStore.sessionId();
+      if (sessionId.isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _needsLogin = true;
+          _loading = false;
+        });
+        return;
+      }
       final response = await _apiClient.get(ApiEndpoints.orderList);
       final items = response.data['list'] is List
           ? (response.data['list'] as List)
@@ -48,6 +59,7 @@ class _OrdersPageState extends State<OrdersPage> {
       if (!mounted) return;
       setState(() {
         _orders = items;
+        _needsLogin = false;
         _loading = false;
       });
     } on ApiException catch (error) {
@@ -71,6 +83,21 @@ class _OrdersPageState extends State<OrdersPage> {
   Widget _buildBody() {
     if (_loading) {
       return const Center(child: CircularProgressIndicator());
+    }
+    if (_needsLogin) {
+      return AppEmptyState(
+        icon: Icons.lock_outline_rounded,
+        title: 'Sign in to view your orders',
+        description: 'You can browse offers as a guest. Signing in shows your loans.',
+        action: FilledButton(
+          key: const Key('orders-sign-in'),
+          onPressed: () async {
+            final signedIn = await AppNavigator.toLogin();
+            if (signedIn && mounted) _load();
+          },
+          child: const Text('Sign in'),
+        ),
+      );
     }
     if (_error != null) {
       return AppEmptyState(

@@ -25,7 +25,17 @@ class LoginPage extends GetView<LoginController> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: AppSpacing.xl),
+              if (Navigator.of(context).canPop())
+                IconButton(
+                  key: const Key('login-back'),
+                  padding: EdgeInsets.zero,
+                  alignment: Alignment.centerLeft,
+                  onPressed: () => Get.back<void>(),
+                  icon: const Icon(Icons.arrow_back_rounded),
+                )
+              else
+                const SizedBox(height: AppSpacing.xl),
+              const SizedBox(height: AppSpacing.sm),
               Text('Welcome back', style: textTheme.headlineSmall),
               const SizedBox(height: AppSpacing.xs),
               Text(

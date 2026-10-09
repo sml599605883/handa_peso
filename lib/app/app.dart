@@ -16,7 +16,6 @@ import '../features/main_shell/main_binding.dart';
 import '../features/main_shell/main_shell_page.dart';
 import '../features/mine/account_deletion_page.dart';
 import '../features/orders/orders_page.dart';
-import '../features/splash/splash_page.dart';
 import '../features/support/support_page.dart';
 import '../features/webview/app_webview_page.dart';
 
@@ -34,9 +33,8 @@ class HandaPesoApp extends StatelessWidget {
       builder: EasyLoading.init(),
       navigatorObservers: [appRouteObserver, AnalyticsRouteObserver()],
       initialBinding: MainBinding(appDependencies: dependencies),
-      initialRoute: AppRoutes.splash,
+      initialRoute: AppRoutes.main,
       getPages: [
-        GetPage(name: AppRoutes.splash, page: () => const SplashPage()),
         GetPage(
           name: AppRoutes.login,
           page: () => const LoginPage(),
