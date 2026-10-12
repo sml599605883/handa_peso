@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'app_colors.dart';
 import 'app_spacing.dart';
 
-/// Builds the single [ThemeData] used across the app from design tokens.
+/// 依据设计令牌构建全应用共用的唯一 [ThemeData]。
 abstract final class AppTheme {
   static ThemeData light() {
     final colorScheme = ColorScheme.fromSeed(

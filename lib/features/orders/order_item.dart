@@ -1,7 +1,7 @@
 import '../../core/json/json_utils.dart';
 import '../../core/money/money.dart';
 
-/// Loan order status as presented in the order list.
+/// 订单列表中展示的借款订单状态。
 enum OrderStatus {
   reviewing('Under review'),
   disbursing('Disbursing'),
@@ -52,10 +52,10 @@ class OrderItem {
   final Money amount;
   final OrderStatus status;
 
-  /// Original contractual due date (`origin_end_time`).
+  /// 原始合同应还日期（`origin_end_time`）。
   ///
-  /// Overdue analytics must be derived from this field rather than any
-  /// adjusted/extension date, otherwise repayment statistics drift.
+  /// 逾期统计必须基于该字段，而不是任何调整/展期后的日期，
+  /// 否则还款统计会出现偏差。
   final DateTime? dueDate;
 
   bool get isOverdue {

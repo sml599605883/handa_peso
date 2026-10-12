@@ -1,10 +1,10 @@
 import 'package:permission_handler/permission_handler.dart';
 
-/// Outcome of a permission request, normalised for the UI.
+/// 权限请求的结果，已为 UI 归一化处理。
 enum PermissionDecision { granted, denied, permanentlyDenied, restricted }
 
-/// Centralises permission prompts so every request has a consistent rationale
-/// and complies with App Store / Google Play disclosure requirements.
+/// 集中管理权限弹窗，使每次请求都有一致的说明理由，
+/// 并符合 App Store / Google Play 的信息披露要求。
 class PermissionCoordinator {
   const PermissionCoordinator();
 

@@ -1,8 +1,7 @@
-/// Lightweight, defensive helpers for reading loosely-typed API payloads.
+/// 用于读取弱类型 API 载荷的轻量、防御式辅助方法。
 ///
-/// Backend responses are frequently inconsistent (missing keys, `null` in place
-/// of numbers, strings where numbers are expected). These extensions keep the
-/// parsing code readable without pulling a heavy code-generation layer.
+/// 后端响应常常不一致（键缺失、用 `null` 代替数字、本该是数字却返回字符串）。
+/// 这些扩展方法让解析代码保持可读，同时无需引入笨重的代码生成层。
 extension JsonMap on Map<String, dynamic> {
   Map<String, dynamic>? mapOrNull(String key) {
     final value = this[key];

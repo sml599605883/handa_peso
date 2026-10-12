@@ -1,10 +1,9 @@
 import 'package:encrypt/encrypt.dart';
 
-/// AES-CBC helper for the reporting endpoints whose payload must be encrypted
-/// before it leaves the device (device details, contacts, ...).
+/// 用于上报类接口的 AES-CBC 辅助工具，这类接口的载荷必须在离开设备前
+/// 完成加密（设备详情、通讯录等）。
 ///
-/// The key and IV are injected at build time; they are never persisted on the
-/// device and never logged.
+/// 密钥与 IV 在构建时注入，绝不持久化到设备上，也绝不写入日志。
 class ApiCrypto {
   ApiCrypto({required String key, required String iv})
     : _key = Key.fromUtf8(key),

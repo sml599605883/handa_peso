@@ -23,7 +23,7 @@ void main() {
 
     expect(find.text('HANDA PESO'), findsOneWidget);
     expect(find.text('Available up to'), findsOneWidget);
-    // Two layers (hard shadow + gradient fill) paint the same amount.
+    // 两层（硬投影 + 渐变填充）绘制同一个金额。
     expect(find.text('₱50,000.00'), findsNWidgets(2));
     expect(find.text('Loan terms'), findsOneWidget);
     expect(find.text('180 Days'), findsOneWidget);

@@ -11,7 +11,7 @@ import '../../core/network/api_exception.dart';
 import '../main_shell/main_shell_page.dart';
 import 'order_item.dart';
 
-/// Order list with explicit loading, error and empty states.
+/// 带显式 loading、error 和 empty 状态的订单列表。
 class OrdersPage extends StatefulWidget {
   const OrdersPage({super.key});
 

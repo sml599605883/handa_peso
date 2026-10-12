@@ -2,10 +2,10 @@ import 'package:decimal/decimal.dart';
 
 import '../../core/money/money.dart';
 
-/// A computed, ready-to-render repayment plan.
+/// 计算完成、可直接用于渲染的还款计划。
 ///
-/// All arithmetic is done with [Decimal]/integer minor units so displayed
-/// amounts always reconcile with the schedule to the centavo.
+/// 所有运算均使用 [Decimal]/整数最小货币单位，因此展示的金额与还款计划表
+/// 始终精确到分（centavo）地对齐。
 class LoanPlan {
   LoanPlan._({
     required this.principal,
@@ -14,7 +14,7 @@ class LoanPlan {
     required List<LoanInstallment> schedule,
   }) : schedule = List.unmodifiable(schedule);
 
-  /// Flat-interest plan: interest is charged per period on the full principal.
+  /// 平息方案：每期均按全额本金计息。
   factory LoanPlan.build({
     required Money principal,
     required int periods,
@@ -72,7 +72,7 @@ class LoanPlan {
 
   Money get perPeriodPayment => schedule.isEmpty ? Money.zero : schedule.first.payment;
 
-  /// Splits an amount into [parts] roughly equal minor-unit chunks.
+  /// 将金额拆分为 [parts] 个大致相等的最小货币单位份额。
   static Money _split(Money total, int parts) {
     final base = total.minorUnits ~/ parts;
     return Money.fromMinor(base);

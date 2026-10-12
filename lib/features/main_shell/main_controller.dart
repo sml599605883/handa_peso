@@ -8,7 +8,7 @@ import '../../core/network/api_exception.dart';
 import '../../core/session/session_store.dart';
 import '../home/home_data.dart';
 
-/// Owns the state for the three-tab shell and the shared home feed.
+/// 管理三 Tab 外壳及共享首页信息流的状态。
 class MainController extends GetxController {
   MainController({required this.apiClient, required this.sessionStore});
 
@@ -55,7 +55,7 @@ class MainController extends GetxController {
 
   Future<void> refreshHome() => loadHome(force: true);
 
-  /// Re-syncs guest state after a successful sign-in from any screen.
+  /// 在任意页面登录成功后重新同步游客状态。
   Future<void> onSessionStarted(String phone) async {
     phoneNumber.value = phone;
     _loadedOnce = false;

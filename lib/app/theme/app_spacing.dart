@@ -1,9 +1,9 @@
-/// Spacing and radius tokens.
+/// 间距与圆角令牌。
 ///
-/// The design system is built on an 8dp grid; every value here is a multiple of
-/// 8 so layouts stay visually consistent across screens.
+/// 设计系统基于 8dp 网格；此处每个数值都是 8 的倍数，
+/// 以保证各页面布局的视觉一致性。
 abstract final class AppSpacing {
-  /// Optical hairline used only to nudge icon/text baselines.
+  /// 仅用于微调图标/文字基线的视觉细线间距。
   static const double xxs = 4;
   static const double xs = 8;
   static const double sm = 16;

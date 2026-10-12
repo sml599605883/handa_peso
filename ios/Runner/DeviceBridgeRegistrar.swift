@@ -2,12 +2,11 @@ import Flutter
 import Security
 import UIKit
 
-/// Native bridge that exposes the device identity used by the gateway's signed
-/// public parameters.
+/// 原生桥接，向网关的签名公有参数暴露设备身份信息。
 ///
-/// The Dart layer calls `getPlatformInfo` on `handa_peso/device_bridge`; the
-/// hardware model, OS version, bundle versions and a Keychain-stable IDFV are
-/// returned so requests can be signed with data that survives reinstalls.
+/// Dart 层通过 `handa_peso/device_bridge` 调用 `getPlatformInfo`；返回硬件型号、
+/// 系统版本、bundle 版本以及 Keychain 稳定的 IDFV，
+/// 从而可用重装后依然保留的数据来签名请求。
 final class DeviceBridgeRegistrar: NSObject {
   static let shared = DeviceBridgeRegistrar()
 
@@ -47,8 +46,8 @@ final class DeviceBridgeRegistrar: NSObject {
     }
   }
 
-  /// Hardware identifier such as `iPhone15,2`, falling back to the generic
-  /// device model when `uname` is unavailable.
+  /// 形如 `iPhone15,2` 的硬件标识；当 `uname` 不可用时，
+  /// 回退为通用的设备型号。
   private func deviceModelIdentifier() -> String {
     var systemInfo = utsname()
     uname(&systemInfo)
@@ -60,8 +59,8 @@ final class DeviceBridgeRegistrar: NSObject {
     return identifier.isEmpty ? UIDevice.current.model : identifier
   }
 
-  /// IDFV cached in the Keychain so the identifier survives reinstalls, which
-  /// keeps the signed public parameters stable for the same device.
+  /// 缓存在 Keychain 中的 IDFV，使标识在重装应用后依然保留，
+  /// 从而让同一设备的签名公有参数保持稳定。
   private func stableVendorIdentifier() -> String {
     if let stored = keychainValue(service: keychainService, account: keychainAccount),
        !stored.isEmpty {

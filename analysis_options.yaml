@@ -1,12 +1,12 @@
-# This file configures the analyzer, which statically analyzes Dart code to
-# check for errors, warnings, and lints.
+# 本文件用于配置分析器（analyzer），它通过静态分析 Dart 代码来
+# 检查错误、警告和 lint。
 #
-# The issues identified by the analyzer are surfaced in the UI of Dart-enabled
-# IDEs (https://dart.dev/tools#ides-and-editors). The analyzer can also be
-# invoked from the command line by running `flutter analyze`.
+# 分析器发现的问题会显示在支持 Dart 的 IDE 界面中
+# （https://dart.dev/tools#ides-and-editors）。也可以通过命令行
+# 运行 `flutter analyze` 来调用分析器。
 
-# The following line activates a set of recommended lints for Flutter apps,
-# packages, and plugins designed to encourage good coding practices.
+# 下面这行启用一套为 Flutter 应用、包和插件推荐的 lint，
+# 旨在鼓励良好的编码实践。
 include: package:flutter_lints/flutter.yaml
 
 analyzer:
@@ -15,19 +15,16 @@ analyzer:
     - ios/**
 
 linter:
-  # The lint rules applied to this project can be customized in the
-  # section below to disable rules from the `package:flutter_lints/flutter.yaml`
-  # included above or to enable additional rules. A list of all available lints
-  # and their documentation is published at https://dart.dev/lints.
+  # 本项目应用的 lint 规则可在下面的配置节中自定义：可停用上面包含的
+  # `package:flutter_lints/flutter.yaml` 中的规则，或启用额外的规则。
+  # 所有可用 lint 及其文档发布在 https://dart.dev/lints。
   #
-  # Instead of disabling a lint rule for the entire project in the
-  # section below, it can also be suppressed for a single line of code
-  # or a specific dart file by using the `// ignore: name_of_lint` and
-  # `// ignore_for_file: name_of_lint` syntax on the line or in the file
-  # producing the lint.
+  # 除了在下面的配置节中为整个项目停用某条 lint 规则外，也可以通过
+  # `// ignore: name_of_lint` 和 `// ignore_for_file: name_of_lint` 语法，
+  # 在产生该 lint 的单行代码或特定 dart 文件中抑制它。
   rules:
-    # avoid_print: false  # Uncomment to disable the `avoid_print` rule
-    # prefer_single_quotes: true  # Uncomment to enable the `prefer_single_quotes` rule
+    # avoid_print: false  # 取消注释可停用 `avoid_print` 规则
+    # prefer_single_quotes: true  # 取消注释可启用 `prefer_single_quotes` 规则
 
-# Additional information about this file can be found at
+# 关于本文件的更多信息，请参阅
 # https://dart.dev/guides/language/analysis-options

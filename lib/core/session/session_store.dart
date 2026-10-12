@@ -1,10 +1,9 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Persists the small amount of state that must survive a cold start.
+/// 持久化少量必须跨冷启动保留的状态。
 ///
-/// Tokens and PII are intentionally kept out of this store; only the opaque
-/// session id, the signed-in phone number and lightweight UI preferences are
-/// written here.
+/// 令牌和 PII 被有意排除在该存储之外；这里只写入不透明的会话 id、
+/// 已登录的手机号以及轻量级的 UI 偏好设置。
 class SessionStore {
   SessionStore(this._preferences) : _memory = null;
 
@@ -26,7 +25,7 @@ class SessionStore {
 
   Future<void> savePhone(String value) => _setString(_phoneKey, value);
 
-  /// Human-readable device name resolved from the gateway (public parameter).
+  /// 从网关解析得到的可读设备名称（公有参数）。
   Future<String> deviceName() async => (await _string(_deviceNameKey)) ?? '';
 
   Future<void> saveDeviceName(String value) =>

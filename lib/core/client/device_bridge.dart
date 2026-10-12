@@ -2,11 +2,10 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/services.dart';
 
-/// Device identity read from the native iOS layer.
+/// 从原生 iOS 层读取的设备身份信息。
 ///
-/// [platform] is the hardware identifier (e.g. `iPhone15,2`), [deviceId] is a
-/// Keychain-backed IDFV that stays stable across reinstalls, and the version
-/// fields feed the app's signed public parameters.
+/// [platform] 是硬件标识（例如 `iPhone15,2`），[deviceId] 是 Keychain 支撑的
+/// IDFV，在重装应用后仍保持稳定，版本字段则用于填充应用的签名公有参数。
 class ClientPlatformInfo {
   const ClientPlatformInfo({
     required this.platform,
@@ -35,10 +34,10 @@ class ClientPlatformInfo {
   static String _stringValue(Object? value) => value?.toString() ?? '';
 }
 
-/// Thin wrapper over the `handa_peso/device_bridge` method channel.
+/// 对 `handa_peso/device_bridge` 方法通道的轻量封装。
 ///
-/// Every call degrades gracefully when the channel is unavailable (unit tests,
-/// non-iOS hosts) so callers never have to guard for platform failures.
+/// 当通道不可用时（单元测试、非 iOS 宿主环境），每次调用都会优雅降级，
+/// 因此调用方无需自行防范平台层面的失败。
 class DeviceBridge {
   DeviceBridge({bool? supported, MethodChannel? channel})
     : _supported = supported ?? Platform.isIOS,
@@ -60,7 +59,7 @@ class DeviceBridge {
       if (result == null) return null;
       return ClientPlatformInfo.fromMap(result);
     } on MissingPluginException {
-      // The native bridge is still registering during a cold start.
+      // 冷启动期间原生桥接仍在注册中。
       return null;
     } on PlatformException {
       return null;

@@ -1,25 +1,25 @@
 import 'package:decimal/decimal.dart';
 import 'package:intl/intl.dart';
 
-/// Immutable monetary value stored as integer minor units (centavos).
+/// 以整数最小货币单位（分/centavos）存储的不可变金额值。
 ///
-/// Financial code must never use `double` for money. [Money] keeps an exact
-/// integer representation and only converts to [Decimal] for arithmetic, so
-/// rounding behaviour stays deterministic across iOS, Android and Flutter.
+/// 金融代码绝不能使用 `double` 表示金额。[Money] 保留精确的整数表示，
+/// 仅在参与运算时转换为 [Decimal]，从而保证舍入行为在 iOS、Android 和
+/// Flutter 上保持一致。
 final class Money implements Comparable<Money> {
   const Money._(this.minorUnits, this.currency);
 
-  /// Builds a value from an integer amount of minor units (e.g. centavos).
+  /// 以整数最小货币单位（如 centavos）构造金额值。
   factory Money.fromMinor(int minorUnits, {String currency = php}) {
     return Money._(minorUnits, currency);
   }
 
-  /// Builds a value from a whole-unit amount, e.g. `Money.fromMajor(1500)`.
+  /// 以整数主单位构造金额值，例如 `Money.fromMajor(1500)`。
   factory Money.fromMajor(num amount, {String currency = php}) {
     return Money.fromDecimal(Decimal.parse(amount.toString()), currency: currency);
   }
 
-  /// Builds a value from a decimal amount measured in major units (pesos).
+  /// 以主单位（比索）的十进制金额构造金额值。
   factory Money.fromDecimal(Decimal amount, {String currency = php}) {
     final minor = (amount * Decimal.fromInt(_minorPerMajor)).round();
     return Money._(minor.toBigInt().toInt(), currency);
@@ -50,12 +50,12 @@ final class Money implements Comparable<Money> {
 
   Money operator *(int factor) => Money._(minorUnits * factor, currency);
 
-  /// Multiplies by an arbitrary ratio and rounds half-up to the nearest cent.
+  /// 乘以任意比例，并按四舍五入取整到最近的 1 分。
   Money multipliedBy(Decimal ratio) {
     return Money.fromDecimal(decimalValue * ratio, currency: currency);
   }
 
-  /// Formats as grouped currency, e.g. `PHP 1,234.56`.
+  /// 格式化为带千分位的货币形式，例如 `PHP 1,234.56`。
   String format({bool withSymbol = true, bool withCode = false}) {
     final formatter = NumberFormat('#,##0.00', 'en_PH');
     final major = formatter.format(minorUnits.abs() / _minorPerMajor);
@@ -71,7 +71,7 @@ final class Money implements Comparable<Money> {
     return '$code$symbol$signed';
   }
 
-  /// Formats as grouped digits only, e.g. `1,234.56` (no currency symbol).
+  /// 仅格式化为带千分位的数字，例如 `1,234.56`（不含货币符号）。
   String formatPlain() => format(withSymbol: false);
 
   @override

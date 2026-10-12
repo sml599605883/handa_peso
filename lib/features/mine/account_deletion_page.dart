@@ -8,7 +8,7 @@ import '../../core/analytics/analytics_service.dart';
 import '../../core/network/api_client.dart';
 import '../../core/network/api_exception.dart';
 
-/// In-app account deletion, required by both App Store 5.1.1(v) and Play policy.
+/// 应用内账号注销，App Store 5.1.1(v) 与 Google Play 政策均有要求。
 class AccountDeletionPage extends StatefulWidget {
   const AccountDeletionPage({super.key});
 

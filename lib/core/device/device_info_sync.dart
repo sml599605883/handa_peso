@@ -5,14 +5,12 @@ import '../network/api_client.dart';
 import '../network/api_config.dart';
 import '../session/session_store.dart';
 
-/// Fills the gateway's device public parameters.
+/// 填充网关所需的设备公有参数。
 ///
-/// The native layer supplies the hardware identifier, OS version and a
-/// Keychain-stable IDFV without touching the network, so [applyDeviceIdentity]
-/// can run before the first frame. The human-readable device name needs a
-/// gateway round-trip, so [resolveDeviceName] runs afterwards and is entirely
-/// best-effort: the signed request keeps working with the hardware identifier
-/// as a fallback.
+/// 原生层无需联网即可提供硬件标识、系统版本以及 Keychain 稳定的 IDFV，
+/// 因此 [applyDeviceIdentity] 可以在首帧之前执行。可读设备名称需要一次
+/// 网关往返，所以 [resolveDeviceName] 随后执行且完全尽力而为：即使失败，
+/// 签名请求仍会以硬件标识作为兜底继续工作。
 class DeviceInfoSync {
   const DeviceInfoSync({
     required this.apiClient,
@@ -28,8 +26,8 @@ class DeviceInfoSync {
   final int attempts;
   final Duration retryDelay;
 
-  /// Applies the local device identity to [config] and returns the hardware
-  /// identifier, or `null` when the native bridge is unavailable.
+  /// 将本地设备身份写入 [config] 并返回硬件标识；
+  /// 当原生桥接不可用时返回 `null`。
   Future<String?> applyDeviceIdentity(ApiConfig config) async {
     final info = await _platformInfo();
     if (info != null) {
@@ -44,10 +42,9 @@ class DeviceInfoSync {
     return info?.platform;
   }
 
-  /// Resolves the display device name for [modelIdentifier] via the gateway.
+  /// 通过网关解析 [modelIdentifier] 对应的显示设备名称。
   ///
-  /// Never throws: a failure leaves the hardware identifier in place so the
-  /// next requests are still correctly signed.
+  /// 永不抛异常：失败时保留硬件标识，从而保证后续请求仍能被正确签名。
   Future<void> resolveDeviceName(
     ApiConfig config,
     String modelIdentifier,
@@ -70,7 +67,7 @@ class DeviceInfoSync {
         config.deviceName = name;
       }
     } catch (_) {
-      // Device-name lookup is best-effort and must not affect startup.
+      // 设备名称查询是尽力而为的，不得影响启动。
     }
   }
 
@@ -84,9 +81,9 @@ class DeviceInfoSync {
           return info;
         }
       } on MissingPluginException {
-        // The implicit Flutter engine may still be registering its channels.
+        // 隐式 Flutter 引擎可能仍在注册其通道。
       } on PlatformException {
-        // Retry transient channel failures during a cold start.
+        // 冷启动期间重试偶发的通道失败。
       } on UnsupportedError {
         return null;
       }

@@ -6,7 +6,7 @@ import '../../core/analytics/analytics_service.dart';
 import '../../core/network/api_client.dart';
 import '../../core/network/api_exception.dart';
 
-/// Support centre: self-service FAQ plus a native ticket form.
+/// 客服中心：自助 FAQ 以及原生工单表单。
 class SupportPage extends StatefulWidget {
   const SupportPage({super.key});
 

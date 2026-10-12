@@ -6,17 +6,15 @@ typedef AuthExpiredHandler = Future<void> Function();
 typedef TimestampProvider = int Function();
 typedef RandomDigitsProvider = String Function(int length);
 
-/// Runtime configuration for the API client.
+/// API 客户端的运行时配置。
 ///
-/// The gateway signs every request with an app-scoped secret and obfuscated
-/// public parameters, so the market string, signing secret and reporting AES
-/// keys are all specific to Handa Peso. Override any of them at build time with
-/// `--dart-define` (e.g. `API_SIGN_SECRET=...`, `API_BASE_URL=...`) without
-/// touching source.
+/// 网关会用应用专属密钥和混淆后的公有参数对每个请求签名，因此市场标识、
+/// 签名密钥以及上报用的 AES 密钥都是 Handa Peso 专属的。可在构建时通过
+/// `--dart-define`（例如 `API_SIGN_SECRET=...`、`API_BASE_URL=...`）覆盖
+/// 其中任意一项，而无需改动源码。
 ///
-/// Hosts default to the environment provided by the backend and can be
-/// overridden per build; the app also supports a runtime domain switch driven
-/// by the server.
+/// 域名默认使用后端提供的环境，也可按构建覆盖；应用同时支持由服务端
+/// 下发的运行时域名切换。
 class ApiConfig {
   ApiConfig({
     this.apiBaseUrl = defaultApiBaseUrl,
@@ -72,11 +70,10 @@ class ApiConfig {
   String encryptKey;
   String encryptIv;
 
-  /// Deep-link scheme the gateway returns for native and H5 routes.
+  /// 网关为原生与 H5 路由返回的深链 scheme。
   final String scheme;
 
-  /// App-store market string sent as a public parameter; must stay unique per
-  /// shipping binary.
+  /// 作为公有参数发送的应用市场标识；每个发布包必须保持唯一。
   final String appMarket;
 
   String appVersion;
@@ -84,8 +81,8 @@ class ApiConfig {
   String deviceId;
   String osVersion;
 
-  /// Stable device identifier (IDFV). Sent for both device-id public
-  /// parameters because the gateway expects them to match.
+  /// 稳定的设备标识（IDFV）。两个设备 ID 公有参数都会发送该值，
+  /// 因为网关要求二者一致。
   String get gpsAdId => deviceId;
 
   SessionStore? _sessionStore;

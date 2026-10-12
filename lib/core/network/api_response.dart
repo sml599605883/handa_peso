@@ -1,12 +1,11 @@
 import 'api_exception.dart';
 import 'api_protocol.dart';
 
-/// Normalised envelope returned by the gateway.
+/// 网关返回的统一信封结构。
 ///
-/// The backend wraps every payload in `{code, message, data}` where each key is
-/// an app-specific opaque token (see [ApiProtocol]). [states] exposes the
-/// unwrapped `data` object; when the backend sends a bare array it is nested
-/// under `list` so callers always get a map.
+/// 后端会把每个载荷包装成 `{code, message, data}`，其中每个键都是应用专属的
+/// 不透明令牌（见 [ApiProtocol]）。[states] 暴露解包后的 `data` 对象；当后端
+/// 返回裸数组时，会将其嵌套到 `list` 下，因此调用方始终拿到一个 map。
 class ApiResponse {
   const ApiResponse({
     required this.code,
@@ -26,7 +25,7 @@ class ApiResponse {
 
   bool get isAuthExpired => code == ApiProtocol.authExpiredCode;
 
-  /// Unwrapped payload. Kept as `data` so feature code stays readable.
+  /// 解包后的载荷。保留 `data` 这个名字，方便业务代码阅读。
   Map<String, dynamic> get data => states;
 
   static ApiResponse fromRaw(dynamic raw) {

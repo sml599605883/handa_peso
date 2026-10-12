@@ -6,10 +6,10 @@ import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
 import '../../core/analytics/analytics_service.dart';
 
-/// Hosts legal documents and content pages.
+/// 承载法律文书与内容页面。
 ///
-/// It is intentionally *not* the app shell: only static/legal content is shown
-/// here so the product remains a native application.
+/// 它有意*不*作为应用外壳：这里只展示静态/法律类内容，
+/// 以保证产品仍是一个原生应用。
 class AppWebViewPage extends StatefulWidget {
   const AppWebViewPage({super.key});
 

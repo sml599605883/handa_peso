@@ -9,7 +9,7 @@ import '../main_shell/main_shell_page.dart';
 import 'home_big_card.dart';
 import 'home_data.dart';
 
-/// Analytics/session tag for the hero card call-to-action.
+/// 用于主卡片行动号召（CTA）的埋点/会话标签。
 const String _homeApplyProductId = 'home_card';
 
 class HomePage extends GetView<MainController> {
@@ -57,8 +57,8 @@ class HomePage extends GetView<MainController> {
             physics: const AlwaysScrollableScrollPhysics(),
             padding: EdgeInsets.zero,
             children: [
-              // The hero artwork is designed full-bleed, with its top edge at
-              // the physical top of the screen (design 02-01 y=0).
+              // 主视觉插画按满幅出血设计，其顶边对齐屏幕物理顶部
+              // （设计稿 02-01 y=0）。
               HomeBigCard(
                 creditLimit: data.creditLimit,
                 onApply: () => controller.applyNow(_homeApplyProductId),

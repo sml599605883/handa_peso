@@ -5,26 +5,25 @@ import '../../core/network/api_client.dart';
 import '../../core/session/session_store.dart';
 import '../routes/app_routes.dart';
 
-/// Navigation and feedback helpers shared by feature controllers.
+/// 供各业务控制器共用的导航与反馈辅助方法。
 ///
-/// Wrapping `Get` here keeps feature code free of routing details and gives us a
-/// single place to add guards (e.g. requiring a completed profile before apply).
+/// 在这里封装 `Get` 可以让业务代码不掺杂路由细节，也提供统一的位置来添加
+/// 拦截（例如申请前要求资料已完善）。
 abstract final class AppNavigator {
   static void Function(int index)? mainTabSelector;
 
-  /// Pushes the login route on top of the current screen.
+  /// 在当前页面之上推入登录路由。
   ///
-  /// Login is demand-driven: guests can browse the shell and are only asked to
-  /// authenticate when an action needs a session. Resolves to `true` when the
-  /// user completes sign-in.
+  /// 登录是按需触发的：游客可以浏览外壳，只有当某个操作需要会话时才要求
+  /// 登录。当用户完成登录后解析为 `true`。
   static Future<bool> toLogin({String? redirect}) async {
     final result = await Get.toNamed<bool>(AppRoutes.login, arguments: redirect);
     return result ?? false;
   }
 
-  /// Ensures a session exists, opening login if needed.
+  /// 确保存在会话，必要时打开登录页。
   ///
-  /// Returns `true` when the caller may proceed with an authenticated action.
+  /// 当调用方可以继续执行需要登录的操作时返回 `true`。
   static Future<bool> requireSession({String? redirect}) async {
     final store = _sessionStore();
     if (store != null && (await store.sessionId()).isNotEmpty) {
@@ -33,10 +32,10 @@ abstract final class AppNavigator {
     return toLogin(redirect: redirect);
   }
 
-  /// Clears the expired session and returns the user to the login screen.
+  /// 清除已过期的会话并将用户带回登录页。
   ///
-  /// Registered as the [ApiConfig.authExpiredHandler] at bootstrap so the
-  /// network layer can recover from a `-2` response without importing routing.
+  /// 在启动时注册为 [ApiConfig.authExpiredHandler]，使网络层在收到 `-2`
+  /// 响应时能够自行恢复，而无需引入路由模块。
   static Future<void> redirectToLoginAfterSessionExpiry() async {
     await _sessionStore()?.clear();
     await Get.offAllNamed<void>(AppRoutes.login);

@@ -1,9 +1,9 @@
 import 'package:flutter/foundation.dart';
 
-/// Canonical analytics event names.
+/// 规范的埋点事件名称。
 ///
-/// Keeping the strings in one place prevents typo-driven data loss and makes it
-/// trivial to audit which business actions are instrumented.
+/// 把字符串集中在一处可避免拼写错误导致的数据丢失，也让审计哪些业务行为
+/// 已接入埋点变得非常简单。
 abstract final class AppEvents {
   static const appOpen = 'app_open';
   static const loginSubmit = 'login_submit';
@@ -16,11 +16,11 @@ abstract final class AppEvents {
   static const accountDeleted = 'account_deleted';
 }
 
-/// Destination for analytics and crash reports.
+/// 埋点与崩溃上报的目标出口。
 ///
-/// The default implementation only logs in debug builds. A Firebase Analytics /
-/// Crashlytics adapter is registered at startup once the native config files are
-/// provisioned, so no feature code needs to import a vendor SDK directly.
+/// 默认实现仅在 debug 构建下打印日志。待原生配置文件就绪后，会在启动时
+/// 注册 Firebase Analytics / Crashlytics 适配器，因此业务代码无需直接引入
+/// 厂商 SDK。
 abstract interface class TelemetrySink {
   void logEvent(String name, [Map<String, Object?> parameters = const {}]);
   void setUserProperty(String name, String? value);
@@ -58,7 +58,7 @@ class DebugTelemetrySink implements TelemetrySink {
   }
 }
 
-/// Static façade so call sites stay vendor-agnostic.
+/// 静态外观（Facade），使调用点与具体厂商无关。
 abstract final class AnalyticsService {
   static TelemetrySink _sink = DebugTelemetrySink();
 
@@ -79,7 +79,7 @@ abstract final class AnalyticsService {
   }
 }
 
-/// Dedicated entry point for crash reporting so failures are always attributable.
+/// 崩溃上报的专用入口，确保失败始终可追溯。
 abstract final class CrashReporter {
   static TelemetrySink get _sink => AnalyticsService._sink;
 

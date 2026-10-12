@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../core/analytics/analytics_service.dart';
 
-/// Emits analytics screen-view events for every pushed route.
+/// 为每个入栈路由发送页面浏览埋点事件。
 ///
-/// Centralising this here guarantees a complete navigation funnel without each
-/// screen remembering to report itself.
+/// 集中在这里处理可保证导航漏斗完整，而无需每个页面自行记得上报。
 final RouteObserver<ModalRoute<void>> appRouteObserver =
     RouteObserver<ModalRoute<void>>();
 

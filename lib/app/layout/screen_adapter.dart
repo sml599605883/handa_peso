@@ -1,9 +1,9 @@
 import 'package:flutter/widgets.dart';
 
-/// Scales design-time values from a 375dp reference canvas to the device.
+/// 将设计稿数值从 375dp 参考画布等比缩放到当前设备。
 ///
-/// Keeps pixel-perfect spacing/typography from the design handoff without
-/// scattering magic multipliers through the widget tree.
+/// 在保持设计交付稿像素级间距/字体的同时，避免魔法缩放系数散落在
+/// 各个 widget 树中。
 abstract final class ScreenAdapter {
   static const double designWidth = 375;
   static const double designHeight = 812;

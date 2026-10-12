@@ -1,17 +1,16 @@
-/// Obfuscated route table for the Handa Peso gateway.
+/// Handa Peso 网关的混淆路由表。
 ///
-/// The backend exposes meaning-free path segments (see the interface docs),
-/// which keeps protocol details out of feature code and gives each shipping
-/// binary its own route vocabulary.
+/// 后端暴露的是无意义的路径片段（见接口文档），这样既能让协议细节不出现在
+/// 业务代码中，也让每个发布包拥有各自的路由词表。
 abstract final class ApiEndpoints {
-  // Auth & account
+  // 鉴权与账号
   static const sendSmsCode = '/dropcloth/fishtailed';
   static const smsChannels = '/dropcloth/hastened';
   static const smsCodeLogin = '/dropcloth/checkreins';
   static const logout = '/dropcloth/unaccepted';
   static const deleteAccount = '/dropcloth/unstably';
 
-  // App shell & home
+  // 应用外壳与首页
   static const homePage = '/dropcloth/indulgences';
   static const personalCenter = '/dropcloth/affluents';
   static const appReport = '/dropcloth/chaffers';
@@ -20,12 +19,12 @@ abstract final class ApiEndpoints {
   static const bannerClickRecord = '/dropcloth/fluorochromes';
   static const getDeviceName = '/dropcloth/criminology';
 
-  // Product
+  // 产品
   static const productApply = '/dropcloth/legongs';
   static const productDetail = '/dropcloth/shinning';
   static const productPush = '/dropcloth/outeating';
 
-  // Certification — identity, face, personal, job, contacts, card
+  // 认证 —— 身份、人脸、个人信息、职业、通讯录、银行卡
   static const basicPersonInfo = '/dropcloth/blockader';
   static const uploadImage = '/dropcloth/sikes';
   static const saveBasicInfo = '/dropcloth/polybutadiene';
@@ -48,11 +47,11 @@ abstract final class ApiEndpoints {
   static const retentionDialog = '/dropcloth/unchivalrous';
   static const trustDecisionReport = '/dropcloth/flaunter';
 
-  // Orders
+  // 订单
   static const orderList = '/dropcloth/pyranoside';
   static const userReloan = '/dropcloth/cotype';
 
-  // Risk & telemetry reporting
+  // 风控与埋点上报
   static const uploadLocation = '/dropcloth/farle';
   static const googleMarket = '/dropcloth/phalarope';
   static const buriedPoint = '/dropcloth/disgruntle';
@@ -60,7 +59,7 @@ abstract final class ApiEndpoints {
   static const uploadContacts = '/dropcloth/bioregional';
   static const uploadAppleToken = '/dropcloth/calipash';
 
-  // Support centre
+  // 客服中心
   static const supportTicket = '/dropcloth/compacts';
   static const supportSupplement = '/dropcloth/whinger';
   static const supportTicketList = '/dropcloth/scurvier';

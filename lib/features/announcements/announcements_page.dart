@@ -4,11 +4,10 @@ import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
 import '../main_shell/main_shell_page.dart';
 
-/// Fraud-prevention and product guidance shown inside the app.
+/// 应用内展示的防欺诈与产品指引内容。
 ///
-/// The gateway does not expose a public announcements feed, so this content is
-/// curated locally. Keeping it in-app (rather than served) also gives each
-/// release its own unique content surface.
+/// 网关并未提供公开的公告信息流，因此这些内容在本地维护。将其放在应用内
+/// （而非由服务端下发）也让每个发布版本拥有各自独立的内容面。
 class AnnouncementsPage extends StatelessWidget {
   const AnnouncementsPage({super.key});
 

@@ -1,4 +1,4 @@
-/// Named routes used by `GetMaterialApp`.
+/// `GetMaterialApp` 使用的命名路由。
 abstract final class AppRoutes {
   static const login = '/login';
   static const main = '/main';

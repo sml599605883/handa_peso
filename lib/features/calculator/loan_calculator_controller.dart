@@ -5,10 +5,10 @@ import '../../core/analytics/analytics_service.dart';
 import '../../core/money/money.dart';
 import 'loan_plan.dart';
 
-/// State + calculation for the standalone repayment calculator.
+/// 独立还款计算器的状态与计算逻辑。
 ///
-/// The calculator runs entirely on-device from published rates, which keeps it
-/// a genuine native utility rather than a web view.
+/// 计算器完全在设备本地按公布的费率运行，因此它是真正的原生工具，
+/// 而不是一个 WebView。
 class LoanCalculatorController extends GetxController {
   static const availableAmounts = <int>[5000, 10000, 20000, 35000];
   static const availablePeriods = <int>[1, 3, 6, 12];

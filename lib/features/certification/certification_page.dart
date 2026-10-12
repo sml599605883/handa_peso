@@ -4,11 +4,10 @@ import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
 import '../../core/analytics/analytics_service.dart';
 
-/// Verification checklist.
+/// 认证核对清单。
 ///
-/// Each step is a native screen in the full product; here we expose the flow
-/// skeleton with realistic copy and completion state so the feature is more
-/// than a web wrapper.
+/// 在完整产品中每个步骤都是一个原生页面；这里先给出流程骨架，配上贴近真实的
+/// 文案与完成状态，让该功能不止是一个 Web 包装层。
 class CertificationPage extends StatefulWidget {
   const CertificationPage({super.key});
 

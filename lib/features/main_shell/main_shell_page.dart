@@ -71,20 +71,20 @@ class _ShellNavigationBar extends StatelessWidget {
     required this.onSelected,
   });
 
-  /// Content height above the home-indicator safe area (design block_6).
+  /// 底部 Home 指示条安全区之上的内容高度（设计稿 block_6）。
   static const double _contentHeight = 56;
 
-  /// Tab icon is a 90x90 @3x slice rendered at 30dp.
+  /// Tab 图标取自 90x90 @3x 图切片，按 30dp 渲染。
   static const double _iconSize = 30;
 
-  /// Vertical breathing room above the icon row, below the top tick.
+  /// 图标行上方、顶部选中条下方的垂直留白。
   static const double _topPadding = AppSpacing.xs;
   static const double _bottomPadding = 2;
 
-  /// Optical gap between icon and label (design uses a 2px offset).
+  /// 图标与文字之间的视觉间隙（设计稿使用 2px 偏移）。
   static const double _iconLabelGap = 2;
 
-  /// Active-tab tick at the very top edge of the bar.
+  /// 位于导航栏最顶部边缘的选中 Tab 指示条。
   static const double _indicatorWidth = 12;
   static const double _indicatorHeight = 2;
 
@@ -183,7 +183,7 @@ class _TabItem extends StatelessWidget {
   }
 }
 
-/// Reusable page header used by secondary screens.
+/// 供二级页面复用的页面标题栏。
 class ShellAppBar extends StatelessWidget implements PreferredSizeWidget {
   const ShellAppBar({required this.title, this.actions, super.key});
 
@@ -199,7 +199,7 @@ class ShellAppBar extends StatelessWidget implements PreferredSizeWidget {
   }
 }
 
-/// Shared empty-state widget with an 8dp-grid layout.
+/// 采用 8dp 网格布局的共享空状态 widget。
 class AppEmptyState extends StatelessWidget {
   const AppEmptyState({
     required this.icon,

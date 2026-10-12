@@ -1,7 +1,7 @@
 import '../../core/json/json_utils.dart';
 import '../../core/money/money.dart';
 
-/// Home feed content delivered by `ApiEndpoints.homePage`.
+/// 由 `ApiEndpoints.homePage` 下发的首页信息流内容。
 class HomeData {
   HomeData({
     required this.greeting,

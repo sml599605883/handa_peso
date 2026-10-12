@@ -9,7 +9,7 @@ import '../../core/network/api_exception.dart';
 import '../../core/session/session_store.dart';
 import '../main_shell/main_controller.dart';
 
-/// Drives the phone + SMS login flow.
+/// 驱动手机号 + 短信验证码登录流程。
 class LoginController extends GetxController {
   LoginController({required this.apiClient, required this.sessionStore});
 

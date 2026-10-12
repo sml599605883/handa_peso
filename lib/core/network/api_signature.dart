@@ -6,12 +6,11 @@ import 'package:crypto/crypto.dart';
 import 'api_exception.dart';
 import 'api_config.dart';
 
-/// Builds the signed public-parameter set attached to every request.
+/// 构造附加在每个请求上的已签名公有参数集合。
 ///
-/// The gateway requires the request path plus a fixed set of device/app fields
-/// to be signed with the app secret. Values are sorted by key and concatenated
-/// as `key + value`, then HMAC-SHA256 hashed; the hash travels as an opaque
-/// `lasses` parameter alongside a time-stamped, obfuscated field.
+/// 网关要求把请求路径加上一组固定的设备/应用字段，用应用密钥进行签名。
+/// 这些值按 key 排序后以 `key + value` 的形式拼接，再做 HMAC-SHA256 哈希；
+/// 该哈希会作为一个不透明 `lasses` 参数，连同带时间戳的混淆字段一起传输。
 class ApiSignature {
   ApiSignature(this.config);
 
@@ -61,7 +60,7 @@ class ApiSignature {
     ).convert(utf8.encode(source)).toString();
   }
 
-  /// Strips scheme/host/query so only the route participates in the signature.
+  /// 去掉 scheme/host/query，使只有路由参与签名。
   static String clearPath(String path) {
     final uri = Uri.tryParse(path);
     if (uri != null && uri.hasScheme) {

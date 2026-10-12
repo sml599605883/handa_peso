@@ -3,13 +3,13 @@ import 'package:flutter/material.dart';
 import '../../app/theme/app_colors.dart';
 import '../../core/money/money.dart';
 
-/// The hero "big card" region from design 02-01 (首页-未认证-默认).
+/// 设计稿 02-01（首页-未认证-默认）中的主视觉「大卡片」区域。
 ///
-/// Covers everything from the top of the feed down to (and including) the
-/// Apply Now button: the HELLO WELCOME artwork, the dark loan card and the CTA.
+/// 覆盖从信息流顶部一直到（含）「立即申请」按钮的全部内容：HELLO WELCOME
+/// 插画、深色借款卡片以及 CTA 按钮。
 ///
-/// Positions are authored against the 375x812 design canvas and scaled to the
-/// available width, so the bitmap artwork keeps its proportions on any device.
+/// 各元素位置基于 375x812 设计稿画布编写，并按可用宽度等比缩放，
+/// 因此位图插画在任何设备上都能保持比例。
 class HomeBigCard extends StatelessWidget {
   const HomeBigCard({
     super.key,
@@ -23,7 +23,7 @@ class HomeBigCard extends StatelessWidget {
   static const double _designWidth = 375;
   static const double _designHeight = 514;
 
-  /// Stable handle for the Apply Now call-to-action (tests / hit-testing).
+  /// 用于「立即申请」行动号召（CTA）的稳定标识（供测试 / 命中测试使用）。
   static const Key applyButtonKey = Key('home-big-card-apply');
 
   final Money creditLimit;
@@ -45,7 +45,7 @@ class HomeBigCard extends StatelessWidget {
           child: Stack(
             clipBehavior: Clip.none,
             children: [
-              // HELLO WELCOME halftone header artwork (design: 330x276 @ 22.5,20).
+              // HELLO WELCOME 半调风格头部插画（设计稿：330x276 @ 22.5,20）。
               Positioned(
                 left: px(22.5),
                 top: px(20),
@@ -56,7 +56,7 @@ class HomeBigCard extends StatelessWidget {
                   fit: BoxFit.fill,
                 ),
               ),
-              // Card frame: APP NAME banner, dark amount panel, terms strip.
+              // 卡片框架：APP NAME 横幅、深色金额面板、条款条。
               Positioned(
                 left: px(12),
                 top: px(110),
@@ -166,7 +166,7 @@ class _AppNameBadge extends StatelessWidget {
   }
 }
 
-/// Amount with the design's silver vertical gradient and 2px hard drop shadow.
+/// 带设计稿银色垂直渐变和 2px 硬投影的金额文本。
 class _GradientAmount extends StatelessWidget {
   const _GradientAmount({required this.amount, required this.scale});
 
