@@ -42,23 +42,13 @@ Future<void> startHandaPeso({
   AnalyticsService.logEvent(AppEvents.appOpen);
   runApplication(
     StartupNetworkGate(
-      probe: () => _probeStartupTransport(dependencies),
+      probe: () => probeStartupTransport(
+        dependencies.apiClient,
+        onReachable: dependencies.syncDeviceName,
+      ),
       readyBuilder: () => HandaPesoApp(dependencies: dependencies),
     ),
   );
-}
-
-/// 在外壳挂载之前确认网关可达。
-///
-/// 与 fund_nexus 的启动门禁保持一致：探测运行期间由启动图占住屏幕，
-/// 设备名称查询仅在网关响应后触发，因此探测失败时可以给出重试入口，
-/// 而不是停留在一个卡死的外壳上。
-Future<bool> _probeStartupTransport(AppDependencies dependencies) async {
-  final available = await dependencies.apiClient.probeTransport();
-  if (available) {
-    await dependencies.syncDeviceName();
-  }
-  return available;
 }
 
 Future<void> _lockPortrait() {

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 
+import '../json/json_utils.dart';
 import 'api_config.dart';
 import 'api_crypto.dart';
 import 'api_endpoints.dart';
@@ -557,6 +558,65 @@ class ApiClient {
       return response.statusCode != null;
     } on DioException catch (error) {
       return error.response?.statusCode != null;
+    }
+  }
+
+  /// 拉取远程配置链接里发布的备用基础地址。
+  ///
+  /// 请求 [remoteConfigUrl]（为空时回退到 [ApiConfig.remoteConfigUrl]），
+  /// 用响应中的 `api` / `web` 字段覆盖 [ApiConfig.apiBaseUrl] 与
+  /// [ApiConfig.webBaseUrl]。响应体同时兼容 JSON 对象与 base64 编码的 JSON
+  /// 对象，与 kaibigan_loan 的约定保持一致。
+  ///
+  /// 永不抛异常。仅当新的 API 基础地址被应用时返回 `true`，
+  /// 便于调用方针对该地址重新探测。
+  Future<bool> applyRemoteBaseUrls({String? remoteConfigUrl}) async {
+    final configUrl = (remoteConfigUrl ?? config.remoteConfigUrl).trim();
+    if (configUrl.isEmpty) return false;
+
+    final String body;
+    try {
+      final response = await dio.get<String>(
+        configUrl,
+        options: Options(responseType: ResponseType.plain),
+      );
+      body = response.data ?? '';
+    } catch (_) {
+      return false;
+    }
+
+    final parsed = _parseRemoteConfig(body);
+    final api = parsed.stringValue('api');
+    if (api.isEmpty) return false;
+
+    config.apiBaseUrl = api;
+    final web = parsed.stringValue('web');
+    if (web.isNotEmpty) config.webBaseUrl = web;
+    return true;
+  }
+
+  /// 解析远程配置响应体，兼容 JSON 对象与 base64 编码的 JSON 对象。
+  Map<String, dynamic> _parseRemoteConfig(String body) {
+    final trimmed = body.trim();
+    if (trimmed.isEmpty) return const <String, dynamic>{};
+
+    final direct = _decodeJsonObject(trimmed);
+    if (direct != null) return direct;
+
+    try {
+      return _decodeJsonObject(utf8.decode(base64Decode(trimmed))) ??
+          const <String, dynamic>{};
+    } catch (_) {
+      return const <String, dynamic>{};
+    }
+  }
+
+  Map<String, dynamic>? _decodeJsonObject(String source) {
+    try {
+      final decoded = jsonDecode(source);
+      return decoded is Map<String, dynamic> ? decoded : null;
+    } catch (_) {
+      return null;
     }
   }
 

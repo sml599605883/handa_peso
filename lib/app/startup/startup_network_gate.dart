@@ -2,11 +2,38 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../core/network/api_client.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 
 typedef StartupNetworkProbe = Future<bool> Function();
 typedef StartupNetworkReadyBuilder = Widget Function();
+
+/// 解析启动门禁所需的网关可达性。
+///
+/// 先探测编译内置的地址；失败时从远程配置链接拉取备用基础地址后再次探测。
+/// [onReachable] 只会在某个地址成功响应后执行，避免设备名称查询打到失效的网关上。
+///
+/// 远程配置链接为空时该回退不生效，第一次探测即为最终判断。
+Future<bool> probeStartupTransport(
+  ApiClient apiClient, {
+  String? remoteConfigUrl,
+  Future<void> Function()? onReachable,
+}) async {
+  if (!await apiClient.probeTransport()) {
+    final switched = await apiClient.applyRemoteBaseUrls(
+      remoteConfigUrl: remoteConfigUrl,
+    );
+    if (!switched || !await apiClient.probeTransport()) {
+      return false;
+    }
+  }
+
+  if (onReachable != null) {
+    await onReachable();
+  }
+  return true;
+}
 
 /// 在网关可达之前，让启动图一直停留在屏幕上。
 ///
