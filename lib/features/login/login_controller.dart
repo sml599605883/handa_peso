@@ -5,7 +5,6 @@ import 'package:get/get.dart';
 import '../../app/navigation/app_navigator.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/network/api_client.dart';
-import '../../core/network/api_endpoints.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/session/session_store.dart';
 import '../main_shell/main_controller.dart';
@@ -57,11 +56,7 @@ class LoginController extends GetxController {
     sendingCode.value = true;
     errorText.value = null;
     try {
-      await apiClient.post(
-        ApiEndpoints.sendSmsCode,
-        data: {'phone': phone.value},
-        authorized: false,
-      );
+      await apiClient.sendSmsCode(fishtailed: phone.value);
       _startCountdown();
       AppNavigator.showToast('Verification code sent.');
     } on ApiException catch (error) {
@@ -83,12 +78,11 @@ class LoginController extends GetxController {
     errorText.value = null;
     AnalyticsService.logEvent(AppEvents.loginSubmit, {'length': phone.value.length});
     try {
-      final response = await apiClient.post(
-        ApiEndpoints.smsLogin,
-        data: {'phone': phone.value, 'code': code.value},
-        authorized: false,
+      final response = await apiClient.smsCodeLogin(
+        criminology: phone.value,
+        legongs: code.value,
       );
-      final sessionId = response.data['token']?.toString() ?? '';
+      final sessionId = response.data['sandman']?.toString() ?? '';
       await sessionStore.saveSessionId(sessionId);
       await sessionStore.savePhone(phone.value);
       AnalyticsService.setUserId(phone.value);

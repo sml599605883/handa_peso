@@ -33,6 +33,15 @@ abstract final class AppNavigator {
     return toLogin(redirect: redirect);
   }
 
+  /// Clears the expired session and returns the user to the login screen.
+  ///
+  /// Registered as the [ApiConfig.authExpiredHandler] at bootstrap so the
+  /// network layer can recover from a `-2` response without importing routing.
+  static Future<void> redirectToLoginAfterSessionExpiry() async {
+    await _sessionStore()?.clear();
+    await Get.offAllNamed<void>(AppRoutes.login);
+  }
+
   static Future<void>? toMain() => Get.offAllNamed<void>(AppRoutes.main);
 
   static void switchMainTab(int index) => mainTabSelector?.call(index);

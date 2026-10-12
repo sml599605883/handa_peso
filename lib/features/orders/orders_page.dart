@@ -7,7 +7,6 @@ import '../../app/theme/app_spacing.dart';
 import '../../app/navigation/app_navigator.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/network/api_client.dart';
-import '../../core/network/api_endpoints.dart';
 import '../../core/network/api_exception.dart';
 import '../main_shell/main_shell_page.dart';
 import 'order_item.dart';
@@ -49,12 +48,13 @@ class _OrdersPageState extends State<OrdersPage> {
         });
         return;
       }
-      final response = await _apiClient.get(ApiEndpoints.orderList);
-      final items = response.data['list'] is List
-          ? (response.data['list'] as List)
-              .whereType<Map<String, dynamic>>()
-              .map(OrderItem.fromJson)
-              .toList()
+      final response = await _apiClient.orderList(corequisites: '4');
+      final list = response.data['latchstrings'];
+      final items = list is List
+          ? list
+                .whereType<Map<String, dynamic>>()
+                .map(OrderItem.fromJson)
+                .toList()
           : <OrderItem>[];
       if (!mounted) return;
       setState(() {

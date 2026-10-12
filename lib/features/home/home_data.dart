@@ -1,7 +1,7 @@
 import '../../core/json/json_utils.dart';
 import '../../core/money/money.dart';
 
-/// Home feed content delivered by `ApiEndpoints.homeFeed`.
+/// Home feed content delivered by `ApiEndpoints.homePage`.
 class HomeData {
   HomeData({
     required this.greeting,

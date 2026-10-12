@@ -4,7 +4,6 @@ import 'package:get/get.dart';
 import '../../app/theme/app_spacing.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/network/api_client.dart';
-import '../../core/network/api_endpoints.dart';
 import '../../core/network/api_exception.dart';
 
 /// Support centre: self-service FAQ plus a native ticket form.
@@ -48,10 +47,7 @@ class _SupportPageState extends State<SupportPage> {
     if (message.isEmpty || _submitting) return;
     setState(() => _submitting = true);
     try {
-      await Get.find<ApiClient>().post(
-        ApiEndpoints.createTicket,
-        data: {'message': message},
-      );
+      await Get.find<ApiClient>().supportTicket(grapier: message);
       AnalyticsService.logEvent(AppEvents.supportTicketCreated);
       _messageController.clear();
       if (!mounted) return;

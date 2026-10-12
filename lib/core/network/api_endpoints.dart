@@ -1,45 +1,69 @@
-/// Relative API paths.
+/// Obfuscated route table for the Handa Peso gateway.
 ///
-/// Paths are grouped by feature so reviewers and analysts can trace a screen
-/// back to its contract. No environment-specific host or secret belongs here.
+/// The backend exposes meaning-free path segments (see the interface docs),
+/// which keeps protocol details out of feature code and gives each shipping
+/// binary its own route vocabulary.
 abstract final class ApiEndpoints {
-  // Authentication
-  static const sendSmsCode = '/auth/sms/send';
-  static const smsLogin = '/auth/sms/login';
-  static const logout = '/auth/logout';
-  static const deleteAccount = '/auth/account';
+  // Auth & account
+  static const sendSmsCode = '/dropcloth/fishtailed';
+  static const smsChannels = '/dropcloth/hastened';
+  static const smsCodeLogin = '/dropcloth/checkreins';
+  static const logout = '/dropcloth/unaccepted';
+  static const deleteAccount = '/dropcloth/unstably';
 
-  // Account / profile
-  static const profile = '/user/profile';
-  static const updateProfile = '/user/profile/update';
-  static const uploadContacts = '/user/contacts';
-  static const uploadDevice = '/user/device';
+  // App shell & home
+  static const homePage = '/dropcloth/indulgences';
+  static const personalCenter = '/dropcloth/affluents';
+  static const appReport = '/dropcloth/chaffers';
+  static const reCredit = '/dropcloth/stressor';
+  static const dialog = '/dropcloth/counterchecked';
+  static const bannerClickRecord = '/dropcloth/fluorochromes';
+  static const getDeviceName = '/dropcloth/criminology';
 
-  // Home & discovery
-  static const homeFeed = '/home/feed';
-  static const banners = '/home/banners';
-  static const popup = '/home/popup';
-  static const productDetail = '/product/detail';
+  // Product
+  static const productApply = '/dropcloth/legongs';
+  static const productDetail = '/dropcloth/shinning';
+  static const productPush = '/dropcloth/outeating';
 
-  // Certification
-  static const identityUpload = '/certification/identity';
-  static const personalInfo = '/certification/personal';
-  static const workInfo = '/certification/work';
-  static const emergencyContacts = '/certification/contacts';
-  static const bindAccount = '/certification/account';
+  // Certification — identity, face, personal, job, contacts, card
+  static const basicPersonInfo = '/dropcloth/blockader';
+  static const uploadImage = '/dropcloth/sikes';
+  static const saveBasicInfo = '/dropcloth/polybutadiene';
+  static const checkBasicPass = '/dropcloth/phellem';
+  static const getFaceIdToken = '/dropcloth/postforming';
+  static const advanceLog = '/dropcloth/commuters';
+  static const faceIdTokenUpload = '/dropcloth/riposted';
+  static const faceIdResultUpload = '/dropcloth/wresting';
+  static const personalInfo = '/dropcloth/endoscopes';
+  static const savePersonalInfo = '/dropcloth/walleyed';
+  static const jobInfo = '/dropcloth/counteract';
+  static const saveJobInfo = '/dropcloth/latchstrings';
+  static const extInfoV2 = '/dropcloth/trollopy';
+  static const saveExtInfoV2 = '/dropcloth/ranulas';
+  static const cardInit = '/dropcloth/dependable';
+  static const bindCard = '/dropcloth/tidewaters';
+  static const cityInit = '/dropcloth/originator';
+  static const userCardList = '/dropcloth/dullard';
+  static const changeOrderAccount = '/dropcloth/circularise';
+  static const retentionDialog = '/dropcloth/unchivalrous';
+  static const trustDecisionReport = '/dropcloth/flaunter';
 
-  // Orders & repayment
-  static const orderList = '/order/list';
-  static const orderDetail = '/order/detail';
-  static const loanConfirm = '/loan/confirm';
-  static const loanSubmit = '/loan/submit';
-  static const repaymentPlan = '/repayment/plan';
+  // Orders
+  static const orderList = '/dropcloth/pyranoside';
+  static const userReloan = '/dropcloth/cotype';
 
-  // Support & content
-  static const announcements = '/content/announcements';
-  static const faq = '/content/faq';
-  static const createTicket = '/support/ticket';
+  // Risk & telemetry reporting
+  static const uploadLocation = '/dropcloth/farle';
+  static const googleMarket = '/dropcloth/phalarope';
+  static const buriedPoint = '/dropcloth/disgruntle';
+  static const uploadDeviceInfo = '/dropcloth/unglove';
+  static const uploadContacts = '/dropcloth/bioregional';
+  static const uploadAppleToken = '/dropcloth/calipash';
 
-  // Telemetry
-  static const event = '/telemetry/event';
+  // Support centre
+  static const supportTicket = '/dropcloth/compacts';
+  static const supportSupplement = '/dropcloth/whinger';
+  static const supportTicketList = '/dropcloth/scurvier';
+  static const faqList = '/dropcloth/crossbucks';
+  static const supportPhone = '/dropcloth/predicating';
 }

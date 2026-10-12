@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 
 import '../core/bootstrap/app_bootstrap.dart';
 import 'navigation/app_route_observer.dart';
+import 'theme/app_colors.dart';
 import 'routes/app_routes.dart';
 import 'theme/app_theme.dart';
 import '../features/announcements/announcements_page.dart';
@@ -22,6 +23,8 @@ import '../features/webview/app_webview_page.dart';
 class HandaPesoApp extends StatelessWidget {
   const HandaPesoApp({required this.dependencies, super.key});
 
+  static final TransitionBuilder _easyLoadingBuilder = EasyLoading.init();
+
   final AppDependencies dependencies;
 
   @override
@@ -30,7 +33,13 @@ class HandaPesoApp extends StatelessWidget {
       title: 'Handa Peso',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
-      builder: EasyLoading.init(),
+      builder: (context, child) => _easyLoadingBuilder(
+        context,
+        DecoratedBox(
+          decoration: const BoxDecoration(gradient: AppColors.pageBackgroundGradient),
+          child: child,
+        ),
+      ),
       navigatorObservers: [appRouteObserver, AnalyticsRouteObserver()],
       initialBinding: MainBinding(appDependencies: dependencies),
       initialRoute: AppRoutes.main,

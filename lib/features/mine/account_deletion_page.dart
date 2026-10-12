@@ -6,7 +6,6 @@ import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/network/api_client.dart';
-import '../../core/network/api_endpoints.dart';
 import '../../core/network/api_exception.dart';
 
 /// In-app account deletion, required by both App Store 5.1.1(v) and Play policy.
@@ -37,10 +36,7 @@ class _AccountDeletionPageState extends State<AccountDeletionPage> {
     });
     try {
       final apiClient = Get.find<ApiClient>();
-      await apiClient.post(
-        ApiEndpoints.deleteAccount,
-        data: {'reason': _reasonController.text.trim()},
-      );
+      await apiClient.deleteAccount();
       AnalyticsService.logEvent(AppEvents.accountDeleted);
       await apiClient.config.sessionStore.clear();
       AnalyticsService.setUserId(null);

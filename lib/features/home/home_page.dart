@@ -6,7 +6,11 @@ import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
 import '../main_shell/main_controller.dart';
 import '../main_shell/main_shell_page.dart';
+import 'home_big_card.dart';
 import 'home_data.dart';
+
+/// Analytics/session tag for the hero card call-to-action.
+const String _homeApplyProductId = 'home_card';
 
 class HomePage extends GetView<MainController> {
   const HomePage({super.key});
@@ -14,17 +18,16 @@ class HomePage extends GetView<MainController> {
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
-      color: AppColors.pageBackground,
-      child: SafeArea(
-        bottom: false,
-        child: Obx(() {
-          final data = controller.homeData.value;
-          final error = controller.homeError.value;
-          if (controller.homeLoading.value && data == null) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (error != null && data == null) {
-            return AppEmptyState(
+      color: Colors.transparent,
+      child: Obx(() {
+        final data = controller.homeData.value;
+        final error = controller.homeError.value;
+        if (controller.homeLoading.value && data == null) {
+          return const SafeArea(child: Center(child: CircularProgressIndicator()));
+        }
+        if (error != null && data == null) {
+          return SafeArea(
+            child: AppEmptyState(
               icon: Icons.cloud_off_rounded,
               title: 'We could not load your home feed',
               description: error,
@@ -32,10 +35,12 @@ class HomePage extends GetView<MainController> {
                 onPressed: controller.refreshHome,
                 child: const Text('Try again'),
               ),
-            );
-          }
-          if (data == null) {
-            return AppEmptyState(
+            ),
+          );
+        }
+        if (data == null) {
+          return SafeArea(
+            child: AppEmptyState(
               icon: Icons.inbox_rounded,
               title: 'Nothing here yet',
               description: 'Pull down to refresh your offers.',
@@ -43,105 +48,70 @@ class HomePage extends GetView<MainController> {
                 onPressed: controller.refreshHome,
                 child: const Text('Refresh'),
               ),
-            );
-          }
-          return RefreshIndicator(
-            onRefresh: controller.refreshHome,
-            child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.screenPadding,
-                AppSpacing.sm,
-                AppSpacing.screenPadding,
-                AppSpacing.xl,
-              ),
-              children: [
-                _HeroCard(data: data, phone: controller.phoneNumber.value),
-                const SizedBox(height: AppSpacing.sm),
-                _CertificationCard(progress: data.progress),
-                const SizedBox(height: AppSpacing.sm),
-                const _QuickActions(),
-                if (data.offers.isNotEmpty) ...[
-                  const SizedBox(height: AppSpacing.md),
-                  Text('Offers for you', style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: AppSpacing.xs),
-                  for (final offer in data.offers) ...[
-                    _OfferCard(offer: offer, onApply: () => controller.applyNow(offer.productId)),
-                    const SizedBox(height: AppSpacing.xs),
-                  ],
-                ],
-                if (data.announcements.isNotEmpty) ...[
-                  const SizedBox(height: AppSpacing.md),
-                  Text('Announcements', style: Theme.of(context).textTheme.titleMedium),
-                  const SizedBox(height: AppSpacing.xs),
-                  for (final item in data.announcements)
-                    _AnnouncementTile(announcement: item),
-                ],
-              ],
             ),
           );
-        }),
-      ),
-    );
-  }
-}
-
-class _HeroCard extends StatelessWidget {
-  const _HeroCard({required this.data, required this.phone});
-
-  final HomeData data;
-  final String phone;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: const BoxDecoration(
-        gradient: AppColors.heroGradient,
-        borderRadius: BorderRadius.all(Radius.circular(AppRadius.lg)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            data.greeting,
-            style: const TextStyle(
-              color: AppColors.textOnPrimary,
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-            ),
+        }
+        return RefreshIndicator(
+          onRefresh: controller.refreshHome,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.zero,
+            children: [
+              // The hero artwork is designed full-bleed, with its top edge at
+              // the physical top of the screen (design 02-01 y=0).
+              HomeBigCard(
+                creditLimit: data.creditLimit,
+                onApply: () => controller.applyNow(_homeApplyProductId),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.screenPadding,
+                ),
+                child: Column(
+                  children: [
+                    const SizedBox(height: AppSpacing.sm),
+                    _CertificationCard(progress: data.progress),
+                    const SizedBox(height: AppSpacing.sm),
+                    const _QuickActions(),
+                    if (data.offers.isNotEmpty) ...[
+                      const SizedBox(height: AppSpacing.md),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Offers for you',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      for (final offer in data.offers) ...[
+                        _OfferCard(
+                          offer: offer,
+                          onApply: () => controller.applyNow(offer.productId),
+                        ),
+                        const SizedBox(height: AppSpacing.xs),
+                      ],
+                    ],
+                    if (data.announcements.isNotEmpty) ...[
+                      const SizedBox(height: AppSpacing.md),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Announcements',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      for (final item in data.announcements)
+                        _AnnouncementTile(announcement: item),
+                    ],
+                    const SizedBox(height: AppSpacing.xl),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: AppSpacing.md),
-          const Text(
-            'Available credit',
-            style: TextStyle(color: AppColors.onPrimaryMuted, fontSize: 13),
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            data.creditLimit.format(),
-            style: const TextStyle(
-              color: AppColors.textOnPrimary,
-              fontSize: 32,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          if (phone.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              'Signed in as $phone',
-              style: const TextStyle(color: AppColors.onPrimaryMuted, fontSize: 12),
-            ),
-          ],
-          const SizedBox(height: AppSpacing.sm),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: FilledButton.tonal(
-              onPressed: () => AppNavigator.toCalculator(),
-              child: const Text('Check repayment'),
-            ),
-          ),
-        ],
-      ),
+        );
+      }),
     );
   }
 }

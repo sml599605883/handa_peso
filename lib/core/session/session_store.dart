@@ -13,6 +13,7 @@ class SessionStore {
   static const _sessionIdKey = 'session.id';
   static const _phoneKey = 'session.phone';
   static const _profileCompleteKey = 'session.profile_complete';
+  static const _deviceNameKey = 'device.name';
 
   final SharedPreferencesAsync? _preferences;
   final Map<String, Object?>? _memory;
@@ -24,6 +25,12 @@ class SessionStore {
   Future<String> phone() async => (await _string(_phoneKey)) ?? '';
 
   Future<void> savePhone(String value) => _setString(_phoneKey, value);
+
+  /// Human-readable device name resolved from the gateway (public parameter).
+  Future<String> deviceName() async => (await _string(_deviceNameKey)) ?? '';
+
+  Future<void> saveDeviceName(String value) =>
+      _setString(_deviceNameKey, value);
 
   Future<bool> profileComplete() async => (await _string(_profileCompleteKey)) == '1';
 

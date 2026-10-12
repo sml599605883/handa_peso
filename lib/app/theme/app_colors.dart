@@ -15,7 +15,20 @@ abstract final class AppColors {
   // Surfaces
   static const surface = Color(0xFFFFFFFF);
   static const surfaceMuted = Color(0xFFF4F7F6);
-  static const pageBackground = Color(0xFFF4F7F6);
+
+  /// Page-level background gradient (design 06-01). Top is the salmon header
+  /// tone, the middle holds a cream plateau, and the footer warms back to peach.
+  static const pageBackgroundGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [
+      Color(0xFFF09D87),
+      Color(0xFFFEE9C3),
+      Color(0xFFFEE9C3),
+      Color(0xFFF7C5A7),
+    ],
+    stops: [0, 0.56, 0.86, 1],
+  );
   static const divider = Color(0xFFE6ECEA);
   static const border = Color(0xFFD8E2DF);
 
@@ -37,6 +50,21 @@ abstract final class AppColors {
   // Bottom navigation (design 02-01 tabbar)
   static const tabActive = Color(0xFF7F4209);
   static const tabInactive = Color(0xFF716F5F);
+
+  // Home hero loan card (design 02-01)
+  static const heroLabel = Color(0xFF716F5F);
+  static const heroValue = Color(0xFF151200);
+  static const heroDivider = Color(0xFFC2B5A3);
+  static const heroCaption = Color(0xFFA55826);
+
+  /// Silver gradient applied to the amount on the dark card panel.
+  static const heroAmountGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Color(0xFFDACECB), Color(0xFFFEFCFD), Color(0xFFD1C2BE)],
+    stops: [0, 0.44, 1],
+  );
+  static const heroAmountShadow = Color(0xFF201100);
 
   // Effects
   static const shadow = Color(0x140F2B25);

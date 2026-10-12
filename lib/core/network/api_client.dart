@@ -1,125 +1,630 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 
-import '../json/json_utils.dart';
 import 'api_config.dart';
+import 'api_crypto.dart';
+import 'api_endpoints.dart';
 import 'api_exception.dart';
 import 'api_response.dart';
 import 'api_signature.dart';
 
-typedef UnauthorizedHandler = Future<void> Function();
-
-/// Thin, typed wrapper over [Dio].
+/// Typed gateway client.
 ///
-/// Responsibilities:
-/// * attach the session id, common device parameters and a request signature;
-/// * normalise transport/business errors into [ApiException];
-/// * keep a single retry path for transient failures.
+/// Every request is signed (see [ApiSignature]) and every response is unwrapped
+/// into an [ApiResponse]. Business failures surface as [ApiException] so callers
+/// never touch raw Dio types.
 class ApiClient {
   ApiClient(this.config, {Dio? dio}) : dio = dio ?? Dio() {
     this.dio.options
       ..connectTimeout = const Duration(seconds: 20)
       ..receiveTimeout = const Duration(seconds: 20)
-      ..contentType = Headers.jsonContentType
+      ..contentType = Headers.formUrlEncodedContentType
       ..validateStatus = (_) => true;
-    this.dio.interceptors.add(
-          InterceptorsWrapper(
-            onRequest: (options, handler) async {
-              final authorized = options.extra['authorized'] != false;
-              options.headers['Accept'] = 'application/json';
-              options.headers['X-Client-Platform'] = 'flutter';
-              if (authorized) {
-                final sessionId = await config.sessionStore.sessionId();
-                if (sessionId.isNotEmpty) {
-                  options.headers['Authorization'] = 'Bearer $sessionId';
-                }
-                final secret = config.signatureSecret;
-                if (secret != null && secret.isNotEmpty) {
-                  final timestamp = config.timestamp();
-                  final nonce = ApiSignature.nonce();
-                  options.headers['X-Timestamp'] = '$timestamp';
-                  options.headers['X-Nonce'] = nonce;
-                  options.headers['X-Signature'] = ApiSignature.sign(
-                    params: _flatten(options),
-                    secret: secret,
-                    nonce: nonce,
-                    timestamp: timestamp,
-                  );
-                }
-              }
-              handler.next(options);
-            },
-          ),
-        );
   }
 
   final ApiConfig config;
   final Dio dio;
 
-  UnauthorizedHandler? onUnauthorized;
-  bool _handlingUnauthorized = false;
+  late final ApiCrypto crypto = ApiCrypto(
+    key: config.encryptKey,
+    iv: config.encryptIv,
+  );
+
+  bool _handlingAuthExpired = false;
+
+  // ---------------------------------------------------------------------------
+  // Auth & account
+  // ---------------------------------------------------------------------------
+
+  Future<ApiResponse> sendSmsCode({
+    required String fishtailed,
+    String checkreins = 'sms',
+  }) {
+    return post(
+      ApiEndpoints.sendSmsCode,
+      data: {
+        'fishtailed': fishtailed,
+        'checkreins': checkreins,
+        'hastened': _randomDigits(6),
+      },
+    );
+  }
+
+  Future<ApiResponse> smsChannels({required String fishtailed}) {
+    return post(
+      ApiEndpoints.smsChannels,
+      data: {
+        'fishtailed': fishtailed,
+        'affluents': _randomDigits(6),
+        'chaffers': _randomDigits(6),
+      },
+    );
+  }
+
+  Future<ApiResponse> smsCodeLogin({
+    required String criminology,
+    required String legongs,
+  }) {
+    return post(
+      ApiEndpoints.smsCodeLogin,
+      data: {
+        'criminology': criminology,
+        'legongs': legongs,
+        'affluents': _randomDigits(6),
+        'chaffers': _randomDigits(6),
+      },
+    );
+  }
+
+  Future<ApiResponse> logout() {
+    return get(
+      ApiEndpoints.logout,
+      params: {'phellem': _randomDigits(6), 'postforming': _randomDigits(6)},
+    );
+  }
+
+  Future<ApiResponse> deleteAccount() {
+    return get(
+      ApiEndpoints.deleteAccount,
+      params: {'commuters': _randomDigits(6)},
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // App shell & home
+  // ---------------------------------------------------------------------------
+
+  Future<ApiResponse> homePage() {
+    return get(
+      ApiEndpoints.homePage,
+      params: {'riposted': _randomDigits(6), 'wresting': _randomDigits(6)},
+    );
+  }
+
+  Future<ApiResponse> personalCenter() {
+    return get(
+      ApiEndpoints.personalCenter,
+      params: {'uncloudedly': _randomDigits(6)},
+    );
+  }
+
+  Future<ApiResponse> appReport({
+    required String khedas,
+    required String inanest,
+  }) {
+    return post(
+      ApiEndpoints.appReport,
+      data: {
+        'khedas': khedas,
+        'inanest': inanest,
+        'treasuring': _randomDigits(6),
+      },
+    );
+  }
+
+  Future<ApiResponse> reCredit() {
+    return get(
+      ApiEndpoints.reCredit,
+      params: {'contemplate': _randomDigits(6)},
+    );
+  }
+
+  Future<ApiResponse> dialog({required int disobliges}) {
+    return get(ApiEndpoints.dialog, params: {'disobliges': disobliges});
+  }
+
+  Future<ApiResponse> bannerClickRecord({required String interreligious}) {
+    return post(
+      ApiEndpoints.bannerClickRecord,
+      data: {'interreligious': interreligious, 'hearten': _randomDigits(6)},
+    );
+  }
+
+  Future<ApiResponse> getDeviceName({required String definitively}) {
+    return post(
+      ApiEndpoints.getDeviceName,
+      data: {'definitively': definitively, 'hearten': _randomDigits(6)},
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Product
+  // ---------------------------------------------------------------------------
+
+  Future<ApiResponse> productApply({
+    required String cotype,
+    String efflorescence = '0',
+  }) {
+    return post(
+      ApiEndpoints.productApply,
+      data: {
+        'jumpiest': '1001',
+        'plundered': '1000',
+        'caesium': '1000',
+        'cotype': cotype,
+        'efflorescence': efflorescence,
+        'strikes': _randomDigits(6),
+        'somans': _randomDigits(6),
+      },
+    );
+  }
+
+  Future<ApiResponse> productDetail({required String cotype}) {
+    return post(
+      ApiEndpoints.productDetail,
+      data: {
+        'cotype': cotype,
+        'suffocation': _randomDigits(6),
+        'undraping': _randomDigits(6),
+        'anecdotes': _randomDigits(6),
+      },
+    );
+  }
+
+  Future<ApiResponse> productPush({
+    required String eelworm,
+    required String luciferins,
+    required String splashiest,
+    required String curb,
+  }) {
+    return post(
+      ApiEndpoints.productPush,
+      data: {
+        'eelworm': eelworm,
+        'luciferins': luciferins,
+        'splashiest': splashiest,
+        'curb': curb,
+        'floggers': _randomDigits(6),
+        'sententia': _randomDigits(6),
+        'colonics': _randomDigits(6),
+        'scorekeepers': _randomDigits(6),
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Certification
+  // ---------------------------------------------------------------------------
+
+  Future<ApiResponse> basicPersonInfo({required String cotype}) {
+    return get(
+      ApiEndpoints.basicPersonInfo,
+      params: {'cotype': cotype, 'prebendaries': _randomDigits(6)},
+    );
+  }
+
+  Future<ApiResponse> uploadImage({
+    required String filePath,
+    String fileField = 'attach',
+    Map<String, dynamic> data = const <String, dynamic>{},
+  }) {
+    return upload(
+      ApiEndpoints.uploadImage,
+      filePath: filePath,
+      fileField: fileField,
+      data: data,
+    );
+  }
+
+  Future<ApiResponse> saveBasicInfo({required Map<String, dynamic> data}) {
+    return post(ApiEndpoints.saveBasicInfo, data: data);
+  }
+
+  Future<ApiResponse> checkBasicPass({required String cotype}) {
+    return post(
+      ApiEndpoints.checkBasicPass,
+      data: {
+        'cotype': cotype,
+        'nonperformer': _randomDigits(6),
+        'gushes': _randomDigits(6),
+      },
+    );
+  }
+
+  Future<ApiResponse> getFaceIdToken({
+    required String eelworm,
+    required String trollopy,
+  }) {
+    return post(
+      ApiEndpoints.getFaceIdToken,
+      data: {
+        'eelworm': eelworm,
+        'trollopy': trollopy,
+        'dis': _randomDigits(6),
+        'popularizes': _randomDigits(6),
+      },
+    );
+  }
+
+  Future<ApiResponse> advanceLog({required Map<String, dynamic> data}) {
+    return post(ApiEndpoints.advanceLog, data: data);
+  }
+
+  Future<ApiResponse> faceIdTokenUpload({required Map<String, dynamic> data}) {
+    return post(ApiEndpoints.faceIdTokenUpload, data: data);
+  }
+
+  Future<ApiResponse> faceIdResultUpload({required Map<String, dynamic> data}) {
+    return post(ApiEndpoints.faceIdResultUpload, data: data);
+  }
+
+  Future<ApiResponse> personalInfo({required String cotype}) {
+    return post(
+      ApiEndpoints.personalInfo,
+      data: {'cotype': cotype, 'bondstone': _randomDigits(6)},
+    );
+  }
+
+  Future<ApiResponse> savePersonalInfo({required Map<String, dynamic> data}) {
+    return post(ApiEndpoints.savePersonalInfo, data: data);
+  }
+
+  Future<ApiResponse> jobInfo({required String cotype}) {
+    return get(
+      ApiEndpoints.jobInfo,
+      params: {'cotype': cotype, 'bondstone': _randomDigits(6)},
+    );
+  }
+
+  Future<ApiResponse> saveJobInfo({required Map<String, dynamic> data}) {
+    return post(
+      ApiEndpoints.saveJobInfo,
+      data: {
+        ...data,
+        'salpinges': _randomDigits(6),
+        'determiner': _randomDigits(6),
+        'fertilizers': _randomDigits(6),
+      },
+    );
+  }
+
+  Future<ApiResponse> extInfoV2({required String cotype}) {
+    return get(
+      ApiEndpoints.extInfoV2,
+      params: {'cotype': cotype, 'tatty': _randomDigits(6)},
+    );
+  }
+
+  Future<ApiResponse> saveExtInfoV2({
+    required String cotype,
+    required List<Map<String, dynamic>> contacts,
+  }) {
+    return post(
+      ApiEndpoints.saveExtInfoV2,
+      data: {
+        'cotype': cotype,
+        'indulgences': jsonEncode(contacts),
+        'monumentalizes': _randomDigits(6),
+      },
+    );
+  }
+
+  Future<ApiResponse> cardInit({required String cotype}) {
+    return get(
+      ApiEndpoints.cardInit,
+      params: {
+        'cotype': cotype,
+        'pastorales': _randomDigits(6),
+        'replunge': _randomDigits(6),
+      },
+    );
+  }
+
+  Future<ApiResponse> bindCard({required Map<String, dynamic> data}) {
+    return post(ApiEndpoints.bindCard, data: data);
+  }
+
+  Future<ApiResponse> cityInit() => get(ApiEndpoints.cityInit);
+
+  Future<ApiResponse> userCardList({required String cotype}) {
+    return post(
+      ApiEndpoints.userCardList,
+      data: {
+        'cotype': cotype,
+        'tetracids': _randomDigits(6),
+        'oozed': _randomDigits(6),
+      },
+    );
+  }
+
+  Future<ApiResponse> changeOrderAccount({
+    required String eelworm,
+    required String eyeglasses,
+  }) {
+    return post(
+      ApiEndpoints.changeOrderAccount,
+      data: {
+        'eelworm': eelworm,
+        'eyeglasses': eyeglasses,
+        'guaiocums': _randomDigits(6),
+      },
+    );
+  }
+
+  Future<ApiResponse> retentionDialog({
+    required String ulterior,
+    required String knife,
+  }) {
+    return post(
+      ApiEndpoints.retentionDialog,
+      data: {
+        'ulterior': ulterior,
+        'knife': knife,
+        'chauvinistic': _randomDigits(6),
+      },
+    );
+  }
+
+  Future<ApiResponse> trustDecisionReport({
+    required String ediblenesses,
+    required String eggplants,
+    required String beet,
+    required String murdering,
+  }) {
+    return post(
+      ApiEndpoints.trustDecisionReport,
+      data: {
+        'ediblenesses': ediblenesses,
+        'eggplants': eggplants,
+        'beet': beet,
+        'murdering': murdering,
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Orders
+  // ---------------------------------------------------------------------------
+
+  Future<ApiResponse> orderList({
+    required String corequisites,
+    String girlies = '1',
+    String uncompromisable = '50',
+  }) {
+    return post(
+      ApiEndpoints.orderList,
+      data: {
+        'corequisites': corequisites,
+        'girlies': girlies,
+        'uncompromisable': uncompromisable,
+      },
+    );
+  }
+
+  Future<ApiResponse> userReloan({required String chattinesses}) {
+    return post(ApiEndpoints.userReloan, data: {'chattinesses': chattinesses});
+  }
+
+  // ---------------------------------------------------------------------------
+  // Risk & telemetry reporting
+  // ---------------------------------------------------------------------------
+
+  Future<ApiResponse> uploadLocation({required Map<String, dynamic> data}) {
+    return post(ApiEndpoints.uploadLocation, data: data);
+  }
+
+  Future<ApiResponse> googleMarket({
+    required String tunesmith,
+    required String colickiest,
+  }) {
+    return post(
+      ApiEndpoints.googleMarket,
+      data: {
+        'tunesmith': tunesmith,
+        'nevoid': _randomDigits(6),
+        'colickiest': colickiest,
+      },
+    );
+  }
+
+  Future<ApiResponse> buriedPoint({required Map<String, dynamic> data}) {
+    return post(
+      ApiEndpoints.buriedPoint,
+      data: {...data, 'pastorales': _randomDigits(6)},
+    );
+  }
+
+  /// Device detail reporting. [payload] must be AES-encrypted first via
+  /// [crypto]; the gateway only accepts the cipher text.
+  Future<ApiResponse> uploadDeviceInfo({required String payload}) {
+    return postEncrypted(ApiEndpoints.uploadDeviceInfo, value: payload);
+  }
+
+  /// Contacts reporting. [payload] must be AES-encrypted first via [crypto].
+  Future<ApiResponse> uploadContacts({
+    required String payload,
+    String trollopy = '3',
+  }) {
+    return postEncrypted(
+      ApiEndpoints.uploadContacts,
+      value: payload,
+      data: {
+        'trollopy': trollopy,
+        'wharfingers': _randomDigits(6),
+        'toga': _randomDigits(6),
+      },
+    );
+  }
+
+  Future<ApiResponse> uploadAppleToken({required String bettered}) {
+    return post(ApiEndpoints.uploadAppleToken, data: {'bettered': bettered});
+  }
+
+  // ---------------------------------------------------------------------------
+  // Support centre
+  // ---------------------------------------------------------------------------
+
+  Future<ApiResponse> supportTicket({
+    required String grapier,
+    String? skells,
+    String? vespid,
+    String? filthily,
+    String? redecorates,
+  }) {
+    return post(
+      ApiEndpoints.supportTicket,
+      data: {
+        'skells': ?skells,
+        'vespid': ?vespid,
+        'grapier': grapier,
+        'filthily': ?filthily,
+        'redecorates': ?redecorates,
+        'hidalgos': _randomDigits(6),
+      },
+    );
+  }
+
+  Future<ApiResponse> supportTicketList() {
+    return post(
+      ApiEndpoints.supportTicketList,
+      data: {'undraping': _randomDigits(6), 'riposted': _randomDigits(6)},
+    );
+  }
+
+  Future<ApiResponse> supportSupplement({
+    required String polemists,
+    required String grapier,
+    String? filthily,
+  }) {
+    return post(
+      ApiEndpoints.supportSupplement,
+      data: {'polemists': polemists, 'grapier': grapier, 'filthily': ?filthily},
+    );
+  }
+
+  Future<ApiResponse> faqList({
+    String? tsaddik,
+    String? quagmire,
+    String? redecorates,
+  }) {
+    return get(
+      ApiEndpoints.faqList,
+      params: {
+        'tsaddik': ?tsaddik,
+        'quagmire': ?quagmire,
+        'redecorates': ?redecorates,
+        'witnessed': _randomDigits(6),
+      },
+    );
+  }
+
+  Future<ApiResponse> supportPhone() {
+    return get(
+      ApiEndpoints.supportPhone,
+      params: {'treasuring': _randomDigits(6)},
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Transport
+  // ---------------------------------------------------------------------------
 
   Future<ApiResponse> get(
     String path, {
-    Map<String, dynamic>? params,
-    bool authorized = true,
-  }) {
-    return _send(
-      path,
-      authorized: authorized,
-      request: (options) => dio.get<dynamic>(path, queryParameters: params, options: options),
+    Map<String, dynamic> params = const <String, dynamic>{},
+  }) async {
+    final query = await ApiSignature(config)
+        .buildSignedQuery(path: path, extraQuery: params);
+    final response = await _guard(
+      () => dio.get<dynamic>(_url(path), queryParameters: query),
     );
+    return _handleResponse(response);
   }
 
   Future<ApiResponse> post(
     String path, {
-    Map<String, dynamic>? data,
-    bool authorized = true,
-  }) {
-    return _send(
-      path,
-      authorized: authorized,
-      request: (options) => dio.post<dynamic>(path, data: data, options: options),
-    );
-  }
-
-  Future<ApiResponse> _send(
-    String path, {
-    required bool authorized,
-    required Future<Response<dynamic>> Function(Options options) request,
+    Map<String, dynamic> data = const <String, dynamic>{},
+    Map<String, dynamic> query = const <String, dynamic>{},
+    Options? options,
   }) async {
-    final options = Options(extra: {'authorized': authorized});
-    try {
-      final response = await request(options);
-      return _mapResponse(response);
-    } on DioException catch (error, stackTrace) {
-      throw _mapDioException(error, stackTrace);
-    }
+    final signed = await ApiSignature(config)
+        .buildSignedQuery(path: path, extraQuery: query);
+    final response = await _guard(
+      () => dio.post<dynamic>(
+        _url(path),
+        queryParameters: signed,
+        data: data,
+        options: options,
+      ),
+    );
+    return _handleResponse(response);
   }
 
-  ApiResponse _mapResponse(Response<dynamic> response) {
-    final status = response.statusCode ?? 0;
-    if (status == 401) {
-      _notifyUnauthorized();
-      throw ApiException.unauthorized();
-    }
-    final body = response.data;
-    final map = body is Map<String, dynamic>
-        ? body
-        : body is Map
-            ? Map<String, dynamic>.from(body)
-            : <String, dynamic>{'code': status, 'message': '', 'data': body};
-    final decoded = ApiResponse.fromJson(map);
-    if (status >= 400) {
+  Future<ApiResponse> upload(
+    String path, {
+    required String filePath,
+    required String fileField,
+    Map<String, dynamic> data = const <String, dynamic>{},
+    Map<String, dynamic> query = const <String, dynamic>{},
+  }) async {
+    final file = File(filePath);
+    if (!file.existsSync()) {
       throw ApiException(
-        decoded.message.isEmpty ? 'Request failed ($status).' : decoded.message,
-        code: 'http_$status',
-        statusCode: status,
+        'The selected file is no longer available.',
+        code: 'upload_missing_file',
       );
     }
-    return decoded;
+
+    final signed = await ApiSignature(config)
+        .buildSignedQuery(path: path, extraQuery: query);
+    final formData = FormData.fromMap({
+      ...data,
+      fileField: await MultipartFile.fromFile(file.path),
+    });
+    final response = await _guard(
+      () => dio.post<dynamic>(
+        _url(path),
+        queryParameters: signed,
+        data: formData,
+        options: Options(contentType: Headers.multipartFormDataContentType),
+      ),
+    );
+    return _handleResponse(response);
   }
 
-  ApiException _mapDioException(DioException error, StackTrace stackTrace) {
+  /// Posts an already-encrypted payload under the gateway's `data` field.
+  Future<ApiResponse> postEncrypted(
+    String path, {
+    required String value,
+    Map<String, dynamic> data = const <String, dynamic>{},
+    Map<String, dynamic> query = const <String, dynamic>{},
+  }) {
+    return post(path, data: {...data, 'indulgences': value}, query: query);
+  }
+
+  Future<Response<dynamic>> _guard(
+    Future<Response<dynamic>> Function() request,
+  ) async {
+    try {
+      return await request();
+    } on DioException catch (error) {
+      throw _mapDioException(error);
+    }
+  }
+
+  ApiException _mapDioException(DioException error) {
     switch (error.type) {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.sendTimeout:
@@ -131,15 +636,13 @@ class ApiClient {
         return ApiException.network(error);
       case DioExceptionType.badResponse:
         final status = error.response?.statusCode ?? 0;
-        if (status == 401) {
-          _notifyUnauthorized();
-          return ApiException.unauthorized();
-        }
-        final message = error.response?.data is Map
-            ? Map<String, dynamic>.from(error.response!.data as Map)
-                .stringValue('message', fallback: 'Request failed ($status).')
-            : 'Request failed ($status).';
-        return ApiException(message, code: 'http_$status', statusCode: status, cause: error);
+        if (status == 401) return ApiException.unauthorized();
+        return ApiException(
+          'Request failed ($status).',
+          code: 'http_$status',
+          statusCode: status,
+          cause: error,
+        );
       case DioExceptionType.badCertificate:
       case DioExceptionType.transformTimeout:
       case DioExceptionType.unknown:
@@ -147,31 +650,44 @@ class ApiClient {
     }
   }
 
-  void _notifyUnauthorized() {
-    if (_handlingUnauthorized) return;
-    _handlingUnauthorized = true;
-    final handler = onUnauthorized;
-    Future<void>.microtask(() async {
-      try {
-        await handler?.call();
-      } finally {
-        _handlingUnauthorized = false;
-      }
-    });
+  Future<ApiResponse> _handleResponse(Response<dynamic> response) async {
+    final status = response.statusCode ?? 0;
+    if (status >= 400) {
+      throw ApiException(
+        'Request failed ($status).',
+        code: 'http_$status',
+        statusCode: status,
+      );
+    }
+    final parsed = ApiResponse.fromRaw(response.data);
+    if (parsed.isAuthExpired) {
+      await _handleAuthExpired(parsed.message);
+    }
+    return parsed.ensureSuccess();
   }
 
-  Map<String, String> _flatten(RequestOptions options) {
-    final result = <String, String>{};
-    void add(String key, Object? value) {
-      if (value == null) return;
-      result[key] = value.toString();
+  Future<void> _handleAuthExpired(String serverMessage) async {
+    if (_handlingAuthExpired) {
+      throw ApiException(serverMessage, code: '-2');
     }
+    _handlingAuthExpired = true;
+    try {
+      await config.authExpiredHandler?.call();
+    } finally {
+      _handlingAuthExpired = false;
+    }
+    throw ApiException(serverMessage, code: '-2');
+  }
 
-    options.queryParameters.forEach((key, value) => add(key.toString(), value));
-    final data = options.data;
-    if (data is Map) {
-      data.forEach((key, value) => add(key.toString(), value));
+  String _url(String path) {
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return path;
     }
-    return result;
+    return '${config.apiBaseUrl}${path.startsWith('/') ? path : '/$path'}';
+  }
+
+  String _randomDigits(int length) {
+    return config.randomDigitsProvider?.call(length) ??
+        ApiSignature.randomDigits(length);
   }
 }

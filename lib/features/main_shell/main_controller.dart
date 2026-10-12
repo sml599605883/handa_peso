@@ -4,7 +4,6 @@ import '../../app/navigation/app_navigator.dart';
 import '../../app/routes/app_routes.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/network/api_client.dart';
-import '../../core/network/api_endpoints.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/session/session_store.dart';
 import '../home/home_data.dart';
@@ -43,7 +42,7 @@ class MainController extends GetxController {
     homeLoading.value = true;
     homeError.value = null;
     try {
-      final response = await apiClient.get(ApiEndpoints.homeFeed);
+      final response = await apiClient.homePage();
       homeData.value = HomeData.fromJson(response.data);
       _loadedOnce = true;
     } on ApiException catch (error) {
@@ -78,7 +77,7 @@ class MainController extends GetxController {
 
   Future<void> logout() async {
     try {
-      await apiClient.get(ApiEndpoints.logout);
+      await apiClient.logout();
     } on ApiException catch (error) {
       CrashReporter.record(error, StackTrace.current);
     } finally {
