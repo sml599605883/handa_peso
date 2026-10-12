@@ -214,4 +214,103 @@ void main() {
       expect(config.webBaseUrl, 'http://8.220.176.2');
     });
   });
+
+  group('endpoint switch reporting', () {
+    _StubAdapter switchingAdapter() {
+      return _StubAdapter((options) async {
+        switch (options.uri.toString()) {
+          case 'http://config.test/api.json':
+            return ResponseBody.fromString('{"api":"http://backup.test"}', 200);
+          case 'http://backup.test':
+            return ResponseBody.fromString('ok', 200);
+          default:
+            throw DioException.connectionError(
+              requestOptions: options,
+              reason: 'offline',
+            );
+        }
+      });
+    }
+
+    test('reports the accumulated log when the spare host takes over', () async {
+      final config = _buildConfig(
+        remoteConfigUrl: 'http://config.test/api.json',
+      );
+      final payloads = <String>[];
+
+      final ok = await probeStartupTransport(
+        _client(config, switchingAdapter()),
+        reportSwitch: (payload) async => payloads.add(payload),
+      );
+      await pumpEventQueue();
+
+      expect(ok, isTrue);
+      expect(payloads, hasLength(1));
+
+      final entries = (jsonDecode(payloads.single) as List).cast<String>();
+      expect(entries, hasLength(4));
+      expect(entries.first, contains('primary.test'));
+      expect(
+        entries.any((line) => line.contains('primary.test -> backup.test')),
+        isTrue,
+      );
+    });
+
+    test('stays quiet when the built-in host answers', () async {
+      final adapter = _StubAdapter(
+        (options) async => ResponseBody.fromString('ok', 200),
+      );
+      final payloads = <String>[];
+
+      final ok = await probeStartupTransport(
+        _client(_buildConfig(), adapter),
+        reportSwitch: (payload) async => payloads.add(payload),
+      );
+      await pumpEventQueue();
+
+      expect(ok, isTrue);
+      expect(payloads, isEmpty);
+    });
+
+    test('stays quiet when the spare host also fails', () async {
+      final config = _buildConfig(
+        remoteConfigUrl: 'http://config.test/api.json',
+      );
+      final payloads = <String>[];
+
+      final ok = await probeStartupTransport(
+        _client(
+          config,
+          _StubAdapter((options) async {
+            if (options.uri.toString() == 'http://config.test/api.json') {
+              return ResponseBody.fromString('{"api":"http://backup.test"}', 200);
+            }
+            throw DioException.connectionError(
+              requestOptions: options,
+              reason: 'offline',
+            );
+          }),
+        ),
+        reportSwitch: (payload) async => payloads.add(payload),
+      );
+      await pumpEventQueue();
+
+      expect(ok, isFalse);
+      expect(payloads, isEmpty);
+    });
+
+    test('ignores a reporter failure', () async {
+      final config = _buildConfig(
+        remoteConfigUrl: 'http://config.test/api.json',
+      );
+
+      final ok = await probeStartupTransport(
+        _client(config, switchingAdapter()),
+        reportSwitch: (payload) async => throw StateError('reporter down'),
+      );
+      await pumpEventQueue();
+
+      expect(ok, isTrue);
+    });
+  });
 }

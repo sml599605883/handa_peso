@@ -125,6 +125,14 @@ class ApiClient {
     );
   }
 
+  /// app上报 —— 动态域名切换上报（`khedas=1`）。
+  ///
+  /// [payload] 承载本次切换过程的日志载荷；`khedas` 固定为 `1`（动态域名上报），
+  /// 另一个取值 `2` 用于流程埋点上报。失败由调用方兜底。
+  Future<void> reportEndpointSwitch(String payload) {
+    return appReport(khedas: '1', inanest: payload);
+  }
+
   Future<ApiResponse> reCredit() {
     return get(
       ApiEndpoints.reCredit,

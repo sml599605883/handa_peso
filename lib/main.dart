@@ -45,6 +45,7 @@ Future<void> startHandaPeso({
       probe: () => probeStartupTransport(
         dependencies.apiClient,
         onReachable: dependencies.syncDeviceName,
+        reportSwitch: dependencies.apiClient.reportEndpointSwitch,
       ),
       readyBuilder: () => HandaPesoApp(dependencies: dependencies),
     ),

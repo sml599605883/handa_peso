@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
@@ -9,30 +10,77 @@ import '../theme/app_spacing.dart';
 typedef StartupNetworkProbe = Future<bool> Function();
 typedef StartupNetworkReadyBuilder = Widget Function();
 
+/// 上报一次动态域名切换的日志载荷（app上报 `khedas=1`）。
+typedef EndpointSwitchReporter = Future<void> Function(String payload);
+
 /// 解析启动门禁所需的网关可达性。
 ///
 /// 先探测编译内置的地址；失败时从远程配置链接拉取备用基础地址后再次探测。
 /// [onReachable] 只会在某个地址成功响应后执行，避免设备名称查询打到失效的网关上。
+/// 真正发生换址时，会把本次过程累积的日志交给 [reportSwitch] 上报（best-effort）。
 ///
 /// 远程配置链接为空时该回退不生效，第一次探测即为最终判断。
 Future<bool> probeStartupTransport(
   ApiClient apiClient, {
   String? remoteConfigUrl,
   Future<void> Function()? onReachable,
+  EndpointSwitchReporter? reportSwitch,
 }) async {
-  if (!await apiClient.probeTransport()) {
+  final logs = <String>[];
+  void log(String message) {
+    logs.add('${DateTime.now().toIso8601String()} $message');
+  }
+
+  final builtInHost = _hostOf(apiClient.config.apiBaseUrl);
+  log('launch probe opened against built-in host $builtInHost');
+
+  if (await apiClient.probeTransport()) {
+    log('built-in host $builtInHost answered; nothing to switch');
+  } else {
+    log('built-in host $builtInHost stayed silent');
+
     final switched = await apiClient.applyRemoteBaseUrls(
       remoteConfigUrl: remoteConfigUrl,
     );
-    if (!switched || !await apiClient.probeTransport()) {
+    if (!switched) {
+      log('no spare host source configured; staying on $builtInHost');
       return false;
+    }
+
+    final spareHost = _hostOf(apiClient.config.apiBaseUrl);
+    log('spare host $spareHost read from the config source; verifying');
+
+    if (!await apiClient.probeTransport()) {
+      log('spare host $spareHost stayed silent too; giving up the switch');
+      return false;
+    }
+
+    log('spare host $spareHost answered; moving traffic $builtInHost -> $spareHost');
+
+    final reporter = reportSwitch;
+    if (reporter != null) {
+      unawaited(_reportSwitchQuietly(reporter, jsonEncode(logs)));
     }
   }
 
-  if (onReachable != null) {
-    await onReachable();
+  final reachable = onReachable;
+  if (reachable != null) {
+    await reachable();
   }
   return true;
+}
+
+String _hostOf(String url) => Uri.tryParse(url)?.host ?? url;
+
+Future<void> _reportSwitchQuietly(
+  EndpointSwitchReporter report,
+  String payload,
+) async {
+  try {
+    await report(payload);
+  } catch (_) {
+    // 换址上报是尽力而为的，绝不影响启动。
+  }
 }
 
 /// 在网关可达之前，让启动图一直停留在屏幕上。
