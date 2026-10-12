@@ -10,11 +10,11 @@ import 'api_exception.dart';
 import 'api_response.dart';
 import 'api_signature.dart';
 
-/// Typed gateway client.
+/// 强类型网关客户端。
 ///
-/// Every request is signed (see [ApiSignature]) and every response is unwrapped
-/// into an [ApiResponse]. Business failures surface as [ApiException] so callers
-/// never touch raw Dio types.
+/// 每个请求都会被签名（见 [ApiSignature]），每个响应都会被解包为
+/// [ApiResponse]。业务失败以 [ApiException] 的形式抛出，调用方无需
+/// 接触原始的 Dio 类型。
 class ApiClient {
   ApiClient(this.config, {Dio? dio}) : dio = dio ?? Dio() {
     this.dio.options
@@ -35,7 +35,7 @@ class ApiClient {
   bool _handlingAuthExpired = false;
 
   // ---------------------------------------------------------------------------
-  // Auth & account
+  // 鉴权与账号
   // ---------------------------------------------------------------------------
 
   Future<ApiResponse> sendSmsCode({
@@ -93,7 +93,7 @@ class ApiClient {
   }
 
   // ---------------------------------------------------------------------------
-  // App shell & home
+  // 应用外壳与首页
   // ---------------------------------------------------------------------------
 
   Future<ApiResponse> homePage() {
@@ -150,7 +150,7 @@ class ApiClient {
   }
 
   // ---------------------------------------------------------------------------
-  // Product
+  // 产品
   // ---------------------------------------------------------------------------
 
   Future<ApiResponse> productApply({
@@ -205,7 +205,7 @@ class ApiClient {
   }
 
   // ---------------------------------------------------------------------------
-  // Certification
+  // 认证
   // ---------------------------------------------------------------------------
 
   Future<ApiResponse> basicPersonInfo({required String cotype}) {
@@ -395,7 +395,7 @@ class ApiClient {
   }
 
   // ---------------------------------------------------------------------------
-  // Orders
+  // 订单
   // ---------------------------------------------------------------------------
 
   Future<ApiResponse> orderList({
@@ -418,7 +418,7 @@ class ApiClient {
   }
 
   // ---------------------------------------------------------------------------
-  // Risk & telemetry reporting
+  // 风控与埋点上报
   // ---------------------------------------------------------------------------
 
   Future<ApiResponse> uploadLocation({required Map<String, dynamic> data}) {
@@ -446,13 +446,13 @@ class ApiClient {
     );
   }
 
-  /// Device detail reporting. [payload] must be AES-encrypted first via
-  /// [crypto]; the gateway only accepts the cipher text.
+  /// 设备详情上报。[payload] 必须先通过 [crypto] 进行 AES 加密；
+  /// 网关只接受密文。
   Future<ApiResponse> uploadDeviceInfo({required String payload}) {
     return postEncrypted(ApiEndpoints.uploadDeviceInfo, value: payload);
   }
 
-  /// Contacts reporting. [payload] must be AES-encrypted first via [crypto].
+  /// 通讯录上报。[payload] 必须先通过 [crypto] 进行 AES 加密。
   Future<ApiResponse> uploadContacts({
     required String payload,
     String trollopy = '3',
@@ -473,7 +473,7 @@ class ApiClient {
   }
 
   // ---------------------------------------------------------------------------
-  // Support centre
+  // 客服中心
   // ---------------------------------------------------------------------------
 
   Future<ApiResponse> supportTicket({
@@ -538,8 +538,27 @@ class ApiClient {
   }
 
   // ---------------------------------------------------------------------------
-  // Transport
+  // 传输层
   // ---------------------------------------------------------------------------
+
+  /// 供启动门禁使用的轻量级网关可达性探测。
+  ///
+  /// 只要网关返回任意状态码即解析为 `true`，因此应用层错误仍算作可达。
+  /// 传输层失败（超时、DNS 解析失败、连接被拒绝）解析为 `false`。
+  Future<bool> probeTransport() async {
+    try {
+      final response = await dio.getUri<String>(
+        Uri.parse(config.apiBaseUrl),
+        options: Options(
+          responseType: ResponseType.plain,
+          validateStatus: (_) => true,
+        ),
+      );
+      return response.statusCode != null;
+    } on DioException catch (error) {
+      return error.response?.statusCode != null;
+    }
+  }
 
   Future<ApiResponse> get(
     String path, {
@@ -604,7 +623,7 @@ class ApiClient {
     return _handleResponse(response);
   }
 
-  /// Posts an already-encrypted payload under the gateway's `data` field.
+  /// 将已加密的载荷以网关的 `data` 字段提交。
   Future<ApiResponse> postEncrypted(
     String path, {
     required String value,
