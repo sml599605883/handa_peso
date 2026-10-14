@@ -6,8 +6,8 @@ import 'package:get/get.dart';
 import '../../app/navigation/app_navigator.dart';
 import '../../app/routes/app_routes.dart';
 import '../../core/analytics/analytics_service.dart';
-import '../../core/network/api_client.dart';
-import '../../core/network/api_exception.dart';
+import '../../core/network/gateway_client.dart';
+import '../../core/network/gateway_failure.dart';
 import '../../core/session/session_store.dart';
 import '../home/home_data.dart';
 
@@ -22,7 +22,7 @@ const String _homeApplyProductId = 'home_card';
 class MainController extends GetxController with WidgetsBindingObserver {
   MainController({required this.apiClient, required this.sessionStore});
 
-  final ApiClient apiClient;
+  final GatewayClient apiClient;
   final SessionStore sessionStore;
 
   final selectedIndex = 0.obs;
@@ -117,10 +117,10 @@ class MainController extends GetxController with WidgetsBindingObserver {
     homeLoading.value = true;
     homeError.value = null;
     try {
-      final response = await apiClient.homePage();
-      homeData.value = HomeData.fromJson(response.data);
+      final response = await apiClient.fetchHomeOverview();
+      homeData.value = HomeData.fromJson(response.payload);
       _loadedOnce = true;
-    } on ApiException catch (error) {
+    } on GatewayFailure catch (error) {
       homeError.value = error.message;
       CrashReporter.record(error, StackTrace.current);
       // 已有内容时保留旧数据，只用轻提示反馈本次刷新失败。
@@ -150,7 +150,7 @@ class MainController extends GetxController with WidgetsBindingObserver {
       try {
         final id = banner.id.trim();
         if (id.isNotEmpty && (await sessionStore.sessionId()).isNotEmpty) {
-          await apiClient.bannerClickRecord(interreligious: id);
+          await apiClient.recordBannerClick(bannerId: id);
         }
       } catch (_) {
         // 上报失败不影响跳转。
@@ -181,8 +181,8 @@ class MainController extends GetxController with WidgetsBindingObserver {
 
   Future<void> logout() async {
     try {
-      await apiClient.logout();
-    } on ApiException catch (error) {
+      await apiClient.signOut();
+    } on GatewayFailure catch (error) {
       CrashReporter.record(error, StackTrace.current);
     } finally {
       await sessionStore.clear();

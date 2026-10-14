@@ -9,8 +9,8 @@ import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:get/get.dart';
 import 'package:handa_peso/app/navigation/app_route_observer.dart';
 import 'package:handa_peso/app/routes/app_routes.dart';
-import 'package:handa_peso/core/network/api_client.dart';
-import 'package:handa_peso/core/network/api_config.dart';
+import 'package:handa_peso/core/network/gateway_client.dart';
+import 'package:handa_peso/core/network/gateway_settings.dart';
 import 'package:handa_peso/core/session/session_store.dart';
 import 'package:handa_peso/features/home/home_big_card.dart';
 import 'package:handa_peso/features/home/home_banner.dart';
@@ -219,24 +219,24 @@ String _liveGuestBody() {
   ]);
 }
 
-ApiConfig _config() {
-  return ApiConfig(
-    apiBaseUrl: 'http://home.test',
-    signatureSecret: 'unit-test-secret',
+GatewaySettings _config() {
+  return GatewaySettings(
+    apiOrigin: 'http://home.test',
+    signSecret: 'unit-test-secret',
     sessionStore: SessionStore.memory(),
-    timestampProvider: () => 1700000000000,
-    randomDigitsProvider: (length) => '1' * length,
+    clock: () => 1700000000000,
+    noiseDigits: (length) => '1' * length,
   );
 }
 
-ApiClient _client(ApiConfig config, HttpClientAdapter adapter) {
-  return ApiClient(config, dio: Dio()..httpClientAdapter = adapter);
+GatewayClient _client(GatewaySettings config, HttpClientAdapter adapter) {
+  return GatewayClient(config, dio: Dio()..httpClientAdapter = adapter);
 }
 
 /// 用真实路由启动外壳，使 `Get.currentRoute` 与设计一致（`/main`）。
 Future<void> _pumpShell(
   WidgetTester tester,
-  ApiClient client, {
+  GatewayClient client, {
   bool settle = true,
 }) async {
   tester.view.physicalSize = const Size(375, 812);

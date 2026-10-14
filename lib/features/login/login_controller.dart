@@ -6,8 +6,8 @@ import 'package:get/get.dart';
 import '../../app/navigation/app_navigator.dart';
 import '../../app/navigation/h5_paths.dart';
 import '../../core/analytics/analytics_service.dart';
-import '../../core/network/api_client.dart';
-import '../../core/network/api_exception.dart';
+import '../../core/network/gateway_client.dart';
+import '../../core/network/gateway_failure.dart';
 import '../../core/session/session_store.dart';
 import '../main_shell/main_controller.dart';
 import 'login_cooldown.dart';
@@ -31,7 +31,7 @@ const String codeSentHint = 'Verification code sent.';
 class LoginController extends GetxController {
   LoginController({required this.apiClient, required this.sessionStore});
 
-  final ApiClient apiClient;
+  final GatewayClient apiClient;
   final SessionStore sessionStore;
 
   /// 输入框的文本控制器：控制器持有它们是为了回填上次的手机号、登录失败后
@@ -64,10 +64,10 @@ class LoginController extends GetxController {
 
   /// 协议地址 = 服务端下发的 H5 域名 + 文档登记的混淆段。
   String get privacyUrl =>
-      H5Paths.resolve(apiClient.config.webBaseUrl, H5Paths.privacyPolicy);
+      H5Paths.resolve(apiClient.settings.webOrigin, H5Paths.privacyPolicy);
 
   String get termsUrl =>
-      H5Paths.resolve(apiClient.config.webBaseUrl, H5Paths.agreement);
+      H5Paths.resolve(apiClient.settings.webOrigin, H5Paths.agreement);
 
   @override
   void onInit() {
@@ -120,18 +120,18 @@ class LoginController extends GetxController {
     try {
       // 只等请求，不等「转圈」动画：动画没跑完时请求也应该已经发出去了。
       unawaited(AppNavigator.showLoading());
-      await apiClient.sendSmsCode(fishtailed: phoneDigits.value);
+      await apiClient.requestSmsCode(phone: phoneDigits.value);
       await AppNavigator.dismissLoading();
       cooldown.restart();
       codeFocus.requestFocus();
       _notify(codeSentHint);
-    } on ApiException catch (error) {
+    } on GatewayFailure catch (error) {
       await AppNavigator.dismissLoading();
       _notify(error.message);
       CrashReporter.record(error, StackTrace.current);
     } catch (error) {
       await AppNavigator.dismissLoading();
-      _notify(ApiErrorMessage.resolve(error));
+      _notify(FailureMessage.describe(error));
       CrashReporter.record(error, StackTrace.current);
     } finally {
       requestingCode.value = false;
@@ -158,13 +158,13 @@ class LoginController extends GetxController {
     });
     try {
       unawaited(AppNavigator.showLoading());
-      final response = await apiClient.smsCodeLogin(
-        criminology: phoneDigits.value,
-        legongs: codeDigits.value,
+      final response = await apiClient.signInWithSmsCode(
+        phone: phoneDigits.value,
+        code: codeDigits.value,
       );
-      final sessionId = response.data['sandman']?.toString() ?? '';
+      final sessionId = response.payload['sandman']?.toString() ?? '';
       if (sessionId.isEmpty) {
-        throw const ApiException('Invalid login response');
+        throw const GatewayFailure('Invalid login response');
       }
       await AppNavigator.dismissLoading();
       await sessionStore.saveSessionId(sessionId);
@@ -179,14 +179,14 @@ class LoginController extends GetxController {
       } else {
         await AppNavigator.toMain();
       }
-    } on ApiException catch (error) {
+    } on GatewayFailure catch (error) {
       await AppNavigator.dismissLoading();
       _notify(error.message);
       CrashReporter.record(error, StackTrace.current);
       _resetCodeEntry();
     } catch (error) {
       await AppNavigator.dismissLoading();
-      _notify(ApiErrorMessage.resolve(error));
+      _notify(FailureMessage.describe(error));
       CrashReporter.record(error, StackTrace.current);
       _resetCodeEntry();
     } finally {

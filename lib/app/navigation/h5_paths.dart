@@ -1,7 +1,7 @@
 /// H5 页面地址（接口文档「值映射 -> Scheme -> h5页面混淆」）。
 ///
 /// 前端路由与 H5 页面都做过混淆，原生只能用文档登记过的混淆段来拼路径；
-/// 域名则来自服务端下发的 `ApiConfig.webBaseUrl`（启动后会被远端配置刷新），
+/// 域名则来自服务端下发的 `GatewaySettings.webOrigin`（启动后会被远端配置刷新），
 /// 所以这里只维护混淆段，不写死域名。
 abstract final class H5Paths {
   /// 客服中心。

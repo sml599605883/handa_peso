@@ -6,8 +6,8 @@ import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
 import '../../app/navigation/app_navigator.dart';
 import '../../core/analytics/analytics_service.dart';
-import '../../core/network/api_client.dart';
-import '../../core/network/api_exception.dart';
+import '../../core/network/gateway_client.dart';
+import '../../core/network/gateway_failure.dart';
 import '../main_shell/main_shell_page.dart';
 import 'order_item.dart';
 
@@ -20,7 +20,7 @@ class OrdersPage extends StatefulWidget {
 }
 
 class _OrdersPageState extends State<OrdersPage> {
-  late final ApiClient _apiClient = Get.find<ApiClient>();
+  late final GatewayClient _apiClient = Get.find<GatewayClient>();
 
   List<OrderItem>? _orders;
   String? _error;
@@ -39,7 +39,7 @@ class _OrdersPageState extends State<OrdersPage> {
       _error = null;
     });
     try {
-      final sessionId = await _apiClient.config.sessionStore.sessionId();
+      final sessionId = await _apiClient.settings.sessionStore.sessionId();
       if (sessionId.isEmpty) {
         if (!mounted) return;
         setState(() {
@@ -48,8 +48,8 @@ class _OrdersPageState extends State<OrdersPage> {
         });
         return;
       }
-      final response = await _apiClient.orderList(corequisites: '4');
-      final list = response.data['latchstrings'];
+      final response = await _apiClient.fetchOrders(status: '4');
+      final list = response.payload['latchstrings'];
       final items = list is List
           ? list
                 .whereType<Map<String, dynamic>>()
@@ -62,7 +62,7 @@ class _OrdersPageState extends State<OrdersPage> {
         _needsLogin = false;
         _loading = false;
       });
-    } on ApiException catch (error) {
+    } on GatewayFailure catch (error) {
       CrashReporter.record(error, StackTrace.current);
       if (!mounted) return;
       setState(() {

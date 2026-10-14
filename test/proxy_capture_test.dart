@@ -4,15 +4,15 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:handa_peso/core/bootstrap/app_bootstrap.dart';
-import 'package:handa_peso/core/client/device_bridge.dart';
-import 'package:handa_peso/core/network/api_client.dart';
-import 'package:handa_peso/core/network/api_config.dart';
+import 'package:handa_peso/core/client/platform_bridge.dart';
+import 'package:handa_peso/core/network/gateway_client.dart';
+import 'package:handa_peso/core/network/gateway_settings.dart';
 import 'package:handa_peso/core/session/session_store.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 /// 抓包回归：Dart 的 HttpClient 不读取 iOS 系统代理，因此代理必须由原生层
 /// 透出，并在首个请求之前应用到 Dio 上。覆盖原生解析、Dio 改造与启动接线。
-const _channel = MethodChannel(DeviceBridge.channelName);
+const _channel = MethodChannel(PlatformBridge.channelName);
 
 final _successEnvelope = jsonEncode(<String, Object?>{
   'unaccepted': 0,
@@ -20,13 +20,13 @@ final _successEnvelope = jsonEncode(<String, Object?>{
   'indulgences': <String, Object?>{},
 });
 
-ApiConfig _config({String apiBaseUrl = 'http://127.0.0.1:1'}) {
-  return ApiConfig(
-    apiBaseUrl: apiBaseUrl,
-    signatureSecret: 'unit-test-secret',
+GatewaySettings _config({String apiOrigin = 'http://127.0.0.1:1'}) {
+  return GatewaySettings(
+    apiOrigin: apiOrigin,
+    signSecret: 'unit-test-secret',
     sessionStore: SessionStore.memory(),
-    timestampProvider: () => 1700000000000,
-    randomDigitsProvider: (length) => '1' * length,
+    clock: () => 1700000000000,
+    noiseDigits: (length) => '1' * length,
   );
 }
 
@@ -51,49 +51,49 @@ void main() {
         .setMockMethodCallHandler(_channel, null);
   });
 
-  group('ClientProxySettings', () {
+  group('ProxyEndpoint', () {
     test('accepts an enabled proxy payload from the native bridge', () {
-      final settings = ClientProxySettings.fromMap(<Object?, Object?>{
+      final settings = ProxyEndpoint.fromMap(<Object?, Object?>{
         'enabled': true,
         'host': '192.168.1.8',
         'port': 8888,
       });
 
-      expect(settings.enabled, isTrue);
+      expect(settings.isEnabled, isTrue);
       expect(settings.host, '192.168.1.8');
       expect(settings.port, 8888);
-      expect(settings.canApply, isTrue);
+      expect(settings.isUsable, isTrue);
     });
 
     test('rejects disabled or incomplete payloads', () {
       expect(
-        ClientProxySettings.fromMap(<Object?, Object?>{
+        ProxyEndpoint.fromMap(<Object?, Object?>{
           'enabled': false,
           'host': '192.168.1.8',
           'port': 8888,
-        }).canApply,
+        }).isUsable,
         isFalse,
       );
       expect(
-        ClientProxySettings.fromMap(<Object?, Object?>{
+        ProxyEndpoint.fromMap(<Object?, Object?>{
           'enabled': true,
           'host': '',
           'port': 8888,
-        }).canApply,
+        }).isUsable,
         isFalse,
       );
       expect(
-        ClientProxySettings.fromMap(<Object?, Object?>{
+        ProxyEndpoint.fromMap(<Object?, Object?>{
           'enabled': true,
           'host': '192.168.1.8',
           'port': 0,
-        }).canApply,
+        }).isUsable,
         isFalse,
       );
     });
   });
 
-  group('DeviceBridge.proxySettings', () {
+  group('PlatformBridge.proxySettings', () {
     test('reads host and port from the iOS bridge', () async {
       final methods = <String>[];
       _mockBridge((call) {
@@ -105,12 +105,12 @@ void main() {
         };
       });
 
-      final settings = await DeviceBridge(supported: true).proxySettings();
+      final settings = await PlatformBridge(available: true).readProxyEndpoint();
 
       expect(methods, <String>['getProxySettings']);
       expect(settings?.host, '127.0.0.1');
       expect(settings?.port, 8888);
-      expect(settings?.canApply, isTrue);
+      expect(settings?.isUsable, isTrue);
     });
 
     test('returns null when the native side reports no proxy', () async {
@@ -118,17 +118,17 @@ void main() {
         (call) => <String, Object?>{'enabled': false, 'host': '', 'port': 0},
       );
 
-      final settings = await DeviceBridge(supported: true).proxySettings();
+      final settings = await PlatformBridge(available: true).readProxyEndpoint();
 
-      expect(settings?.canApply, isFalse);
+      expect(settings?.isUsable, isFalse);
     });
 
     test('returns null when the native bridge is unavailable', () async {
-      expect(await DeviceBridge(supported: false).proxySettings(), isNull);
+      expect(await PlatformBridge(available: false).readProxyEndpoint(), isNull);
     });
   });
 
-  group('ApiClient.setProxy', () {
+  group('GatewayClient.setProxy', () {
     // flutter_test 的绑定会把所有请求拦截成 400，抓包验证需要真实的本机
     // HTTP 服务，因此这里恢复默认的 HttpClient 行为。
     setUp(() => HttpOverrides.global = null);
@@ -166,10 +166,10 @@ void main() {
           ..close();
       });
 
-      final apiClient = ApiClient(_config())
-        ..setProxy(host: '127.0.0.1', port: proxyServer.port);
+      final apiClient = GatewayClient(_config())
+        ..useProxy(host: '127.0.0.1', port: proxyServer.port);
 
-      await apiClient.get('/dropcloth/fishtailed');
+      await apiClient.read('/dropcloth/fishtailed');
 
       expect(apiClient.proxyHost, '127.0.0.1');
       expect(apiClient.proxyPort, proxyServer.port);
@@ -211,17 +211,17 @@ void main() {
           ..close();
       });
 
-      final apiClient = ApiClient(
-        _config(apiBaseUrl: 'http://127.0.0.1:${targetServer.port}'),
+      final apiClient = GatewayClient(
+        _config(apiOrigin: 'http://127.0.0.1:${targetServer.port}'),
       );
 
-      await apiClient.get('/dropcloth/fishtailed');
+      await apiClient.read('/dropcloth/fishtailed');
       expect(apiClient.proxyHost, isNull);
       expect(targetRequests, 1);
       expect(proxyRequests, 0);
 
-      apiClient.setProxy(host: '127.0.0.1', port: proxyServer.port);
-      await apiClient.get('/dropcloth/fishtailed');
+      apiClient.useProxy(host: '127.0.0.1', port: proxyServer.port);
+      await apiClient.read('/dropcloth/fishtailed');
 
       expect(targetRequests, 1);
       expect(proxyRequests, 1);
@@ -249,7 +249,7 @@ void main() {
 
       final dependencies = await AppBootstrap.initialize(
         sessionStoreFactory: SessionStore.memory,
-        deviceBridge: DeviceBridge(supported: true),
+        platformBridge: PlatformBridge(available: true),
       );
 
       expect(dependencies.apiClient.proxyHost, '127.0.0.1');
@@ -271,7 +271,7 @@ void main() {
 
       final dependencies = await AppBootstrap.initialize(
         sessionStoreFactory: SessionStore.memory,
-        deviceBridge: DeviceBridge(supported: true),
+        platformBridge: PlatformBridge(available: true),
       );
 
       expect(dependencies.apiClient.proxyHost, isNull);

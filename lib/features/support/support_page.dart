@@ -3,8 +3,8 @@ import 'package:get/get.dart';
 
 import '../../app/theme/app_spacing.dart';
 import '../../core/analytics/analytics_service.dart';
-import '../../core/network/api_client.dart';
-import '../../core/network/api_exception.dart';
+import '../../core/network/gateway_client.dart';
+import '../../core/network/gateway_failure.dart';
 
 /// 客服中心：自助 FAQ 以及原生工单表单。
 class SupportPage extends StatefulWidget {
@@ -47,14 +47,14 @@ class _SupportPageState extends State<SupportPage> {
     if (message.isEmpty || _submitting) return;
     setState(() => _submitting = true);
     try {
-      await Get.find<ApiClient>().supportTicket(grapier: message);
+      await Get.find<GatewayClient>().openSupportTicket(description: message);
       AnalyticsService.logEvent(AppEvents.supportTicketCreated);
       _messageController.clear();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Ticket submitted. We will reply by SMS.')),
       );
-    } on ApiException catch (error) {
+    } on GatewayFailure catch (error) {
       CrashReporter.record(error, StackTrace.current);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));

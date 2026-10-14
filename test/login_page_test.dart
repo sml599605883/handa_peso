@@ -13,8 +13,8 @@ import 'package:get/get.dart';
 import 'package:handa_peso/app/routes/app_routes.dart';
 import 'package:handa_peso/app/theme/app_colors.dart';
 import 'package:handa_peso/app/theme/app_theme.dart';
-import 'package:handa_peso/core/network/api_client.dart';
-import 'package:handa_peso/core/network/api_config.dart';
+import 'package:handa_peso/core/network/gateway_client.dart';
+import 'package:handa_peso/core/network/gateway_settings.dart';
 import 'package:handa_peso/core/session/session_store.dart';
 import 'package:handa_peso/features/login/login_controller.dart';
 import 'package:handa_peso/features/login/login_page.dart';
@@ -102,14 +102,14 @@ String _envelope([Map<String, dynamic>? data]) {
   });
 }
 
-ApiConfig _config(SessionStore store) {
-  return ApiConfig(
-    apiBaseUrl: 'http://login.test',
-    signatureSecret: 'unit-test-secret',
+GatewaySettings _config(SessionStore store) {
+  return GatewaySettings(
+    apiOrigin: 'http://login.test',
+    signSecret: 'unit-test-secret',
     sessionStore: store,
-    webBaseUrl: 'http://web.test',
-    timestampProvider: () => 1700000000000,
-    randomDigitsProvider: (length) => '1' * length,
+    webOrigin: 'http://web.test',
+    clock: () => 1700000000000,
+    noiseDigits: (length) => '1' * length,
   );
 }
 
@@ -202,7 +202,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
-    final client = ApiClient(
+    final client = GatewayClient(
       _config(store),
       dio: Dio()..httpClientAdapter = adapter,
     );

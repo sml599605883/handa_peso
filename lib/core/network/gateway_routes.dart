@@ -1,8 +1,8 @@
 /// Handa Peso 网关的混淆路由表。
 ///
-/// 后端暴露的是无意义的路径片段（见接口文档），这样既能让协议细节不出现在
-/// 业务代码中，也让每个发布包拥有各自的路由词表。
-abstract final class ApiEndpoints {
+/// 后端对外只暴露无意义的路径片段（见接口文档），这样协议细节不会散落在业务
+/// 代码里，每个发布包也各自拥有一套路由词表。
+abstract final class GatewayRoutes {
   // 鉴权与账号
   static const sendSmsCode = '/dropcloth/fishtailed';
   static const smsChannels = '/dropcloth/hastened';

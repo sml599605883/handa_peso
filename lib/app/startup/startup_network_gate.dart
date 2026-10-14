@@ -3,7 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
-import '../../core/network/api_client.dart';
+import '../../core/network/gateway_client.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 
@@ -21,8 +21,8 @@ typedef EndpointSwitchReporter = Future<void> Function(String payload);
 ///
 /// 远程配置链接为空时该回退不生效，第一次探测即为最终判断。
 Future<bool> probeStartupTransport(
-  ApiClient apiClient, {
-  String? remoteConfigUrl,
+  GatewayClient apiClient, {
+  String? spareSourceUrl,
   Future<void> Function()? onReachable,
   EndpointSwitchReporter? reportSwitch,
 }) async {
@@ -31,26 +31,26 @@ Future<bool> probeStartupTransport(
     logs.add('${DateTime.now().toIso8601String()} $message');
   }
 
-  final builtInHost = _hostOf(apiClient.config.apiBaseUrl);
+  final builtInHost = _hostOf(apiClient.settings.apiOrigin);
   log('launch probe opened against built-in host $builtInHost');
 
-  if (await apiClient.probeTransport()) {
+  if (await apiClient.probeReachability()) {
     log('built-in host $builtInHost answered; nothing to switch');
   } else {
     log('built-in host $builtInHost stayed silent');
 
-    final switched = await apiClient.applyRemoteBaseUrls(
-      remoteConfigUrl: remoteConfigUrl,
+    final switched = await apiClient.refreshOrigins(
+      sourceUrl: spareSourceUrl,
     );
     if (!switched) {
       log('no spare host source configured; staying on $builtInHost');
       return false;
     }
 
-    final spareHost = _hostOf(apiClient.config.apiBaseUrl);
+    final spareHost = _hostOf(apiClient.settings.apiOrigin);
     log('spare host $spareHost read from the config source; verifying');
 
-    if (!await apiClient.probeTransport()) {
+    if (!await apiClient.probeReachability()) {
       log('spare host $spareHost stayed silent too; giving up the switch');
       return false;
     }

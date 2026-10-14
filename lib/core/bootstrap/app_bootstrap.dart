@@ -2,10 +2,10 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../app/navigation/app_navigator.dart';
-import '../client/device_bridge.dart';
+import '../client/platform_bridge.dart';
 import '../device/device_info_sync.dart';
-import '../network/api_client.dart';
-import '../network/api_config.dart';
+import '../network/gateway_client.dart';
+import '../network/gateway_settings.dart';
 import '../session/session_store.dart';
 
 /// 承载首帧渲染之前就已创建好的各项依赖。
@@ -16,7 +16,7 @@ class AppDependencies {
     Future<void> Function()? syncDeviceName,
   }) : syncDeviceName = syncDeviceName ?? _noop;
 
-  final ApiClient apiClient;
+  final GatewayClient apiClient;
   final SessionStore sessionStore;
 
   /// 尽力而为地向网关查询可读的设备名称。
@@ -39,24 +39,24 @@ abstract final class AppBootstrap {
     String? apiBaseUrl,
     String? webBaseUrl,
     String? signatureSecret,
-    AuthExpiredHandler? authExpiredHandler,
-    DeviceBridge? deviceBridge,
+    SessionExpiredCallback? onSessionExpired,
+    PlatformBridge? platformBridge,
   }) async {
     final sessionStore =
         sessionStoreFactory?.call() ?? SessionStore(SharedPreferencesAsync());
 
-    final config = ApiConfig(
-      apiBaseUrl: apiBaseUrl ?? ApiConfig.defaultApiBaseUrl,
-      webBaseUrl: webBaseUrl ?? ApiConfig.defaultWebBaseUrl,
-      signatureSecret: signatureSecret ?? ApiConfig.defaultSignatureSecret,
+    final settings = GatewaySettings(
+      apiOrigin: apiBaseUrl ?? GatewaySettings.fallbackApiOrigin,
+      webOrigin: webBaseUrl ?? GatewaySettings.fallbackWebOrigin,
+      signSecret: signatureSecret ?? GatewaySettings.fallbackSignSecret,
       sessionStore: sessionStore,
     )..appVersion = await _appVersion();
 
-    config.authExpiredHandler ??=
+    settings.onSessionExpired ??=
         AppNavigator.redirectToLoginAfterSessionExpiry;
 
-    final bridge = deviceBridge ?? DeviceBridge();
-    final apiClient = ApiClient(config);
+    final bridge = platformBridge ?? PlatformBridge();
+    final apiClient = GatewayClient(settings);
 
     // 抓包：代理地址由 iOS 系统网络设置决定，未配置代理时保持直连。
     // 必须在首个请求（启动门禁探测）之前完成。
@@ -70,14 +70,14 @@ abstract final class AppBootstrap {
 
     // 用原生设备身份填充需要签名的公有参数。此过程不涉及网络；
     // 可读设备名称会在启动门禁确认网关可达后解析。
-    final model = await deviceSync.applyDeviceIdentity(config);
+    final model = await deviceSync.applyDeviceIdentity(settings);
 
     return AppDependencies(
       apiClient: apiClient,
       sessionStore: sessionStore,
       syncDeviceName: model == null || model.isEmpty
           ? null
-          : () => deviceSync.resolveDeviceName(config, model),
+          : () => deviceSync.resolveDeviceName(settings, model),
     );
   }
 
@@ -95,13 +95,13 @@ abstract final class AppBootstrap {
   ///
   /// 尽力而为：桥接不可用、原生未开启代理或读取失败时都保持直连启动。
   static Future<void> _applyNativeProxy(
-    ApiClient apiClient,
-    DeviceBridge bridge,
+    GatewayClient apiClient,
+    PlatformBridge bridge,
   ) async {
     try {
-      final proxy = await bridge.proxySettings();
-      if (proxy != null && proxy.canApply) {
-        apiClient.setProxy(host: proxy.host, port: proxy.port);
+      final proxy = await bridge.readProxyEndpoint();
+      if (proxy != null && proxy.isUsable) {
+        apiClient.useProxy(host: proxy.host, port: proxy.port);
       }
     } catch (_) {
       // 代理发现不得阻塞启动。

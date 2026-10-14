@@ -7,7 +7,7 @@ import 'app/navigation/app_navigator.dart';
 import 'app/startup/startup_network_gate.dart';
 import 'core/analytics/analytics_service.dart';
 import 'core/bootstrap/app_bootstrap.dart';
-import 'core/network/api_client.dart';
+import 'core/network/gateway_client.dart';
 import 'features/main_shell/main_controller.dart';
 
 typedef DependencyBootstrapper = Future<AppDependencies> Function();
@@ -32,7 +32,7 @@ Future<void> startHandaPeso({
   final dependencies = await bootstrap();
 
   Get.put<AppDependencies>(dependencies, permanent: true);
-  Get.put<ApiClient>(dependencies.apiClient, permanent: true);
+  Get.put<GatewayClient>(dependencies.apiClient, permanent: true);
   AppNavigator.mainTabSelector = (index) {
     if (Get.isRegistered<MainController>()) {
       Get.find<MainController>().selectTab(index);

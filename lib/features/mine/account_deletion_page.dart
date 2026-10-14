@@ -5,8 +5,8 @@ import '../../app/navigation/app_navigator.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
 import '../../core/analytics/analytics_service.dart';
-import '../../core/network/api_client.dart';
-import '../../core/network/api_exception.dart';
+import '../../core/network/gateway_client.dart';
+import '../../core/network/gateway_failure.dart';
 
 /// 应用内账号注销，App Store 5.1.1(v) 与 Google Play 政策均有要求。
 class AccountDeletionPage extends StatefulWidget {
@@ -35,15 +35,15 @@ class _AccountDeletionPageState extends State<AccountDeletionPage> {
       _error = null;
     });
     try {
-      final apiClient = Get.find<ApiClient>();
-      await apiClient.deleteAccount();
+      final apiClient = Get.find<GatewayClient>();
+      await apiClient.closeAccount();
       AnalyticsService.logEvent(AppEvents.accountDeleted);
-      await apiClient.config.sessionStore.clear();
+      await apiClient.settings.sessionStore.clear();
       AnalyticsService.setUserId(null);
       if (!mounted) return;
       AppNavigator.showToast('Your account deletion request has been submitted.');
       await AppNavigator.toLogin();
-    } on ApiException catch (error) {
+    } on GatewayFailure catch (error) {
       CrashReporter.record(error, StackTrace.current);
       if (!mounted) return;
       setState(() => _error = error.message);

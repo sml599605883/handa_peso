@@ -4,21 +4,21 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:handa_peso/app/startup/startup_network_gate.dart';
-import 'package:handa_peso/core/network/api_client.dart';
-import 'package:handa_peso/core/network/api_config.dart';
+import 'package:handa_peso/core/network/gateway_client.dart';
+import 'package:handa_peso/core/network/gateway_settings.dart';
 import 'package:handa_peso/core/session/session_store.dart';
 
-ApiConfig _buildConfig({
-  String apiBaseUrl = 'http://primary.test',
-  String remoteConfigUrl = '',
+GatewaySettings _buildConfig({
+  String apiOrigin = 'http://primary.test',
+  String spareSourceUrl = '',
 }) {
-  return ApiConfig(
-    apiBaseUrl: apiBaseUrl,
-    remoteConfigUrl: remoteConfigUrl,
-    signatureSecret: 'unit-test-secret',
+  return GatewaySettings(
+    apiOrigin: apiOrigin,
+    spareSourceUrl: spareSourceUrl,
+    signSecret: 'unit-test-secret',
     sessionStore: SessionStore.memory(),
-    timestampProvider: () => 1700000000000,
-    randomDigitsProvider: (length) => '1' * length,
+    clock: () => 1700000000000,
+    noiseDigits: (length) => '1' * length,
   );
 }
 
@@ -44,8 +44,8 @@ class _StubAdapter implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
-ApiClient _client(ApiConfig config, _StubAdapter adapter) {
-  return ApiClient(config, dio: Dio()..httpClientAdapter = adapter);
+GatewayClient _client(GatewaySettings config, _StubAdapter adapter) {
+  return GatewayClient(config, dio: Dio()..httpClientAdapter = adapter);
 }
 
 void main() {
@@ -64,7 +64,7 @@ void main() {
 
       expect(ok, isTrue);
       expect(reached, 1);
-      expect(config.apiBaseUrl, 'http://primary.test');
+      expect(config.apiOrigin, 'http://primary.test');
       expect(adapter.urls, ['http://primary.test']);
     });
 
@@ -117,7 +117,7 @@ void main() {
         }
       });
       final config = _buildConfig(
-        remoteConfigUrl: 'http://config.test/api.json',
+        spareSourceUrl: 'http://config.test/api.json',
       );
       var reached = 0;
 
@@ -128,8 +128,8 @@ void main() {
 
       expect(ok, isTrue);
       expect(reached, 1);
-      expect(config.apiBaseUrl, 'http://backup.test');
-      expect(config.webBaseUrl, 'http://h5.test');
+      expect(config.apiOrigin, 'http://backup.test');
+      expect(config.webOrigin, 'http://h5.test');
       expect(adapter.urls, [
         'http://primary.test',
         'http://config.test/api.json',
@@ -151,7 +151,7 @@ void main() {
         );
       });
       final config = _buildConfig(
-        remoteConfigUrl: 'http://config.test/api.json',
+        spareSourceUrl: 'http://config.test/api.json',
       );
       var reached = 0;
 
@@ -162,22 +162,22 @@ void main() {
 
       expect(ok, isFalse);
       expect(reached, 0);
-      expect(config.apiBaseUrl, 'http://backup.test');
+      expect(config.apiOrigin, 'http://backup.test');
     });
   });
 
-  group('ApiClient.applyRemoteBaseUrls', () {
+  group('GatewayClient.applyRemoteBaseUrls', () {
     test('is a no-op when no remote link is configured', () async {
       final adapter = _StubAdapter(
         (options) async => ResponseBody.fromString('{}', 200),
       );
       final config = _buildConfig();
 
-      final applied = await _client(config, adapter).applyRemoteBaseUrls();
+      final applied = await _client(config, adapter).refreshOrigins();
 
       expect(applied, isFalse);
       expect(adapter.urls, isEmpty);
-      expect(config.apiBaseUrl, 'http://primary.test');
+      expect(config.apiOrigin, 'http://primary.test');
     });
 
     test('applies api and web from a plain JSON body', () async {
@@ -188,14 +188,14 @@ void main() {
         ),
       );
       final config = _buildConfig(
-        remoteConfigUrl: 'https://config.test/api.json',
+        spareSourceUrl: 'https://config.test/api.json',
       );
 
-      final applied = await _client(config, adapter).applyRemoteBaseUrls();
+      final applied = await _client(config, adapter).refreshOrigins();
 
       expect(applied, isTrue);
-      expect(config.apiBaseUrl, 'https://remote-api.test');
-      expect(config.webBaseUrl, 'https://h5.test');
+      expect(config.apiOrigin, 'https://remote-api.test');
+      expect(config.webOrigin, 'https://h5.test');
     });
 
     test('ignores a body without an api field', () async {
@@ -204,14 +204,14 @@ void main() {
             ResponseBody.fromString('{"web":"https://h5.test"}', 200),
       );
       final config = _buildConfig(
-        remoteConfigUrl: 'https://config.test/api.json',
+        spareSourceUrl: 'https://config.test/api.json',
       );
 
-      final applied = await _client(config, adapter).applyRemoteBaseUrls();
+      final applied = await _client(config, adapter).refreshOrigins();
 
       expect(applied, isFalse);
-      expect(config.apiBaseUrl, 'http://primary.test');
-      expect(config.webBaseUrl, 'http://8.220.176.2');
+      expect(config.apiOrigin, 'http://primary.test');
+      expect(config.webOrigin, 'http://8.220.176.2');
     });
   });
 
@@ -234,7 +234,7 @@ void main() {
 
     test('reports the accumulated log when the spare host takes over', () async {
       final config = _buildConfig(
-        remoteConfigUrl: 'http://config.test/api.json',
+        spareSourceUrl: 'http://config.test/api.json',
       );
       final payloads = <String>[];
 
@@ -274,7 +274,7 @@ void main() {
 
     test('stays quiet when the spare host also fails', () async {
       final config = _buildConfig(
-        remoteConfigUrl: 'http://config.test/api.json',
+        spareSourceUrl: 'http://config.test/api.json',
       );
       final payloads = <String>[];
 
@@ -301,7 +301,7 @@ void main() {
 
     test('ignores a reporter failure', () async {
       final config = _buildConfig(
-        remoteConfigUrl: 'http://config.test/api.json',
+        spareSourceUrl: 'http://config.test/api.json',
       );
 
       final ok = await probeStartupTransport(

@@ -1,7 +1,7 @@
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:get/get.dart';
 
-import '../../core/network/api_client.dart';
+import '../../core/network/gateway_client.dart';
 import '../../core/session/session_store.dart';
 import '../routes/app_routes.dart';
 import '../widgets/app_hint.dart';
@@ -37,7 +37,7 @@ abstract final class AppNavigator {
 
   /// 清除已过期的会话并将用户带回登录页。
   ///
-  /// 在启动时注册为 [ApiConfig.authExpiredHandler]，使网络层在收到 `-2`
+  /// 在启动时注册为 [GatewaySettings.onSessionExpired]，使网络层在收到 `-2`
   /// 响应时能够自行恢复，而无需引入路由模块。
   static Future<void> redirectToLoginAfterSessionExpiry() async {
     await _sessionStore()?.clear();
@@ -129,8 +129,8 @@ abstract final class AppNavigator {
   static void showError(String message) => EasyLoading.showError(message);
 
   static SessionStore? _sessionStore() {
-    if (Get.isRegistered<ApiClient>()) {
-      return Get.find<ApiClient>().config.sessionStore;
+    if (Get.isRegistered<GatewayClient>()) {
+      return Get.find<GatewayClient>().settings.sessionStore;
     }
     return null;
   }
