@@ -342,7 +342,7 @@ void main() {
     expect(field.height, closeTo(48 * scale, 0.01));
   });
 
-  testWidgets('默认态：协议未勾选，点击协议可切换勾选', (tester) async {
+  testWidgets('默认态：协议已同意，点击协议可取消勾选', (tester) async {
     await pumpLogin(tester);
 
     Image checkbox() =>
@@ -350,7 +350,7 @@ void main() {
 
     expect(
       checkbox().image,
-      const AssetImage('assets/login/login_checkbox_unchecked.png'),
+      const AssetImage('assets/login/login_checkbox_checked.png'),
     );
 
     await tester.tap(find.byKey(const Key('login-agreement')));
@@ -358,7 +358,7 @@ void main() {
 
     expect(
       checkbox().image,
-      const AssetImage('assets/login/login_checkbox_checked.png'),
+      const AssetImage('assets/login/login_checkbox_unchecked.png'),
     );
   });
 
@@ -385,8 +385,6 @@ void main() {
       find.byKey(const Key('login-phone')),
       '737478847391000',
     );
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('login-agreement')));
     await tester.pump();
     await tester.enterText(find.byKey(const Key('login-code')), '111111');
     await tester.pump();
@@ -486,8 +484,6 @@ void main() {
     final codeField = find.byKey(const Key('login-code'));
     await tester.enterText(find.byKey(const Key('login-phone')), '9171234567');
     await tester.pump();
-    await tester.tap(find.byKey(const Key('login-agreement')));
-    await tester.pump();
 
     // 还没填满 6 位时焦点在验证码输入框上（键盘是弹出的）。
     await tester.enterText(codeField, '11111');
@@ -529,8 +525,6 @@ void main() {
 
     await tester.enterText(find.byKey(const Key('login-phone')), '9171234567');
     await tester.pump();
-    await tester.tap(find.byKey(const Key('login-agreement')));
-    await tester.pump();
     await tester.enterText(find.byKey(const Key('login-code')), '111111');
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 10));
@@ -541,9 +535,12 @@ void main() {
     expect(Get.currentRoute, _homeRoute);
   });
 
-  testWidgets('未勾选协议时填满验证码立刻提示，且不调用登录接口', (tester) async {
+  testWidgets('取消勾选协议后填满验证码立刻提示，且不调用登录接口', (tester) async {
     await pumpLogin(tester);
 
+    // 协议默认已同意，这里主动取消勾选。
+    await tester.tap(find.byKey(const Key('login-agreement')));
+    await tester.pump();
     await tester.enterText(find.byKey(const Key('login-phone')), '9171234567');
     await tester.pump();
     await tester.enterText(find.byKey(const Key('login-code')), '111111');
@@ -558,7 +555,7 @@ void main() {
     expect(Get.find<LoginController>().isSignInReady, isFalse);
     await drainToast(tester);
 
-    // 勾选协议后主按钮转为可用态，点击即登录。
+    // 重新勾选协议后主按钮转为可用态，点击即登录。
     await tester.tap(find.byKey(const Key('login-agreement')));
     await tester.pump();
     expect(Get.find<LoginController>().isSignInReady, isTrue);

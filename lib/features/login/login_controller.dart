@@ -43,7 +43,10 @@ class LoginController extends GetxController {
   /// 输入内容的响应式状态，供按钮态与提示判断使用。
   final phoneDigits = ''.obs;
   final codeDigits = ''.obs;
-  final privacyAccepted = false.obs;
+
+  /// 协议勾选默认已同意（与同族 Dali / Kaibigan 端一致）；用户取消勾选后
+  /// 主按钮与自动登录都会停下来提示。
+  final privacyAccepted = true.obs;
   final requestingCode = false.obs;
   final signingIn = false.obs;
   final cooldown = LoginCooldown();

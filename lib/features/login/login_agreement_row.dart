@@ -7,7 +7,8 @@ import '../../app/theme/app_colors.dart';
 import 'login_controller.dart';
 import 'login_design.dart';
 
-/// 协议勾选行：左边是设计稿的方框（默认空心），右边两个协议名可以点开 H5。
+/// 协议勾选行：左边是设计稿的方框（默认已勾选，点一下取消），右边两个协议名
+/// 可以点开 H5。
 class LoginAgreementRow extends StatelessWidget {
   const LoginAgreementRow({super.key, required this.controller});
 
