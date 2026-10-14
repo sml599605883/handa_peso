@@ -70,6 +70,7 @@ flutter:
 
   assets:
     - assets/
+    - assets/login/
 
   # 若要向应用添加资源，可像这样添加 assets 配置节：
   # assets:

@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import '../../core/network/api_client.dart';
 import '../../core/session/session_store.dart';
 import '../routes/app_routes.dart';
+import '../widgets/app_hint.dart';
 
 /// 供各业务控制器共用的导航与反馈辅助方法。
 ///
@@ -12,13 +13,15 @@ import '../routes/app_routes.dart';
 abstract final class AppNavigator {
   static void Function(int index)? mainTabSelector;
 
-  /// 在当前页面之上推入登录路由。
+  /// 在当前页面之上推入登录路由，返回用户离开登录页时是否已有会话。
   ///
   /// 登录是按需触发的：游客可以浏览外壳，只有当某个操作需要会话时才要求
-  /// 登录。当用户完成登录后解析为 `true`。
+  /// 登录。GetX 的命名路由会按 `Route<dynamic>` 生成，无法承载泛型回传值，
+  /// 因此这里的判断以登录页关闭后的会话状态为准。
   static Future<bool> toLogin({String? redirect}) async {
-    final result = await Get.toNamed<bool>(AppRoutes.login, arguments: redirect);
-    return result ?? false;
+    final store = _sessionStore();
+    await Get.toNamed<void>(AppRoutes.login, arguments: redirect);
+    return store != null && (await store.sessionId()).isNotEmpty;
   }
 
   /// 确保存在会话，必要时打开登录页。
@@ -114,6 +117,14 @@ abstract final class AppNavigator {
   static Future<void> dismissLoading() => EasyLoading.dismiss();
 
   static void showToast(String message) => EasyLoading.showToast(message);
+
+  /// 屏幕正中的提示浮层（设计稿 01-02 - 登录 的提示样式）。
+  ///
+  /// 没有可用的 Overlay 时退回 EasyLoading，保证提示不会静默丢失。
+  static void showHint(String message) {
+    if (AppHint.show(message)) return;
+    showToast(message);
+  }
 
   static void showError(String message) => EasyLoading.showError(message);
 

@@ -107,6 +107,29 @@ abstract final class AppColors {
   static const homeLogoPlaceholder = Color(0xFFD8D8D8);
   static const homeLogoPlaceholderBorder = Color(0xFF979797);
 
+  // 登录页（设计稿 01-02 - 登录）
+  /// 表单标签、「+63」右侧的占位提示等次要文字。
+  static const loginLabelText = Color(0xFF716F5F);
+
+  /// 输入框内已输入内容。
+  static const loginInputText = Color(0xFF151200);
+
+  /// 「+63」与「Get Code」的品牌棕。
+  static const loginAccentText = Color(0xFF7F4209);
+
+  /// 「Get Code」按钮底色。
+  static const loginCodeButtonSurface = Color(0xFFF3AF95);
+
+  /// 倒计时按钮与不可提交状态主按钮的灰色底。
+  static const loginDisabledSurface = Color(0xFFBCB7B2);
+
+  /// 登录页背景的收尾色 #F7C5A7，与整页切图 `login_background.png` 的底边
+  /// 同色：比设计稿 375x812 更高的机型，用它在切图下方补齐滚动区域。
+  static const loginBackgroundBottom = Color(0xFFF7C5A7);
+
+  /// 提示浮层底色：设计稿里是 64% 黑，叠在任意背景上。（见 `lib/app/widgets/app_hint.dart`）
+  static const hintSurface = Color(0xA3000000);
+
   // 效果
   static const shadow = Color(0x140F2B25);
   static const barrier = Color(0x66000000);
