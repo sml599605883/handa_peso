@@ -25,10 +25,10 @@ class HomePage extends GetView<MainController> {
   @override
   Widget build(BuildContext context) {
     return Obx(() {
-      final data = controller.homeData.value;
-      final error = controller.homeError.value;
+      final data = controller.overviewData.value;
+      final error = controller.overviewError.value;
 
-      if (controller.homeLoading.value && data == null) {
+      if (controller.overviewLoading.value && data == null) {
         return const Center(child: CircularProgressIndicator());
       }
       if (data == null || data.isEmpty) {
@@ -40,7 +40,7 @@ class HomePage extends GetView<MainController> {
                 : 'We could not load your home feed',
             description: error ?? 'Pull down to refresh your offers.',
             action: FilledButton(
-              onPressed: controller.refreshHome,
+              onPressed: controller.refreshOverview,
               child: Text(error == null ? 'Refresh' : 'Try again'),
             ),
           ),
@@ -52,7 +52,7 @@ class HomePage extends GetView<MainController> {
         builder: (context, constraints) {
           final scale = constraints.maxWidth / _designWidth;
           return RefreshIndicator(
-            onRefresh: controller.refreshHome,
+            onRefresh: controller.refreshOverview,
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: EdgeInsets.zero,
@@ -67,7 +67,7 @@ class HomePage extends GetView<MainController> {
                 HomeBanner(
                   banners: data.banners,
                   scale: scale,
-                  isActive: controller.homeVisible.value,
+                  isActive: controller.homeOnScreen.value,
                   onTap: controller.openBanner,
                 ),
                 if (data.offers.isNotEmpty) ...[

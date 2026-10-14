@@ -35,7 +35,7 @@ Future<void> startHandaPeso({
   Get.put<GatewayClient>(dependencies.gatewayClient, permanent: true);
   AppNavigator.mainTabSelector = (index) {
     if (Get.isRegistered<MainController>()) {
-      Get.find<MainController>().selectTab(index);
+      Get.find<MainController>().switchTab(index);
     }
   };
 

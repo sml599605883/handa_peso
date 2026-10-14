@@ -627,8 +627,8 @@ void main() {
       await _pumpShell(tester, _client(_config(), adapter));
       final controller = Get.find<MainController>();
 
-      controller.selectTab(1);
-      controller.selectTab(0);
+      controller.switchTab(1);
+      controller.switchTab(0);
       await tester.pumpAndSettle();
 
       expect(adapter.homeCalls, 2);
@@ -695,7 +695,7 @@ void main() {
       Get.toNamed<void>(_stubRoute);
       await tester.pumpAndSettle();
 
-      await Get.find<MainController>().refreshHome();
+      await Get.find<MainController>().refreshOverview();
       await tester.pumpAndSettle();
       expect(adapter.homeCalls, 1);
 

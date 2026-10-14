@@ -14,13 +14,13 @@ class MinePage extends GetView<MainController> {
   @override
   Widget build(BuildContext context) {
     return Obx(() {
-      final signedIn = controller.phoneNumber.value.isNotEmpty;
+      final signedIn = controller.sessionPhone.value.isNotEmpty;
       return Scaffold(
         appBar: AppBar(title: const Text('Account')),
         body: ListView(
           padding: const EdgeInsets.all(AppSpacing.screenPadding),
           children: [
-            _ProfileHeader(phone: controller.phoneNumber.value, signedIn: signedIn),
+            _ProfileHeader(phone: controller.sessionPhone.value, signedIn: signedIn),
             if (!signedIn) ...[
               const SizedBox(height: AppSpacing.sm),
               const _SignInCard(),

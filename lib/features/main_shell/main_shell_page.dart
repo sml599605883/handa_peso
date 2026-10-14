@@ -39,7 +39,7 @@ class MainShellPage extends GetView<MainController> {
   Widget build(BuildContext context) {
     return _RouteReturnListener(
       child: Obx(() {
-        final tabIndex = controller.selectedIndex.value;
+        final tabIndex = controller.activeTab.value;
         return Scaffold(
           body: IndexedStack(
             index: tabIndex,
@@ -48,7 +48,7 @@ class MainShellPage extends GetView<MainController> {
           bottomNavigationBar: _ShellNavigationBar(
             entries: _tabs,
             activeIndex: tabIndex,
-            onSelect: controller.selectTab,
+            onSelect: controller.switchTab,
           ),
         );
       }),

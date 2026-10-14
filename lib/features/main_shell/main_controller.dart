@@ -25,14 +25,14 @@ class MainController extends GetxController with WidgetsBindingObserver {
   final GatewayClient gatewayClient;
   final LocalSession localSession;
 
-  final selectedIndex = 0.obs;
-  final phoneNumber = ''.obs;
-  final homeData = Rxn<HomeData>();
-  final homeLoading = false.obs;
-  final homeError = RxnString();
+  final activeTab = 0.obs;
+  final sessionPhone = ''.obs;
+  final overviewData = Rxn<HomeData>();
+  final overviewLoading = false.obs;
+  final overviewError = RxnString();
 
   /// 首页是否真的露在外面。首页 Banner 的自动轮播靠它暂停。
-  final homeVisible = true.obs;
+  final homeOnScreen = true.obs;
 
   bool _loadedOnce = false;
   bool _openingBanner = false;
@@ -45,7 +45,7 @@ class MainController extends GetxController with WidgetsBindingObserver {
     super.onInit();
     WidgetsBinding.instance.addObserver(this);
     _restoreProfile();
-    unawaited(loadHome());
+    unawaited(loadOverview());
   }
 
   @override
@@ -55,25 +55,25 @@ class MainController extends GetxController with WidgetsBindingObserver {
   }
 
   /// 只在首页可见时刷新：接口失败会保留旧内容，避免页面闪空。
-  Future<void> refreshHome() async {
+  Future<void> refreshOverview() async {
     if (!_homeIsTopRoute) return;
-    await loadHome(force: true);
+    await loadOverview(force: true);
   }
 
   /// 从二级页面返回外壳时同步首页数据。
   Future<void> onRouteReturned() {
-    homeVisible.value = true;
-    return refreshHome();
+    homeOnScreen.value = true;
+    return refreshOverview();
   }
 
   /// 二级页面覆盖首页时暂停首页上的一切定时行为。
-  void onRouteLeft() => homeVisible.value = false;
+  void onRouteLeft() => homeOnScreen.value = false;
 
-  void selectTab(int index) {
-    if (selectedIndex.value == index) return;
-    selectedIndex.value = index;
-    homeVisible.value = index == 0;
-    if (index == 0) unawaited(refreshHome());
+  void switchTab(int index) {
+    if (activeTab.value == index) return;
+    activeTab.value = index;
+    homeOnScreen.value = index == 0;
+    if (index == 0) unawaited(refreshOverview());
   }
 
   /// 应用生命周期：回到前台后补一次首页刷新。
@@ -102,39 +102,39 @@ class MainController extends GetxController with WidgetsBindingObserver {
     _leftForeground = false;
     if (!fromBackground && !fromDialog) return;
     if (fromDialog) _resumeAfterDialogConsumed = true;
-    unawaited(refreshHome());
+    unawaited(refreshOverview());
   }
 
   Future<void> _restoreProfile() async {
-    phoneNumber.value = await localSession.readPhone();
+    sessionPhone.value = await localSession.readPhone();
   }
 
   /// 拉取首页信息流；[force] 为 false 时只在首次进入时请求。
-  Future<void> loadHome({bool force = false}) async {
-    if (homeLoading.value) return;
+  Future<void> loadOverview({bool force = false}) async {
+    if (overviewLoading.value) return;
     if (_loadedOnce && !force) return;
 
-    homeLoading.value = true;
-    homeError.value = null;
+    overviewLoading.value = true;
+    overviewError.value = null;
     try {
       final response = await gatewayClient.fetchHomeOverview();
-      homeData.value = HomeData.fromJson(response.payload);
+      overviewData.value = HomeData.fromJson(response.payload);
       _loadedOnce = true;
     } on GatewayFailure catch (error) {
-      homeError.value = error.message;
+      overviewError.value = error.message;
       CrashReporter.record(error, StackTrace.current);
       // 已有内容时保留旧数据，只用轻提示反馈本次刷新失败。
-      if (homeData.value != null) AppNavigator.showError(error.message);
+      if (overviewData.value != null) AppNavigator.showError(error.message);
     } finally {
-      homeLoading.value = false;
+      overviewLoading.value = false;
     }
   }
 
   /// 在任意页面登录成功后重新同步游客状态。
   Future<void> onSessionStarted(String phone) async {
-    phoneNumber.value = phone;
+    sessionPhone.value = phone;
     _loadedOnce = false;
-    await loadHome(force: true);
+    await loadOverview(force: true);
   }
 
   /// 打开首页 Banner：先补记一次点击，再按链接跳转。
@@ -187,10 +187,10 @@ class MainController extends GetxController with WidgetsBindingObserver {
     } finally {
       await localSession.resetSession();
       AnalyticsService.setUserId(null);
-      homeData.value = null;
-      phoneNumber.value = '';
+      overviewData.value = null;
+      sessionPhone.value = '';
       _loadedOnce = false;
-      await loadHome(force: true);
+      await loadOverview(force: true);
     }
   }
 
@@ -200,7 +200,7 @@ class MainController extends GetxController with WidgetsBindingObserver {
 
   /// 首页只有在选中且外壳路由位于顶层时才请求得到数据。
   bool get _homeIsTopRoute {
-    if (selectedIndex.value != 0) return false;
+    if (activeTab.value != 0) return false;
     final route = Get.currentRoute;
     return route.isEmpty || route == AppRoutes.main;
   }

@@ -83,6 +83,21 @@ Future<void> _reportSwitchQuietly(
   }
 }
 
+/// 门禁所处的阶段。
+enum _GateStage {
+  /// 首次探测：启动图持续停留在屏幕上。
+  launch,
+
+  /// 探测成功，改为构建真正的应用界面。
+  ready,
+
+  /// 探测失败，停在失败页等用户重试。
+  offline,
+
+  /// 用户在失败页触发的重试，探测进行中。
+  retrying,
+}
+
 /// 在网关可达之前，让启动图一直停留在屏幕上。
 ///
 /// 与 fund_nexus 的启动流程保持一致：传输层探测运行期间保持启动页可见，
@@ -98,69 +113,72 @@ class StartupNetworkGate extends StatefulWidget {
 
   final StartupNetworkProbe probe;
   final StartupNetworkReadyBuilder readyBuilder;
+
+  /// 失败页停留期间，应用回到前台是否自动再探测一次。
   final bool retryOnResume;
 
   @override
   State<StartupNetworkGate> createState() => _StartupNetworkGateState();
 }
 
-class _StartupNetworkGateState extends State<StartupNetworkGate>
-    with WidgetsBindingObserver {
-  bool _checking = false;
-  bool _ready = false;
-  bool _failed = false;
-  bool _showLaunch = true;
+class _StartupNetworkGateState extends State<StartupNetworkGate> {
+  _GateStage _stage = _GateStage.launch;
+  late final AppLifecycleListener _resumeWatcher;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _check());
+    _resumeWatcher = AppLifecycleListener(onResume: _retryAfterResume);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _runProbe());
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
+    _resumeWatcher.dispose();
     super.dispose();
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (widget.retryOnResume && state == AppLifecycleState.resumed && _failed) {
-      unawaited(_check());
-    }
+  /// 回到前台时，只有停在失败页才值得再试一次。
+  void _retryAfterResume() {
+    if (!widget.retryOnResume || _stage != _GateStage.offline) return;
+    unawaited(_runProbe());
   }
 
-  Future<void> _check() async {
-    if (_checking || _ready) return;
+  /// 探测一次传输层可达性；同一时刻只允许一次探测在跑。
+  Future<void> _runProbe() async {
+    if (_stage != _GateStage.launch && _stage != _GateStage.offline) return;
+    final firstAttempt = _stage == _GateStage.launch;
+    final probe = widget.probe;
     setState(() {
-      _checking = true;
-      _failed = false;
+      _stage = firstAttempt ? _GateStage.launch : _GateStage.retrying;
     });
+
+    bool reachable;
     try {
-      final available = await widget.probe();
-      if (!mounted) return;
-      setState(() {
-        _checking = false;
-        _showLaunch = false;
-        _ready = available;
-        _failed = !available;
-      });
+      reachable = await probe();
     } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _checking = false;
-        _showLaunch = false;
-        _failed = true;
-      });
+      reachable = false;
     }
+    if (!mounted) return;
+    setState(() {
+      _stage = reachable ? _GateStage.ready : _GateStage.offline;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_ready) return widget.readyBuilder();
-    if (_showLaunch) return const _LaunchPage();
-    return _NetworkUnavailablePage(checking: _checking, onRetry: _check);
+    switch (_stage) {
+      case _GateStage.ready:
+        return widget.readyBuilder();
+      case _GateStage.launch:
+        return const _LaunchPage();
+      case _GateStage.offline:
+      case _GateStage.retrying:
+        return _NetworkUnavailablePage(
+          checking: _stage == _GateStage.retrying,
+          onRetry: _runProbe,
+        );
+    }
   }
 }
 
