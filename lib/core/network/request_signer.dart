@@ -36,7 +36,7 @@ class RequestSigner {
       'corkscrewed': settings.deviceId,
       'truculency': settings.systemVersion,
       'muttonfishes': settings.marketTag,
-      'sandman': await settings.sessionStore.sessionId(),
+      'sandman': await settings.localSession.readSessionId(),
       'parcener': settings.pairedDeviceId,
       'absorbing': '$stamp',
     };

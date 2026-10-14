@@ -8,7 +8,7 @@ import '../../app/navigation/h5_paths.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/network/gateway_client.dart';
 import '../../core/network/gateway_failure.dart';
-import '../../core/session/session_store.dart';
+import '../../core/session/local_session.dart';
 import '../main_shell/main_controller.dart';
 import 'login_cooldown.dart';
 import 'phone_number.dart';
@@ -29,10 +29,10 @@ const String codeSentHint = 'Verification code sent.';
 /// 请求与登录态：`+63` 前缀固定展示，验证码填满 6 位自动提交，手机号格式不对
 /// 或没勾选协议时立刻给浮层提示，而不是让主按钮点了没反应。
 class LoginController extends GetxController {
-  LoginController({required this.apiClient, required this.sessionStore});
+  LoginController({required this.apiClient, required this.localSession});
 
   final GatewayClient apiClient;
-  final SessionStore sessionStore;
+  final LocalSession localSession;
 
   /// 输入框的文本控制器：控制器持有它们是为了回填上次的手机号、登录失败后
   /// 清空验证码；输入变化本身走 [onPhoneTyped] / [onCodeTyped]，不再挂监听。
@@ -86,7 +86,7 @@ class LoginController extends GetxController {
 
   /// 回填上次登录成功的手机号，省去用户重复输入。
   Future<void> _prefillRememberedPhone() async {
-    final remembered = await sessionStore.phone();
+    final remembered = await localSession.readPhone();
     if (isClosed || remembered.isEmpty || phoneField.text.isNotEmpty) return;
     phoneField.value = TextEditingValue(
       text: remembered,
@@ -167,8 +167,8 @@ class LoginController extends GetxController {
         throw const GatewayFailure('Invalid login response');
       }
       await AppNavigator.dismissLoading();
-      await sessionStore.saveSessionId(sessionId);
-      await sessionStore.savePhone(phoneDigits.value);
+      await localSession.writeSessionId(sessionId);
+      await localSession.writePhone(phoneDigits.value);
       AnalyticsService.setUserId(phoneDigits.value);
       AnalyticsService.logEvent(AppEvents.loginSuccess);
       if (Get.isRegistered<MainController>()) {

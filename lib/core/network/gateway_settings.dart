@@ -1,6 +1,6 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../session/session_store.dart';
+import '../session/local_session.dart';
 
 /// 会话失效时执行的动作（交给导航层跳到登录页）。
 typedef SessionExpiredCallback = Future<void> Function();
@@ -31,12 +31,12 @@ class GatewaySettings {
     this.deviceLabel = '',
     this.deviceId = '',
     this.systemVersion = '',
-    SessionStore? sessionStore,
+    LocalSession? localSession,
     this.onSessionExpired,
     this.clock,
     this.noiseDigits,
   }) {
-    _sessionStore = sessionStore;
+    _localSession = localSession;
   }
 
   static const fallbackApiOrigin = String.fromEnvironment(
@@ -87,16 +87,16 @@ class GatewaySettings {
   /// 这个值，因为网关要求二者一致。
   String get pairedDeviceId => deviceId;
 
-  SessionStore? _sessionStore;
+  LocalSession? _localSession;
   SessionExpiredCallback? onSessionExpired;
   EpochMillisProvider? clock;
   NoiseDigitsProvider? noiseDigits;
 
-  SessionStore get sessionStore {
-    return _sessionStore ??= SessionStore(SharedPreferencesAsync());
+  LocalSession get localSession {
+    return _localSession ??= LocalSession(SharedPreferencesAsync());
   }
 
-  set sessionStore(SessionStore value) {
-    _sessionStore = value;
+  set localSession(LocalSession value) {
+    _localSession = value;
   }
 }

@@ -8,7 +8,7 @@ import 'package:handa_peso/core/network/gateway_failure.dart';
 import 'package:handa_peso/core/network/wire_format.dart';
 import 'package:handa_peso/core/network/gateway_reply.dart';
 import 'package:handa_peso/core/network/request_signer.dart';
-import 'package:handa_peso/core/session/session_store.dart';
+import 'package:handa_peso/core/session/local_session.dart';
 
 GatewaySettings buildConfig({String secret = 'unit-test-secret'}) {
   return GatewaySettings(
@@ -17,7 +17,7 @@ GatewaySettings buildConfig({String secret = 'unit-test-secret'}) {
     deviceLabel: 'iPhone15,2',
     deviceId: 'idfv-123',
     systemVersion: '17.0',
-    sessionStore: SessionStore.memory(),
+    localSession: LocalSession.memory(),
     clock: () => 1700000000000,
     noiseDigits: (length) => '1' * length,
   );
@@ -174,7 +174,7 @@ void main() {
           });
 
       final config = GatewaySettings(
-        sessionStore: SessionStore.memory(),
+        localSession: LocalSession.memory(),
         appVersion: '',
         clock: () => 1700000000000,
         noiseDigits: (length) => '1' * length,
@@ -182,7 +182,7 @@ void main() {
       final sync = DeviceInfoSync(
         apiClient: GatewayClient(config),
         bridge: PlatformBridge(available: true, channel: channel),
-        store: SessionStore.memory(),
+        localSession: LocalSession.memory(),
       );
 
       final model = await sync.applyDeviceIdentity(config);
@@ -204,13 +204,13 @@ void main() {
     });
 
     test('falls back to the cached device name without the bridge', () async {
-      final store = SessionStore.memory();
-      await store.saveDeviceName('Handa Tester');
-      final config = GatewaySettings(sessionStore: store, appVersion: '1.0.0');
+      final store = LocalSession.memory();
+      await store.writeDeviceLabel('Handa Tester');
+      final config = GatewaySettings(localSession: store, appVersion: '1.0.0');
       final sync = DeviceInfoSync(
         apiClient: GatewayClient(config),
         bridge: PlatformBridge(available: false),
-        store: store,
+        localSession: store,
       );
 
       final model = await sync.applyDeviceIdentity(config);

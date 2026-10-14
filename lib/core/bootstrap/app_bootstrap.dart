@@ -6,18 +6,18 @@ import '../client/platform_bridge.dart';
 import '../device/device_info_sync.dart';
 import '../network/gateway_client.dart';
 import '../network/gateway_settings.dart';
-import '../session/session_store.dart';
+import '../session/local_session.dart';
 
 /// 承载首帧渲染之前就已创建好的各项依赖。
 class AppDependencies {
   AppDependencies({
     required this.apiClient,
-    required this.sessionStore,
+    required this.localSession,
     Future<void> Function()? syncDeviceName,
   }) : syncDeviceName = syncDeviceName ?? _noop;
 
   final GatewayClient apiClient;
-  final SessionStore sessionStore;
+  final LocalSession localSession;
 
   /// 尽力而为地向网关查询可读的设备名称。
   ///
@@ -35,21 +35,21 @@ class AppDependencies {
 /// 各页面仍各自加载数据，并渲染 loading/error/empty 状态。
 abstract final class AppBootstrap {
   static Future<AppDependencies> initialize({
-    SessionStore Function()? sessionStoreFactory,
+    LocalSession Function()? localSessionFactory,
     String? apiBaseUrl,
     String? webBaseUrl,
     String? signatureSecret,
     SessionExpiredCallback? onSessionExpired,
     PlatformBridge? platformBridge,
   }) async {
-    final sessionStore =
-        sessionStoreFactory?.call() ?? SessionStore(SharedPreferencesAsync());
+    final localSession =
+        localSessionFactory?.call() ?? LocalSession(SharedPreferencesAsync());
 
     final settings = GatewaySettings(
       apiOrigin: apiBaseUrl ?? GatewaySettings.fallbackApiOrigin,
       webOrigin: webBaseUrl ?? GatewaySettings.fallbackWebOrigin,
       signSecret: signatureSecret ?? GatewaySettings.fallbackSignSecret,
-      sessionStore: sessionStore,
+      localSession: localSession,
     )..appVersion = await _appVersion();
 
     settings.onSessionExpired ??=
@@ -65,7 +65,7 @@ abstract final class AppBootstrap {
     final deviceSync = DeviceInfoSync(
       apiClient: apiClient,
       bridge: bridge,
-      store: sessionStore,
+      localSession: localSession,
     );
 
     // 用原生设备身份填充需要签名的公有参数。此过程不涉及网络；
@@ -74,7 +74,7 @@ abstract final class AppBootstrap {
 
     return AppDependencies(
       apiClient: apiClient,
-      sessionStore: sessionStore,
+      localSession: localSession,
       syncDeviceName: model == null || model.isEmpty
           ? null
           : () => deviceSync.resolveDeviceName(settings, model),

@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:handa_peso/app/startup/startup_network_gate.dart';
 import 'package:handa_peso/core/network/gateway_client.dart';
 import 'package:handa_peso/core/network/gateway_settings.dart';
-import 'package:handa_peso/core/session/session_store.dart';
+import 'package:handa_peso/core/session/local_session.dart';
 
 GatewaySettings _buildConfig({
   String apiOrigin = 'http://primary.test',
@@ -16,7 +16,7 @@ GatewaySettings _buildConfig({
     apiOrigin: apiOrigin,
     spareSourceUrl: spareSourceUrl,
     signSecret: 'unit-test-secret',
-    sessionStore: SessionStore.memory(),
+    localSession: LocalSession.memory(),
     clock: () => 1700000000000,
     noiseDigits: (length) => '1' * length,
   );

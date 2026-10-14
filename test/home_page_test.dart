@@ -11,7 +11,7 @@ import 'package:handa_peso/app/navigation/app_route_observer.dart';
 import 'package:handa_peso/app/routes/app_routes.dart';
 import 'package:handa_peso/core/network/gateway_client.dart';
 import 'package:handa_peso/core/network/gateway_settings.dart';
-import 'package:handa_peso/core/session/session_store.dart';
+import 'package:handa_peso/core/session/local_session.dart';
 import 'package:handa_peso/features/home/home_big_card.dart';
 import 'package:handa_peso/features/home/home_banner.dart';
 import 'package:handa_peso/features/home/home_recommendations.dart';
@@ -223,7 +223,7 @@ GatewaySettings _config() {
   return GatewaySettings(
     apiOrigin: 'http://home.test',
     signSecret: 'unit-test-secret',
-    sessionStore: SessionStore.memory(),
+    localSession: LocalSession.memory(),
     clock: () => 1700000000000,
     noiseDigits: (length) => '1' * length,
   );
@@ -490,7 +490,7 @@ void main() {
 
     testWidgets('登录态点击 Banner 会先补记一次点击上报', (tester) async {
       final config = _config();
-      await config.sessionStore.saveSessionId('session-1');
+      await config.localSession.writeSessionId('session-1');
       final adapter = _StubAdapter(
         (options) async => ResponseBody.fromString(
           _bannerBody(<Map<String, dynamic>>[
@@ -511,7 +511,7 @@ void main() {
 
     testWidgets('跳转链接为空的 Banner 只展示，不跳转也不上报', (tester) async {
       final config = _config();
-      await config.sessionStore.saveSessionId('session-1');
+      await config.localSession.writeSessionId('session-1');
       final adapter = _StubAdapter(
         (options) async => ResponseBody.fromString(
           _bannerBody(<Map<String, dynamic>>[_bannerItem(9)]),

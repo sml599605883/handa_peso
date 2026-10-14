@@ -8,7 +8,7 @@ import '../../app/routes/app_routes.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/network/gateway_client.dart';
 import '../../core/network/gateway_failure.dart';
-import '../../core/session/session_store.dart';
+import '../../core/session/local_session.dart';
 import '../home/home_data.dart';
 
 /// 用于主卡片行动号召（CTA）的埋点/会话标签。
@@ -20,10 +20,10 @@ const String _homeApplyProductId = 'home_card';
 /// 首次进入、切回首页 Tab、从二级页面返回、下拉刷新、回到前台，
 /// 以及登录 / 退出后重新同步。
 class MainController extends GetxController with WidgetsBindingObserver {
-  MainController({required this.apiClient, required this.sessionStore});
+  MainController({required this.apiClient, required this.localSession});
 
   final GatewayClient apiClient;
-  final SessionStore sessionStore;
+  final LocalSession localSession;
 
   final selectedIndex = 0.obs;
   final phoneNumber = ''.obs;
@@ -106,7 +106,7 @@ class MainController extends GetxController with WidgetsBindingObserver {
   }
 
   Future<void> _restoreProfile() async {
-    phoneNumber.value = await sessionStore.phone();
+    phoneNumber.value = await localSession.readPhone();
   }
 
   /// 拉取首页信息流；[force] 为 false 时只在首次进入时请求。
@@ -149,7 +149,7 @@ class MainController extends GetxController with WidgetsBindingObserver {
     try {
       try {
         final id = banner.id.trim();
-        if (id.isNotEmpty && (await sessionStore.sessionId()).isNotEmpty) {
+        if (id.isNotEmpty && (await localSession.readSessionId()).isNotEmpty) {
           await apiClient.recordBannerClick(bannerId: id);
         }
       } catch (_) {
@@ -171,7 +171,7 @@ class MainController extends GetxController with WidgetsBindingObserver {
     if (!await AppNavigator.requireSession(redirect: productId)) {
       return;
     }
-    final profileComplete = await sessionStore.profileComplete();
+    final profileComplete = await localSession.readCertified();
     if (!profileComplete) {
       await AppNavigator.toCertification();
       return;
@@ -185,7 +185,7 @@ class MainController extends GetxController with WidgetsBindingObserver {
     } on GatewayFailure catch (error) {
       CrashReporter.record(error, StackTrace.current);
     } finally {
-      await sessionStore.clear();
+      await localSession.resetSession();
       AnalyticsService.setUserId(null);
       homeData.value = null;
       phoneNumber.value = '';

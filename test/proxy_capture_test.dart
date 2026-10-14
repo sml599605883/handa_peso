@@ -7,7 +7,7 @@ import 'package:handa_peso/core/bootstrap/app_bootstrap.dart';
 import 'package:handa_peso/core/client/platform_bridge.dart';
 import 'package:handa_peso/core/network/gateway_client.dart';
 import 'package:handa_peso/core/network/gateway_settings.dart';
-import 'package:handa_peso/core/session/session_store.dart';
+import 'package:handa_peso/core/session/local_session.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 /// 抓包回归：Dart 的 HttpClient 不读取 iOS 系统代理，因此代理必须由原生层
@@ -24,7 +24,7 @@ GatewaySettings _config({String apiOrigin = 'http://127.0.0.1:1'}) {
   return GatewaySettings(
     apiOrigin: apiOrigin,
     signSecret: 'unit-test-secret',
-    sessionStore: SessionStore.memory(),
+    localSession: LocalSession.memory(),
     clock: () => 1700000000000,
     noiseDigits: (length) => '1' * length,
   );
@@ -248,7 +248,7 @@ void main() {
       });
 
       final dependencies = await AppBootstrap.initialize(
-        sessionStoreFactory: SessionStore.memory,
+        localSessionFactory: LocalSession.memory,
         platformBridge: PlatformBridge(available: true),
       );
 
@@ -270,7 +270,7 @@ void main() {
       });
 
       final dependencies = await AppBootstrap.initialize(
-        sessionStoreFactory: SessionStore.memory,
+        localSessionFactory: LocalSession.memory,
         platformBridge: PlatformBridge(available: true),
       );
 

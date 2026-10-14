@@ -15,7 +15,7 @@ import 'package:handa_peso/app/theme/app_colors.dart';
 import 'package:handa_peso/app/theme/app_theme.dart';
 import 'package:handa_peso/core/network/gateway_client.dart';
 import 'package:handa_peso/core/network/gateway_settings.dart';
-import 'package:handa_peso/core/session/session_store.dart';
+import 'package:handa_peso/core/session/local_session.dart';
 import 'package:handa_peso/features/login/login_controller.dart';
 import 'package:handa_peso/features/login/login_page.dart';
 
@@ -102,11 +102,11 @@ String _envelope([Map<String, dynamic>? data]) {
   });
 }
 
-GatewaySettings _config(SessionStore store) {
+GatewaySettings _config(LocalSession store) {
   return GatewaySettings(
     apiOrigin: 'http://login.test',
     signSecret: 'unit-test-secret',
-    sessionStore: store,
+    localSession: store,
     webOrigin: 'http://web.test',
     clock: () => 1700000000000,
     noiseDigits: (length) => '1' * length,
@@ -146,7 +146,7 @@ void _tapAgreementSpan(WidgetTester tester, String text) {
 }
 
 void main() {
-  late SessionStore store;
+  late LocalSession store;
   late _StubAdapter adapter;
   late List<String> webViewUrls;
   late List<String> webViewTitles;
@@ -172,7 +172,7 @@ void main() {
 
   setUp(() {
     Get.testMode = true;
-    store = SessionStore.memory();
+    store = LocalSession.memory();
     webViewUrls = <String>[];
     webViewTitles = <String>[];
     adapter = _StubAdapter(
@@ -233,7 +233,7 @@ void main() {
             page: () => const LoginPage(),
             binding: BindingsBuilder<void>(
               () => Get.put<LoginController>(
-                LoginController(apiClient: client, sessionStore: store),
+                LoginController(apiClient: client, localSession: store),
               ),
             ),
           ),
@@ -536,8 +536,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 10));
 
     expect(adapter.loginRequests, 1);
-    expect(await store.sessionId(), 'session-123');
-    expect(await store.phone(), '9171234567');
+    expect(await store.readSessionId(), 'session-123');
+    expect(await store.readPhone(), '9171234567');
     expect(Get.currentRoute, _homeRoute);
   });
 
@@ -641,7 +641,7 @@ void main() {
   });
 
   testWidgets('已登录过的手机号会自动回填', (tester) async {
-    await store.savePhone('9179998888');
+    await store.writePhone('9179998888');
 
     await pumpLogin(tester);
 

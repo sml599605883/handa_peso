@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import '../client/platform_bridge.dart';
 import '../network/gateway_client.dart';
 import '../network/gateway_settings.dart';
-import '../session/session_store.dart';
+import '../session/local_session.dart';
 
 /// 填充网关要求的设备公有参数。
 ///
@@ -15,14 +15,14 @@ class DeviceInfoSync {
   const DeviceInfoSync({
     required this.apiClient,
     required this.bridge,
-    required this.store,
+    required this.localSession,
     this.attempts = 3,
     this.retryDelay = const Duration(milliseconds: 100),
   }) : assert(attempts > 0);
 
   final GatewayClient apiClient;
   final PlatformBridge bridge;
-  final SessionStore store;
+  final LocalSession localSession;
   final int attempts;
   final Duration retryDelay;
 
@@ -43,7 +43,7 @@ class DeviceInfoSync {
       }
     }
     if (settings.deviceLabel.isEmpty) {
-      settings.deviceLabel = await store.deviceName();
+      settings.deviceLabel = await localSession.readDeviceLabel();
     }
     return identity?.hardwareModel;
   }
@@ -57,7 +57,7 @@ class DeviceInfoSync {
   ) async {
     if (modelCode.isEmpty) return;
 
-    final cached = await store.deviceName();
+    final cached = await localSession.readDeviceLabel();
     if (cached.isNotEmpty && cached != modelCode) {
       settings.deviceLabel = cached;
       return;
@@ -67,7 +67,7 @@ class DeviceInfoSync {
       final reply = await apiClient.lookupDeviceName(modelCode: modelCode);
       final name = reply.payload['especially']?.toString() ?? '';
       if (name.isNotEmpty && name != modelCode) {
-        await store.saveDeviceName(name);
+        await localSession.writeDeviceLabel(name);
         settings.deviceLabel = name;
       }
     } catch (_) {

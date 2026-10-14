@@ -38,7 +38,7 @@ class _AccountDeletionPageState extends State<AccountDeletionPage> {
       final apiClient = Get.find<GatewayClient>();
       await apiClient.closeAccount();
       AnalyticsService.logEvent(AppEvents.accountDeleted);
-      await apiClient.settings.sessionStore.clear();
+      await apiClient.settings.localSession.resetSession();
       AnalyticsService.setUserId(null);
       if (!mounted) return;
       AppNavigator.showToast('Your account deletion request has been submitted.');

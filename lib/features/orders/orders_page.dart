@@ -39,7 +39,7 @@ class _OrdersPageState extends State<OrdersPage> {
       _error = null;
     });
     try {
-      final sessionId = await _apiClient.settings.sessionStore.sessionId();
+      final sessionId = await _apiClient.settings.localSession.readSessionId();
       if (sessionId.isEmpty) {
         if (!mounted) return;
         setState(() {

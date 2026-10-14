@@ -13,6 +13,6 @@ class LoginBinding extends Bindings {
   @override
   void dependencies() {
     final client = apiClient ?? appDependencies?.apiClient ?? Get.find<GatewayClient>();
-    Get.put<LoginController>(LoginController(apiClient: client, sessionStore: client.settings.sessionStore));
+    Get.put<LoginController>(LoginController(apiClient: client, localSession: client.settings.localSession));
   }
 }

@@ -23,7 +23,7 @@ class MainBinding extends Bindings {
     }
     if (!Get.isRegistered<MainController>()) {
       Get.put<MainController>(
-        MainController(apiClient: client, sessionStore: client.settings.sessionStore),
+        MainController(apiClient: client, localSession: client.settings.localSession),
       );
     }
   }

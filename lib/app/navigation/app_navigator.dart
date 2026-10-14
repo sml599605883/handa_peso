@@ -2,7 +2,7 @@ import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:get/get.dart';
 
 import '../../core/network/gateway_client.dart';
-import '../../core/session/session_store.dart';
+import '../../core/session/local_session.dart';
 import '../routes/app_routes.dart';
 import '../widgets/app_hint.dart';
 
@@ -19,17 +19,17 @@ abstract final class AppNavigator {
   /// 登录。GetX 的命名路由会按 `Route<dynamic>` 生成，无法承载泛型回传值，
   /// 因此这里的判断以登录页关闭后的会话状态为准。
   static Future<bool> toLogin({String? redirect}) async {
-    final store = _sessionStore();
+    final store = _localSession();
     await Get.toNamed<void>(AppRoutes.login, arguments: redirect);
-    return store != null && (await store.sessionId()).isNotEmpty;
+    return store != null && (await store.readSessionId()).isNotEmpty;
   }
 
   /// 确保存在会话，必要时打开登录页。
   ///
   /// 当调用方可以继续执行需要登录的操作时返回 `true`。
   static Future<bool> requireSession({String? redirect}) async {
-    final store = _sessionStore();
-    if (store != null && (await store.sessionId()).isNotEmpty) {
+    final store = _localSession();
+    if (store != null && (await store.readSessionId()).isNotEmpty) {
       return true;
     }
     return toLogin(redirect: redirect);
@@ -40,7 +40,7 @@ abstract final class AppNavigator {
   /// 在启动时注册为 [GatewaySettings.onSessionExpired]，使网络层在收到 `-2`
   /// 响应时能够自行恢复，而无需引入路由模块。
   static Future<void> redirectToLoginAfterSessionExpiry() async {
-    await _sessionStore()?.clear();
+    await _localSession()?.resetSession();
     await Get.offAllNamed<void>(AppRoutes.login);
   }
 
@@ -128,9 +128,9 @@ abstract final class AppNavigator {
 
   static void showError(String message) => EasyLoading.showError(message);
 
-  static SessionStore? _sessionStore() {
+  static LocalSession? _localSession() {
     if (Get.isRegistered<GatewayClient>()) {
-      return Get.find<GatewayClient>().settings.sessionStore;
+      return Get.find<GatewayClient>().settings.localSession;
     }
     return null;
   }
