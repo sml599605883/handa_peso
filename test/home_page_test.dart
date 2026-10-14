@@ -17,6 +17,7 @@ import 'package:handa_peso/features/home/home_banner.dart';
 import 'package:handa_peso/features/home/home_recommendations.dart';
 import 'package:handa_peso/features/main_shell/main_binding.dart';
 import 'package:handa_peso/features/main_shell/main_controller.dart';
+import 'package:handa_peso/app/widgets/app_empty_state.dart';
 import 'package:handa_peso/features/main_shell/main_shell_page.dart';
 
 const String _stubRoute = '/stub';
@@ -248,7 +249,7 @@ Future<void> _pumpShell(
       initialRoute: AppRoutes.main,
       builder: EasyLoading.init(),
       navigatorObservers: <NavigatorObserver>[appRouteObserver],
-      initialBinding: MainBinding(apiClient: client),
+      initialBinding: MainBinding(gatewayClient: client),
       getPages: <GetPage<dynamic>>[
         GetPage<void>(name: AppRoutes.main, page: () => const MainShellPage()),
         GetPage<void>(

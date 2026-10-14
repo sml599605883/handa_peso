@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
-import '../main_shell/main_shell_page.dart';
+import '../../app/widgets/shell_app_bar.dart';
 
 /// 应用内展示的防欺诈与产品指引内容。
 ///

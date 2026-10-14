@@ -166,13 +166,13 @@ void main() {
           ..close();
       });
 
-      final apiClient = GatewayClient(_config())
+      final gatewayClient = GatewayClient(_config())
         ..useProxy(host: '127.0.0.1', port: proxyServer.port);
 
-      await apiClient.read('/dropcloth/fishtailed');
+      await gatewayClient.read('/dropcloth/fishtailed');
 
-      expect(apiClient.proxyHost, '127.0.0.1');
-      expect(apiClient.proxyPort, proxyServer.port);
+      expect(gatewayClient.proxyHost, '127.0.0.1');
+      expect(gatewayClient.proxyPort, proxyServer.port);
       expect(proxiedPaths, <String>['/dropcloth/fishtailed']);
       expect(targetRequests, 0);
     });
@@ -211,17 +211,17 @@ void main() {
           ..close();
       });
 
-      final apiClient = GatewayClient(
+      final gatewayClient = GatewayClient(
         _config(apiOrigin: 'http://127.0.0.1:${targetServer.port}'),
       );
 
-      await apiClient.read('/dropcloth/fishtailed');
-      expect(apiClient.proxyHost, isNull);
+      await gatewayClient.read('/dropcloth/fishtailed');
+      expect(gatewayClient.proxyHost, isNull);
       expect(targetRequests, 1);
       expect(proxyRequests, 0);
 
-      apiClient.useProxy(host: '127.0.0.1', port: proxyServer.port);
-      await apiClient.read('/dropcloth/fishtailed');
+      gatewayClient.useProxy(host: '127.0.0.1', port: proxyServer.port);
+      await gatewayClient.read('/dropcloth/fishtailed');
 
       expect(targetRequests, 1);
       expect(proxyRequests, 1);
@@ -252,8 +252,8 @@ void main() {
         platformBridge: PlatformBridge(available: true),
       );
 
-      expect(dependencies.apiClient.proxyHost, '127.0.0.1');
-      expect(dependencies.apiClient.proxyPort, 8888);
+      expect(dependencies.gatewayClient.proxyHost, '127.0.0.1');
+      expect(dependencies.gatewayClient.proxyPort, 8888);
     });
 
     test('stays direct when the device has no system proxy', () async {
@@ -274,8 +274,8 @@ void main() {
         platformBridge: PlatformBridge(available: true),
       );
 
-      expect(dependencies.apiClient.proxyHost, isNull);
-      expect(dependencies.apiClient.proxyPort, isNull);
+      expect(dependencies.gatewayClient.proxyHost, isNull);
+      expect(dependencies.gatewayClient.proxyPort, isNull);
     });
   });
 }

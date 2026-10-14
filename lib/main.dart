@@ -32,7 +32,7 @@ Future<void> startHandaPeso({
   final dependencies = await bootstrap();
 
   Get.put<AppDependencies>(dependencies, permanent: true);
-  Get.put<GatewayClient>(dependencies.apiClient, permanent: true);
+  Get.put<GatewayClient>(dependencies.gatewayClient, permanent: true);
   AppNavigator.mainTabSelector = (index) {
     if (Get.isRegistered<MainController>()) {
       Get.find<MainController>().selectTab(index);
@@ -43,9 +43,9 @@ Future<void> startHandaPeso({
   runApplication(
     StartupNetworkGate(
       probe: () => probeStartupTransport(
-        dependencies.apiClient,
+        dependencies.gatewayClient,
         onReachable: dependencies.syncDeviceName,
-        reportSwitch: dependencies.apiClient.reportEndpointSwitch,
+        reportSwitch: dependencies.gatewayClient.reportEndpointSwitch,
       ),
       readyBuilder: () => HandaPesoApp(dependencies: dependencies),
     ),

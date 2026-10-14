@@ -29,9 +29,9 @@ const String codeSentHint = 'Verification code sent.';
 /// 请求与登录态：`+63` 前缀固定展示，验证码填满 6 位自动提交，手机号格式不对
 /// 或没勾选协议时立刻给浮层提示，而不是让主按钮点了没反应。
 class LoginController extends GetxController {
-  LoginController({required this.apiClient, required this.localSession});
+  LoginController({required this.gatewayClient, required this.localSession});
 
-  final GatewayClient apiClient;
+  final GatewayClient gatewayClient;
   final LocalSession localSession;
 
   /// 输入框的文本控制器：控制器持有它们是为了回填上次的手机号、登录失败后
@@ -64,10 +64,10 @@ class LoginController extends GetxController {
 
   /// 协议地址 = 服务端下发的 H5 域名 + 文档登记的混淆段。
   String get privacyUrl =>
-      H5Paths.resolve(apiClient.settings.webOrigin, H5Paths.privacyPolicy);
+      H5Paths.resolve(gatewayClient.settings.webOrigin, H5Paths.privacyPolicy);
 
   String get termsUrl =>
-      H5Paths.resolve(apiClient.settings.webOrigin, H5Paths.agreement);
+      H5Paths.resolve(gatewayClient.settings.webOrigin, H5Paths.agreement);
 
   @override
   void onInit() {
@@ -120,7 +120,7 @@ class LoginController extends GetxController {
     try {
       // 只等请求，不等「转圈」动画：动画没跑完时请求也应该已经发出去了。
       unawaited(AppNavigator.showLoading());
-      await apiClient.requestSmsCode(phone: phoneDigits.value);
+      await gatewayClient.requestSmsCode(phone: phoneDigits.value);
       await AppNavigator.dismissLoading();
       cooldown.restart();
       codeFocus.requestFocus();
@@ -158,7 +158,7 @@ class LoginController extends GetxController {
     });
     try {
       unawaited(AppNavigator.showLoading());
-      final response = await apiClient.signInWithSmsCode(
+      final response = await gatewayClient.signInWithSmsCode(
         phone: phoneDigits.value,
         code: codeDigits.value,
       );

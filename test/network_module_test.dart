@@ -180,7 +180,7 @@ void main() {
         noiseDigits: (length) => '1' * length,
       );
       final sync = DeviceInfoSync(
-        apiClient: GatewayClient(config),
+        gatewayClient: GatewayClient(config),
         bridge: PlatformBridge(available: true, channel: channel),
         localSession: LocalSession.memory(),
       );
@@ -208,7 +208,7 @@ void main() {
       await store.writeDeviceLabel('Handa Tester');
       final config = GatewaySettings(localSession: store, appVersion: '1.0.0');
       final sync = DeviceInfoSync(
-        apiClient: GatewayClient(config),
+        gatewayClient: GatewayClient(config),
         bridge: PlatformBridge(available: false),
         localSession: store,
       );

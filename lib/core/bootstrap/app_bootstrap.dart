@@ -11,12 +11,12 @@ import '../session/local_session.dart';
 /// 承载首帧渲染之前就已创建好的各项依赖。
 class AppDependencies {
   AppDependencies({
-    required this.apiClient,
+    required this.gatewayClient,
     required this.localSession,
     Future<void> Function()? syncDeviceName,
   }) : syncDeviceName = syncDeviceName ?? _noop;
 
-  final GatewayClient apiClient;
+  final GatewayClient gatewayClient;
   final LocalSession localSession;
 
   /// 尽力而为地向网关查询可读的设备名称。
@@ -56,14 +56,14 @@ abstract final class AppBootstrap {
         AppNavigator.redirectToLoginAfterSessionExpiry;
 
     final bridge = platformBridge ?? PlatformBridge();
-    final apiClient = GatewayClient(settings);
+    final gatewayClient = GatewayClient(settings);
 
     // 抓包：代理地址由 iOS 系统网络设置决定，未配置代理时保持直连。
     // 必须在首个请求（启动门禁探测）之前完成。
-    await _applyNativeProxy(apiClient, bridge);
+    await _applyNativeProxy(gatewayClient, bridge);
 
     final deviceSync = DeviceInfoSync(
-      apiClient: apiClient,
+      gatewayClient: gatewayClient,
       bridge: bridge,
       localSession: localSession,
     );
@@ -73,7 +73,7 @@ abstract final class AppBootstrap {
     final model = await deviceSync.applyDeviceIdentity(settings);
 
     return AppDependencies(
-      apiClient: apiClient,
+      gatewayClient: gatewayClient,
       localSession: localSession,
       syncDeviceName: model == null || model.isEmpty
           ? null
@@ -95,13 +95,13 @@ abstract final class AppBootstrap {
   ///
   /// 尽力而为：桥接不可用、原生未开启代理或读取失败时都保持直连启动。
   static Future<void> _applyNativeProxy(
-    GatewayClient apiClient,
+    GatewayClient gatewayClient,
     PlatformBridge bridge,
   ) async {
     try {
       final proxy = await bridge.readProxyEndpoint();
       if (proxy != null && proxy.isUsable) {
-        apiClient.useProxy(host: proxy.host, port: proxy.port);
+        gatewayClient.useProxy(host: proxy.host, port: proxy.port);
       }
     } catch (_) {
       // 代理发现不得阻塞启动。

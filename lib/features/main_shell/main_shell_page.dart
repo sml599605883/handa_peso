@@ -16,41 +16,42 @@ class MainShellPage extends GetView<MainController> {
 
   static const _tabs = <_ShellTab>[
     _ShellTab(
-      id: 'home',
       label: 'Home',
-      activeIcon: 'assets/tab_home_active.png',
-      inactiveIcon: 'assets/tab_home_inactive.png',
+      icon: 'assets/tab_home_active.png',
+      dimIcon: 'assets/tab_home_inactive.png',
+      id: 'home',
     ),
     _ShellTab(
-      id: 'loan',
       label: 'Loan',
-      activeIcon: 'assets/tab_loan_active.png',
-      inactiveIcon: 'assets/tab_loan_inactive.png',
+      icon: 'assets/tab_loan_active.png',
+      dimIcon: 'assets/tab_loan_inactive.png',
+      id: 'loan',
     ),
     _ShellTab(
-      id: 'mine',
       label: 'Mine',
-      activeIcon: 'assets/tab_mine_active.png',
-      inactiveIcon: 'assets/tab_mine_inactive.png',
+      icon: 'assets/tab_mine_active.png',
+      dimIcon: 'assets/tab_mine_inactive.png',
+      id: 'mine',
     ),
   ];
 
   @override
   Widget build(BuildContext context) {
     return _RouteReturnListener(
-      child: Obx(
-        () => Scaffold(
+      child: Obx(() {
+        final tabIndex = controller.selectedIndex.value;
+        return Scaffold(
           body: IndexedStack(
-            index: controller.selectedIndex.value,
+            index: tabIndex,
             children: const [HomePage(), OrdersPage(), MinePage()],
           ),
           bottomNavigationBar: _ShellNavigationBar(
-            tabs: _tabs,
-            selectedIndex: controller.selectedIndex.value,
-            onSelected: controller.selectTab,
+            entries: _tabs,
+            activeIndex: tabIndex,
+            onSelect: controller.selectTab,
           ),
-        ),
-      ),
+        );
+      }),
     );
   }
 }
@@ -94,25 +95,26 @@ class _RouteReturnListenerState extends State<_RouteReturnListener>
   Widget build(BuildContext context) => widget.child;
 }
 
+/// 底部 Tab 的静态描述：图标、标题与埋点用的标识。
 class _ShellTab {
   const _ShellTab({
-    required this.id,
     required this.label,
-    required this.activeIcon,
-    required this.inactiveIcon,
+    required this.icon,
+    required this.dimIcon,
+    required this.id,
   });
 
-  final String id;
   final String label;
-  final String activeIcon;
-  final String inactiveIcon;
+  final String icon;
+  final String dimIcon;
+  final String id;
 }
 
 class _ShellNavigationBar extends StatelessWidget {
   const _ShellNavigationBar({
-    required this.tabs,
-    required this.selectedIndex,
-    required this.onSelected,
+    required this.entries,
+    required this.activeIndex,
+    required this.onSelect,
   });
 
   /// 底部 Home 指示条安全区之上的内容高度（设计稿 block_6）。
@@ -132,27 +134,30 @@ class _ShellNavigationBar extends StatelessWidget {
   static const double _indicatorWidth = 12;
   static const double _indicatorHeight = 2;
 
-  final List<_ShellTab> tabs;
-  final int selectedIndex;
-  final ValueChanged<int> onSelected;
+  final List<_ShellTab> entries;
+  final int activeIndex;
+  final ValueChanged<int> onSelect;
+
+  /// 导航栏底板：白色圆角面板。
+  static const BoxDecoration _surface = BoxDecoration(
+    color: AppColors.surface,
+    borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+  );
 
   @override
   Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final safeBottom = MediaQuery.paddingOf(context).bottom;
     return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
-      ),
+      decoration: _surface,
       child: Padding(
-        padding: EdgeInsets.only(bottom: bottomInset),
+        padding: EdgeInsets.only(bottom: safeBottom),
         child: SizedBox(
           height: _contentHeight,
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final tabWidth = constraints.maxWidth / tabs.length;
+              final slotWidth = constraints.maxWidth / entries.length;
               final indicatorLeft =
-                  tabWidth * selectedIndex + (tabWidth - _indicatorWidth) / 2;
+                  slotWidth * activeIndex + (slotWidth - _indicatorWidth) / 2;
               return Stack(
                 children: [
                   Padding(
@@ -162,14 +167,14 @@ class _ShellNavigationBar extends StatelessWidget {
                     ),
                     child: Row(
                       children: [
-                        for (var index = 0; index < tabs.length; index++)
+                        for (var index = 0; index < entries.length; index++)
                           Expanded(
                             child: InkWell(
-                              key: Key('tab-${tabs[index].id}'),
-                              onTap: () => onSelected(index),
+                              key: Key('tab-${entries[index].id}'),
+                              onTap: () => onSelect(index),
                               child: _TabItem(
-                                tab: tabs[index],
-                                selected: index == selectedIndex,
+                                tab: entries[index],
+                                lit: index == activeIndex,
                               ),
                             ),
                           ),
@@ -200,20 +205,23 @@ class _ShellNavigationBar extends StatelessWidget {
   }
 }
 
+/// 单个 Tab：图标 + 文案，选中态换色换图。
 class _TabItem extends StatelessWidget {
-  const _TabItem({required this.tab, required this.selected});
+  const _TabItem({required this.tab, required this.lit});
 
   final _ShellTab tab;
-  final bool selected;
+  final bool lit;
+
+  static const double _labelSize = 10;
+  static const double _labelHeight = 1.4;
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? AppColors.tabActive : AppColors.tabInactive;
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Image.asset(
-          selected ? tab.activeIcon : tab.inactiveIcon,
+          lit ? tab.icon : tab.dimIcon,
           width: _ShellNavigationBar._iconSize,
           height: _ShellNavigationBar._iconSize,
         ),
@@ -221,79 +229,13 @@ class _TabItem extends StatelessWidget {
         Text(
           tab.label,
           style: TextStyle(
-            fontSize: 10,
-            height: 1.4,
-            color: color,
-            fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+            fontSize: _labelSize,
+            height: _labelHeight,
+            color: lit ? AppColors.tabActive : AppColors.tabInactive,
+            fontWeight: lit ? FontWeight.w700 : FontWeight.w400,
           ),
         ),
       ],
-    );
-  }
-}
-
-/// 供二级页面复用的页面标题栏。
-class ShellAppBar extends StatelessWidget implements PreferredSizeWidget {
-  const ShellAppBar({required this.title, this.actions, super.key});
-
-  final String title;
-  final List<Widget>? actions;
-
-  @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
-
-  @override
-  Widget build(BuildContext context) {
-    return AppBar(title: Text(title), actions: actions);
-  }
-}
-
-/// 采用 8dp 网格布局的共享空状态 widget。
-class AppEmptyState extends StatelessWidget {
-  const AppEmptyState({
-    required this.icon,
-    required this.title,
-    this.description,
-    this.action,
-    super.key,
-  });
-
-  final IconData icon;
-  final String title;
-  final String? description;
-  final Widget? action;
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 56, color: AppColors.textMuted),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              title,
-              style: textTheme.titleMedium,
-              textAlign: TextAlign.center,
-            ),
-            if (description != null) ...[
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                description!,
-                style: textTheme.bodySmall,
-                textAlign: TextAlign.center,
-              ),
-            ],
-            if (action != null) ...[
-              const SizedBox(height: AppSpacing.md),
-              action!,
-            ],
-          ],
-        ),
-      ),
     );
   }
 }

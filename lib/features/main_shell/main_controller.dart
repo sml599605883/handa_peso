@@ -20,9 +20,9 @@ const String _homeApplyProductId = 'home_card';
 /// 首次进入、切回首页 Tab、从二级页面返回、下拉刷新、回到前台，
 /// 以及登录 / 退出后重新同步。
 class MainController extends GetxController with WidgetsBindingObserver {
-  MainController({required this.apiClient, required this.localSession});
+  MainController({required this.gatewayClient, required this.localSession});
 
-  final GatewayClient apiClient;
+  final GatewayClient gatewayClient;
   final LocalSession localSession;
 
   final selectedIndex = 0.obs;
@@ -117,7 +117,7 @@ class MainController extends GetxController with WidgetsBindingObserver {
     homeLoading.value = true;
     homeError.value = null;
     try {
-      final response = await apiClient.fetchHomeOverview();
+      final response = await gatewayClient.fetchHomeOverview();
       homeData.value = HomeData.fromJson(response.payload);
       _loadedOnce = true;
     } on GatewayFailure catch (error) {
@@ -150,7 +150,7 @@ class MainController extends GetxController with WidgetsBindingObserver {
       try {
         final id = banner.id.trim();
         if (id.isNotEmpty && (await localSession.readSessionId()).isNotEmpty) {
-          await apiClient.recordBannerClick(bannerId: id);
+          await gatewayClient.recordBannerClick(bannerId: id);
         }
       } catch (_) {
         // 上报失败不影响跳转。
@@ -181,7 +181,7 @@ class MainController extends GetxController with WidgetsBindingObserver {
 
   Future<void> logout() async {
     try {
-      await apiClient.signOut();
+      await gatewayClient.signOut();
     } on GatewayFailure catch (error) {
       CrashReporter.record(error, StackTrace.current);
     } finally {

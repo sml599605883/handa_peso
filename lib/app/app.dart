@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:get/get.dart';
 
+import '../core/analytics/screen_view_reporter.dart';
 import '../core/bootstrap/app_bootstrap.dart';
 import 'navigation/app_route_observer.dart';
 import 'theme/app_colors.dart';
@@ -40,7 +41,7 @@ class HandaPesoApp extends StatelessWidget {
           child: child,
         ),
       ),
-      navigatorObservers: [appRouteObserver, AnalyticsRouteObserver()],
+      navigatorObservers: [appRouteObserver, ScreenViewReporter()],
       initialBinding: MainBinding(appDependencies: dependencies),
       initialRoute: AppRoutes.main,
       getPages: [

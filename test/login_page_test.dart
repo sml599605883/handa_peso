@@ -233,7 +233,7 @@ void main() {
             page: () => const LoginPage(),
             binding: BindingsBuilder<void>(
               () => Get.put<LoginController>(
-                LoginController(apiClient: client, localSession: store),
+                LoginController(gatewayClient: client, localSession: store),
               ),
             ),
           ),

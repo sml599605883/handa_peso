@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../main_shell/main_controller.dart';
-import '../main_shell/main_shell_page.dart';
+import '../../app/widgets/app_empty_state.dart';
 import 'home_banner.dart';
 import 'home_big_card.dart';
 import 'home_recommendations.dart';

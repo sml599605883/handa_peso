@@ -13,14 +13,14 @@ import '../session/local_session.dart';
 /// 硬件标识兜底。
 class DeviceInfoSync {
   const DeviceInfoSync({
-    required this.apiClient,
+    required this.gatewayClient,
     required this.bridge,
     required this.localSession,
     this.attempts = 3,
     this.retryDelay = const Duration(milliseconds: 100),
   }) : assert(attempts > 0);
 
-  final GatewayClient apiClient;
+  final GatewayClient gatewayClient;
   final PlatformBridge bridge;
   final LocalSession localSession;
   final int attempts;
@@ -64,7 +64,7 @@ class DeviceInfoSync {
     }
 
     try {
-      final reply = await apiClient.lookupDeviceName(modelCode: modelCode);
+      final reply = await gatewayClient.lookupDeviceName(modelCode: modelCode);
       final name = reply.payload['especially']?.toString() ?? '';
       if (name.isNotEmpty && name != modelCode) {
         await localSession.writeDeviceLabel(name);

@@ -10,9 +10,9 @@ import 'package:flutter/services.dart';
 /// 画布按同一比例补足高度，多出来的部分交给 [SingleChildScrollView] 承接。
 class DesignCanvas extends StatelessWidget {
   const DesignCanvas({
-    super.key,
     required this.designSize,
     required this.builder,
+    super.key,
   });
 
   /// 设计稿画布尺寸（本项目统一 375x812）。
@@ -22,6 +22,10 @@ class DesignCanvas extends StatelessWidget {
   final Widget Function(BuildContext context, DesignCanvasMetrics metrics)
   builder;
 
+  /// 点到空白处收起键盘，与页面里输入框的焦点行为保持一致。
+  static void _dismissKeyboard() =>
+      FocusManager.instance.primaryFocus?.unfocus();
+
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
@@ -29,8 +33,7 @@ class DesignCanvas extends StatelessWidget {
       child: Scaffold(
         body: GestureDetector(
           behavior: HitTestBehavior.translucent,
-          // 点到空白处收起键盘，与输入框的焦点行为保持一致。
-          onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+          onTap: _dismissKeyboard,
           child: LayoutBuilder(
             builder: (context, constraints) {
               final scale = constraints.maxWidth / designSize.width;

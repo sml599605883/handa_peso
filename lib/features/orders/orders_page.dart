@@ -8,7 +8,8 @@ import '../../app/navigation/app_navigator.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/network/gateway_client.dart';
 import '../../core/network/gateway_failure.dart';
-import '../main_shell/main_shell_page.dart';
+import '../../app/widgets/app_empty_state.dart';
+import '../../app/widgets/shell_app_bar.dart';
 import 'order_item.dart';
 
 /// 带显式 loading、error 和 empty 状态的订单列表。

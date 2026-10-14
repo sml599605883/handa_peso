@@ -21,7 +21,7 @@ typedef EndpointSwitchReporter = Future<void> Function(String payload);
 ///
 /// 远程配置链接为空时该回退不生效，第一次探测即为最终判断。
 Future<bool> probeStartupTransport(
-  GatewayClient apiClient, {
+  GatewayClient gatewayClient, {
   String? spareSourceUrl,
   Future<void> Function()? onReachable,
   EndpointSwitchReporter? reportSwitch,
@@ -31,15 +31,15 @@ Future<bool> probeStartupTransport(
     logs.add('${DateTime.now().toIso8601String()} $message');
   }
 
-  final builtInHost = _hostOf(apiClient.settings.apiOrigin);
+  final builtInHost = _hostOf(gatewayClient.settings.apiOrigin);
   log('launch probe opened against built-in host $builtInHost');
 
-  if (await apiClient.probeReachability()) {
+  if (await gatewayClient.probeReachability()) {
     log('built-in host $builtInHost answered; nothing to switch');
   } else {
     log('built-in host $builtInHost stayed silent');
 
-    final switched = await apiClient.refreshOrigins(
+    final switched = await gatewayClient.refreshOrigins(
       sourceUrl: spareSourceUrl,
     );
     if (!switched) {
@@ -47,10 +47,10 @@ Future<bool> probeStartupTransport(
       return false;
     }
 
-    final spareHost = _hostOf(apiClient.settings.apiOrigin);
+    final spareHost = _hostOf(gatewayClient.settings.apiOrigin);
     log('spare host $spareHost read from the config source; verifying');
 
-    if (!await apiClient.probeReachability()) {
+    if (!await gatewayClient.probeReachability()) {
       log('spare host $spareHost stayed silent too; giving up the switch');
       return false;
     }
