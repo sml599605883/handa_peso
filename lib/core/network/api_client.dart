@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
 
 import '../json/json_utils.dart';
 import 'api_config.dart';
@@ -34,6 +35,12 @@ class ApiClient {
   );
 
   bool _handlingAuthExpired = false;
+  String? _proxyHost;
+  int? _proxyPort;
+
+  /// 当前生效的系统代理；未配置代理时为 `null`。
+  String? get proxyHost => _proxyHost;
+  int? get proxyPort => _proxyPort;
 
   // ---------------------------------------------------------------------------
   // 鉴权与账号
@@ -549,6 +556,33 @@ class ApiClient {
   // ---------------------------------------------------------------------------
   // 传输层
   // ---------------------------------------------------------------------------
+
+  /// 让 Dio 通过系统 HTTP 代理发送请求，供 Proxyman/Charles 抓包使用。
+  ///
+  /// Dart 的 `HttpClient` 不会自动读取 iOS 的系统代理，因此即使设备已配置
+  /// 抓包代理，请求仍会直连。这里用原生层读到的 host/port 重建 Adapter，
+  /// 使后续请求都经过该代理。
+  ///
+  /// [allowBadCertificates] 仅在抓包代理对 HTTPS 做中间人解密、且设备尚未
+  /// 信任其根证书时才需要打开；默认保持系统的证书校验。
+  void setProxy({
+    required String host,
+    required int port,
+    bool allowBadCertificates = false,
+  }) {
+    _proxyHost = host;
+    _proxyPort = port;
+    dio.httpClientAdapter.close(force: true);
+    dio.httpClientAdapter = IOHttpClientAdapter(
+      createHttpClient: () {
+        final client = HttpClient()..findProxy = (_) => 'PROXY $host:$port;';
+        if (allowBadCertificates) {
+          client.badCertificateCallback = (certificate, host, port) => true;
+        }
+        return client;
+      },
+    );
+  }
 
   /// 供启动门禁使用的轻量级网关可达性探测。
   ///

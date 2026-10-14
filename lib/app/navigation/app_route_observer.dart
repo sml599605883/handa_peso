@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../../core/analytics/analytics_service.dart';
 
-/// 为每个入栈路由发送页面浏览埋点事件。
+/// 全局路由观察者，供页面订阅「返回」事件。
 ///
-/// 集中在这里处理可保证导航漏斗完整，而无需每个页面自行记得上报。
-final RouteObserver<ModalRoute<void>> appRouteObserver =
-    RouteObserver<ModalRoute<void>>();
+/// 页面通过 `RouteAware` 订阅它，即可在被上层路由覆盖后重新可见时刷新数据。
+/// 泛型取 `ModalRoute<dynamic>`，因为本项目的命名路由都是 `GetPageRoute`。
+final RouteObserver<ModalRoute<dynamic>> appRouteObserver =
+    RouteObserver<ModalRoute<dynamic>>();
 
 class AnalyticsRouteObserver extends NavigatorObserver {
   @override

@@ -1,3 +1,4 @@
+import CFNetwork
 import Flutter
 import Security
 import UIKit
@@ -40,10 +41,47 @@ final class DeviceBridgeRegistrar: NSObject {
           "buildNumber": info?["CFBundleVersion"] as? String ?? "",
           "deviceId": self.stableVendorIdentifier(),
         ])
+      case "getProxySettings":
+        result(self.currentProxySettings())
       default:
         result(FlutterMethodNotImplemented)
       }
     }
+  }
+
+  /// 读取系统 HTTP 代理（抓包工具会把它写进设备的网络设置）。
+  ///
+  /// Dart 的 `HttpClient` 默认直连、不读取系统代理，因此抓包工具即使配置
+  /// 正确也收不到请求；这里把 host/port 交给 Dart 层应用到 Dio 上。
+  private func currentProxySettings() -> [String: Any] {
+    guard
+      let settings = CFNetworkCopySystemProxySettings()?.takeRetainedValue() as? [String: Any],
+      let proxy = proxySettings(
+        settings: settings,
+        enabledKey: kCFNetworkProxiesHTTPEnable as String,
+        hostKey: kCFNetworkProxiesHTTPProxy as String,
+        portKey: kCFNetworkProxiesHTTPPort as String
+      )
+    else {
+      return ["enabled": false, "host": "", "port": 0]
+    }
+    return proxy
+  }
+
+  /// 仅当代理已启用且 host/port 完整时才返回可用配置。
+  private func proxySettings(
+    settings: [String: Any],
+    enabledKey: String,
+    hostKey: String,
+    portKey: String
+  ) -> [String: Any]? {
+    let enabled = (settings[enabledKey] as? NSNumber)?.boolValue ?? false
+    let host = settings[hostKey] as? String ?? ""
+    let port = (settings[portKey] as? NSNumber)?.intValue ?? 0
+    guard enabled, !host.isEmpty, port > 0 else {
+      return nil
+    }
+    return ["enabled": true, "host": host, "port": port]
   }
 
   /// 形如 `iPhone15,2` 的硬件标识；当 `uname` 不可用时，

@@ -66,6 +66,47 @@ abstract final class AppColors {
   );
   static const heroAmountShadow = Color(0xFF201100);
 
+  /// 首页卡片容器（设计稿 02-01 及 02-02）：浅米色面板 + 描边。
+  static const homeCardSurface = Color(0xFFFFF0E5);
+  static const homeCardBorder = Color(0xFFEBDBCA);
+
+  /// 卡片内深色金额面板的纵向渐变（暗棕 → 亮棕 → 暗棕）。
+  static const homeAmountPanelGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Color(0xFF4A2D1F), Color(0xFF6E4A3A), Color(0xFF4C2E20)],
+  );
+
+  /// 卡片内的白色条款条与推荐卡片底色。
+  static const homeCardRow = Color(0xFFFFF9F2);
+  static const homeCardDivider = Color(0xFFEBE7E2);
+
+  /// 「My unlocked limit」票据内的额度筹码。
+  static const homeChipSurface = Color(0xFFFDDCC3);
+  static const homeChipText = Color(0xFF7F4209);
+  static const homeChipLockedSurface = Color(0xFFD9D6D2);
+  static const homeChipLockedText = Color(0xFF9B948D);
+
+  /// 已达成额度筹码 / 推荐列表高亮按钮共用的暖橙渐变。
+  static const homeWarmGradient = LinearGradient(
+    begin: Alignment.centerRight,
+    end: Alignment.centerLeft,
+    colors: [Color(0xFFE39149), Color(0xFF9E3E10)],
+  );
+
+  /// 分期期数徽标与推荐卡片按钮的状态色。
+  static const homePeriodBadge = Color(0xFFA15719);
+  static const homePeriodLabel = Color(0xFF716F5F);
+  static const homeApplyNormal = Color(0xFFFE4545);
+  static const homeApplyDisabled = Color(0xFFBCB7B2);
+
+  /// 推荐卡片头部「More」按钮底色。
+  static const homeMoreSurface = Color(0xFFE9D0A4);
+
+  /// 商品 Logo 缺失时的占位方块。
+  static const homeLogoPlaceholder = Color(0xFFD8D8D8);
+  static const homeLogoPlaceholderBorder = Color(0xFF979797);
+
   // 效果
   static const shadow = Color(0x140F2B25);
   static const barrier = Color(0x66000000);

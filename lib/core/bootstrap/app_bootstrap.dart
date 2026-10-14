@@ -40,6 +40,7 @@ abstract final class AppBootstrap {
     String? webBaseUrl,
     String? signatureSecret,
     AuthExpiredHandler? authExpiredHandler,
+    DeviceBridge? deviceBridge,
   }) async {
     final sessionStore =
         sessionStoreFactory?.call() ?? SessionStore(SharedPreferencesAsync());
@@ -54,10 +55,16 @@ abstract final class AppBootstrap {
     config.authExpiredHandler ??=
         AppNavigator.redirectToLoginAfterSessionExpiry;
 
+    final bridge = deviceBridge ?? DeviceBridge();
     final apiClient = ApiClient(config);
+
+    // 抓包：代理地址由 iOS 系统网络设置决定，未配置代理时保持直连。
+    // 必须在首个请求（启动门禁探测）之前完成。
+    await _applyNativeProxy(apiClient, bridge);
+
     final deviceSync = DeviceInfoSync(
       apiClient: apiClient,
-      bridge: DeviceBridge(),
+      bridge: bridge,
       store: sessionStore,
     );
 
@@ -81,6 +88,23 @@ abstract final class AppBootstrap {
     } catch (_) {
       // 版本查询是尽力而为的，不得阻塞启动。
       return '';
+    }
+  }
+
+  /// 从原生层读取系统代理并应用到 Dio，让设备上的抓包工具能收到请求。
+  ///
+  /// 尽力而为：桥接不可用、原生未开启代理或读取失败时都保持直连启动。
+  static Future<void> _applyNativeProxy(
+    ApiClient apiClient,
+    DeviceBridge bridge,
+  ) async {
+    try {
+      final proxy = await bridge.proxySettings();
+      if (proxy != null && proxy.canApply) {
+        apiClient.setProxy(host: proxy.host, port: proxy.port);
+      }
+    } catch (_) {
+      // 代理发现不得阻塞启动。
     }
   }
 }

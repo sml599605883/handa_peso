@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../../app/navigation/app_route_observer.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
 import '../home/home_page.dart';
@@ -34,20 +37,61 @@ class MainShellPage extends GetView<MainController> {
 
   @override
   Widget build(BuildContext context) {
-    return Obx(
-      () => Scaffold(
-        body: IndexedStack(
-          index: controller.selectedIndex.value,
-          children: const [HomePage(), OrdersPage(), MinePage()],
-        ),
-        bottomNavigationBar: _ShellNavigationBar(
-          tabs: _tabs,
-          selectedIndex: controller.selectedIndex.value,
-          onSelected: controller.selectTab,
+    return _RouteReturnListener(
+      child: Obx(
+        () => Scaffold(
+          body: IndexedStack(
+            index: controller.selectedIndex.value,
+            children: const [HomePage(), OrdersPage(), MinePage()],
+          ),
+          bottomNavigationBar: _ShellNavigationBar(
+            tabs: _tabs,
+            selectedIndex: controller.selectedIndex.value,
+            onSelected: controller.selectTab,
+          ),
         ),
       ),
     );
   }
+}
+
+/// 订阅全局路由观察者：从二级页面返回外壳时，让当前 Tab 重新拉一次数据。
+class _RouteReturnListener extends StatefulWidget {
+  const _RouteReturnListener({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_RouteReturnListener> createState() => _RouteReturnListenerState();
+}
+
+class _RouteReturnListenerState extends State<_RouteReturnListener>
+    with RouteAware {
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route != null) appRouteObserver.subscribe(this, route);
+  }
+
+  @override
+  void dispose() {
+    appRouteObserver.unsubscribe(this);
+    super.dispose();
+  }
+
+  @override
+  void didPopNext() {
+    unawaited(Get.find<MainController>().onRouteReturned());
+  }
+
+  @override
+  void didPushNext() {
+    Get.find<MainController>().onRouteLeft();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 class _ShellTab {
@@ -112,7 +156,10 @@ class _ShellNavigationBar extends StatelessWidget {
               return Stack(
                 children: [
                   Padding(
-                    padding: const EdgeInsets.only(top: _topPadding, bottom: _bottomPadding),
+                    padding: const EdgeInsets.only(
+                      top: _topPadding,
+                      bottom: _bottomPadding,
+                    ),
                     child: Row(
                       children: [
                         for (var index = 0; index < tabs.length; index++)
@@ -137,7 +184,9 @@ class _ShellNavigationBar extends StatelessWidget {
                       height: _indicatorHeight,
                       decoration: const BoxDecoration(
                         color: AppColors.tabActive,
-                        borderRadius: BorderRadius.vertical(top: Radius.circular(1)),
+                        borderRadius: BorderRadius.vertical(
+                          top: Radius.circular(1),
+                        ),
                       ),
                     ),
                   ),
@@ -225,7 +274,11 @@ class AppEmptyState extends StatelessWidget {
           children: [
             Icon(icon, size: 56, color: AppColors.textMuted),
             const SizedBox(height: AppSpacing.sm),
-            Text(title, style: textTheme.titleMedium, textAlign: TextAlign.center),
+            Text(
+              title,
+              style: textTheme.titleMedium,
+              textAlign: TextAlign.center,
+            ),
             if (description != null) ...[
               const SizedBox(height: AppSpacing.xs),
               Text(

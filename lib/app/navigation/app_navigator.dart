@@ -62,6 +62,52 @@ abstract final class AppNavigator {
     return Get.toNamed<void>(AppRoutes.webView, arguments: {'url': url, 'title': title});
   }
 
+  /// 打开首页 Banner（以及后续的弹窗）下发的跳转链接。
+  ///
+  /// 链接形态见接口文档「值映射 -> Scheme」：
+  /// - `http` / `https`：H5 落地页，交给内置 WebView；
+  /// - `ph://handa-peso/ios/<混淆段>`：映射到对应的原生页面；
+  /// - 其它（包括文档里已登记、但当前版本还没有落地页的混淆段）：明确提示
+  ///   打不开，而不是悄悄当成 H5 打开。
+  static Future<void> openBannerTarget(String target) async {
+    final link = target.trim();
+    if (link.isEmpty) return;
+
+    final uri = Uri.tryParse(link);
+    final scheme = uri?.scheme.toLowerCase() ?? '';
+    if (scheme == 'http' || scheme == 'https') {
+      if (uri == null || uri.host.isEmpty) {
+        showError(_unopenableLink);
+        return;
+      }
+      await toWebView(url: link, title: 'Activity');
+      return;
+    }
+
+    final segments = uri?.pathSegments ?? const <String>[];
+    if (scheme == 'ph' &&
+        uri?.host == _schemeHost &&
+        segments.length == 2 &&
+        segments.first == 'ios') {
+      switch (segments.last) {
+        case _BannerTarget.home:
+          switchMainTab(0);
+          return;
+        case _BannerTarget.login:
+          await toLogin();
+          return;
+        case _BannerTarget.order:
+          await toOrders();
+          return;
+      }
+    }
+
+    showError(_unopenableLink);
+  }
+
+  static const String _schemeHost = 'handa-peso';
+  static const String _unopenableLink = 'Unable to open link';
+
   static Future<void> showLoading([String status = 'Loading...']) =>
       EasyLoading.show(status: status);
 
@@ -77,4 +123,16 @@ abstract final class AppNavigator {
     }
     return null;
   }
+}
+
+/// Banner 深链里的应用页面混淆段（接口文档「值映射 -> Scheme」）。
+///
+/// 这里只登记当前版本真正有落地页的段。文档中同样登记过的设置页
+/// （`HelistopSaintliest`）、产品详情（`Sputterers`）、重新授信（`Herbivory`）
+/// 与准入（`PeacefulnessesQuesters`）还没有对应的原生页面，命中时会走
+/// 「打不开」提示，不会被误当成 H5 打开。
+abstract final class _BannerTarget {
+  static const home = 'SoulsClodpole';
+  static const login = 'Disaccording';
+  static const order = 'Brusker';
 }
