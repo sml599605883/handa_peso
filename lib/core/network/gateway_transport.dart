@@ -234,18 +234,37 @@ class GatewayTransport {
 
   GatewayFailure _httpFailure(int status, [Object? cause]) {
     if (status == 401) return GatewayFailure.sessionExpired();
+    final note = _noteFromBody(cause);
     return GatewayFailure(
-      'Request failed ($status).',
+      note.isEmpty ? 'Request failed ($status).' : note,
       code: 'http_$status',
       statusCode: status,
       cause: cause,
     );
   }
 
+  /// 从 HTTP 错误响应里取网关自己的文案（`unstably`）。
+  ///
+  /// 状态码 >= 400 时响应体通常还是那条标准信封，里面的文案（例如「验证码错误」）
+  /// 比本地拼的 `Request failed (500).` 有用得多。
+  String _noteFromBody(Object? cause) {
+    final raw = cause is DioException ? cause.response?.data : cause;
+    Object? body = raw;
+    if (raw is String) {
+      try {
+        body = jsonDecode(raw);
+      } on FormatException {
+        return '';
+      }
+    }
+    if (body is! Map) return '';
+    return '${body[WireFormat.noteField] ?? ''}'.trim();
+  }
+
   Future<GatewayReply> _unwrap(Response<dynamic> response) async {
     final status = response.statusCode ?? 0;
     if (status >= 400) {
-      throw _httpFailure(status);
+      throw _httpFailure(status, response.data);
     }
     final reply = GatewayReply.parse(response.data);
     if (reply.isSessionExpired) {

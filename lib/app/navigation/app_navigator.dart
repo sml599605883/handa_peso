@@ -126,6 +126,18 @@ abstract final class AppNavigator {
     showToast(message);
   }
 
+  /// 弹一条提示，并在它播完（展示 2 秒 + 淡出）后返回。
+  ///
+  /// 复位输入框之类的界面动作要等提示播完再做：提示还在屏上就把输入框清掉，
+  /// 用户会以为提示说的是别的事。
+  static Future<void> showHintAndWait(String message) async {
+    if (!AppHint.show(message)) {
+      showToast(message);
+      return;
+    }
+    await AppHint.dismissed;
+  }
+
   static void showError(String message) => EasyLoading.showError(message);
 
   static LocalSession? _localSession() {

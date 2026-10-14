@@ -94,13 +94,18 @@ class _StubAdapter implements HttpClientAdapter {
   void close({bool force = false}) {}
 }
 
-String _envelope([Map<String, dynamic>? data]) {
+String _envelope({Map<String, dynamic>? data, String note = 'success'}) {
   return jsonEncode(<String, dynamic>{
     'unaccepted': 0,
-    'unstably': 'success',
+    'unstably': note,
     'indulgences': data ?? <String, dynamic>{},
   });
 }
+
+/// 短信接口下发的「验证码已发出」文案（信封的 `unstably`）。
+///
+/// 端上不写死这句话：参考端也是把接口文案直接丢给 HUD。
+const String _codeSentNote = 'Code sent to your cellphone';
 
 GatewaySettings _config(LocalSession store) {
   return GatewaySettings(
@@ -178,9 +183,13 @@ void main() {
     adapter = _StubAdapter(
       (options) async => ResponseBody.fromString(
         _envelope(
-          options.uri.path.contains('checkreins')
+          data: options.uri.path.contains('checkreins')
               ? <String, dynamic>{'sandman': 'session-123'}
               : null,
+          // 验证码已发出的提示由接口下发，端上只负责展示。
+          note: options.uri.path.contains('fishtailed')
+              ? _codeSentNote
+              : 'success',
         ),
         200,
         headers: _jsonHeaders,
@@ -378,15 +387,17 @@ void main() {
     await drainToast(tester);
   });
 
-  testWidgets('格式无效但表单填满时主按钮仍是可用态，且只提示不打登录接口', (tester) async {
+  testWidgets('手机号格式无效时只提示不打登录接口，并复位验证码', (tester) async {
     await pumpLogin(tester);
+    final controller = Get.find<LoginController>();
 
     await tester.enterText(
       find.byKey(const Key('login-phone')),
       '737478847391000',
     );
     await tester.pump();
-    await tester.enterText(find.byKey(const Key('login-code')), '111111');
+    // 直接写状态：第 6 位验证码会触发自动提交，先量主按钮的可用态。
+    controller.codeDigits.value = '111111';
     await tester.pump();
 
     // 设计稿 01-02 - 登录-电话号码格式无效：验证码填满时主按钮已经是橙色，
@@ -403,11 +414,23 @@ void main() {
             as BoxDecoration;
     expect(decoration.gradient, AppColors.homeWarmGradient);
 
-    // 但格式不合法时不会打登录接口，只给出格式提示。
+    // 提交：格式不合法时不会打登录接口，只给出格式提示。提示还在屏上时输入框
+    // 保持原样——复位要等提示播完（展示 2 秒 + 淡出）再做。
+    await tester.tap(find.byKey(const Key('login-submit')));
     await tester.pump(const Duration(milliseconds: 10));
+
     expect(adapter.loginRequests, 0);
     await expectToast(tester, 'Invalid phone number format.');
+    expect(controller.codeDigits.value, '111111');
+    expect(controller.codeFocus.hasFocus, isFalse);
+
+    // 提示播完再复位（清空 + 光标回到验证码框），手机号保留。
     await drainToast(tester);
+    expect(controller.codeField.text, isEmpty);
+    expect(controller.codeDigits.value, isEmpty);
+    expect(controller.codeFocus.hasFocus, isTrue);
+    expect(controller.phoneField.text, '737478847391000');
+    expect(find.text('111111'), findsNothing);
   });
 
   testWidgets('提示浮层按设计稿尺寸居中', (tester) async {
@@ -509,7 +532,7 @@ void main() {
 
     expect(adapter.codeRequests, 1);
     expect(find.text('60s'), findsOneWidget);
-    await expectToast(tester, 'Verification code sent.');
+    await expectToast(tester, _codeSentNote);
 
     await tester.pump(const Duration(seconds: 1));
     expect(find.text('59s'), findsOneWidget);
@@ -535,6 +558,73 @@ void main() {
     expect(Get.currentRoute, _homeRoute);
   });
 
+  testWidgets('登录失败后提示错误、清空验证码，重试仍可登录成功', (tester) async {
+    // 失败会被上报给 Crashlytics 适配器；此处拦截上报，只断言页面表现
+    // （与首页的失败用例一致）。
+    final reported = <FlutterErrorDetails>[];
+    final previous = FlutterError.onError;
+    FlutterError.onError = reported.add;
+    addTearDown(() => FlutterError.onError = previous);
+
+    var attempts = 0;
+    adapter = _StubAdapter((options) async {
+      attempts++;
+      return ResponseBody.fromString(
+        attempts == 1
+            ? jsonEncode(<String, dynamic>{
+                'unaccepted': 1,
+                'unstably': 'Verification code is incorrect',
+                'indulgences': <String, dynamic>{},
+              })
+            : _envelope(data: <String, dynamic>{'sandman': 'session-123'}),
+        200,
+        headers: _jsonHeaders,
+      );
+    });
+    await pumpLogin(tester);
+
+    final controller = Get.find<LoginController>();
+    await tester.enterText(find.byKey(const Key('login-phone')), '9171234567');
+    await tester.pump();
+    await tester.enterText(find.byKey(const Key('login-code')), '111111');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+
+    // 失败：只发一次请求，先播服务端文案；播放期间输入框原样保留，等它播完
+    // 才把验证码清空、把光标拽回验证码框。
+    expect(adapter.loginRequests, 1);
+    expect(reported, isNotEmpty);
+    await expectToast(tester, 'Verification code is incorrect');
+    expect(controller.codeField.text, '111111');
+    expect(controller.codeFocus.hasFocus, isFalse);
+
+    await drainToast(tester);
+    expect(controller.codeField.text, isEmpty);
+    expect(controller.codeDigits.value, isEmpty);
+    expect(find.text('111111'), findsNothing);
+    expect(controller.codeFocus.hasFocus, isTrue);
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('login-code')))
+          .focusNode!
+          .hasFocus,
+      isTrue,
+    );
+    expect(controller.signingIn.value, isFalse);
+    expect(controller.isSignInReady, isFalse);
+    expect(Get.currentRoute, AppRoutes.login);
+    expect(await store.readSessionId(), isEmpty);
+
+    // 失败后重试：重新输入验证码即登录成功。
+    await tester.enterText(find.byKey(const Key('login-code')), '222222');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(adapter.loginRequests, 2);
+    expect(await store.readSessionId(), 'session-123');
+    expect(Get.currentRoute, _homeRoute);
+  });
+
   testWidgets('取消勾选协议后填满验证码立刻提示，且不调用登录接口', (tester) async {
     await pumpLogin(tester);
 
@@ -551,16 +641,25 @@ void main() {
       tester,
       'Please agree to the Privacy Policy and Terms of Service',
     );
+    final controller = Get.find<LoginController>();
     expect(adapter.loginRequests, 0);
-    expect(Get.find<LoginController>().isSignInReady, isFalse);
-    await drainToast(tester);
+    expect(controller.isSignInReady, isFalse);
+    // 提示还在屏上时不动输入框；播完再复位（清空 + 光标回到验证码框），手机号保留。
+    expect(controller.codeField.text, '111111');
+    expect(controller.codeFocus.hasFocus, isFalse);
 
-    // 重新勾选协议后主按钮转为可用态，点击即登录。
+    await drainToast(tester);
+    expect(controller.codeField.text, isEmpty);
+    expect(controller.codeFocus.hasFocus, isTrue);
+    expect(controller.phoneField.text, '9171234567');
+
+    // 重新勾选协议并重新输入验证码：第 6 位触发自动登录。
     await tester.tap(find.byKey(const Key('login-agreement')));
     await tester.pump();
-    expect(Get.find<LoginController>().isSignInReady, isTrue);
-    await tester.tap(find.byKey(const Key('login-submit')));
+    await tester.enterText(find.byKey(const Key('login-code')), '222222');
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 10));
+
     expect(adapter.loginRequests, 1);
     expect(Get.currentRoute, _homeRoute);
     await drainToast(tester);
@@ -585,8 +684,11 @@ void main() {
   testWidgets('请求进行中展示 Loading，回来后收起再提示', (tester) async {
     final release = Completer<void>();
     adapter = _StubAdapter(
-      (options) async =>
-          ResponseBody.fromString(_envelope(), 200, headers: _jsonHeaders),
+      (options) async => ResponseBody.fromString(
+        _envelope(note: _codeSentNote),
+        200,
+        headers: _jsonHeaders,
+      ),
       gate: release.future,
     );
 
@@ -607,10 +709,68 @@ void main() {
     }
 
     expect(find.text('Loading...'), findsNothing);
-    await expectToast(tester, 'Verification code sent.');
+    await expectToast(tester, _codeSentNote);
     // 倒计时与提示都跑完，避免留下未完成的 Timer。
     await tester.pump(const Duration(seconds: 65));
     await drainToast(tester);
+  });
+
+  testWidgets('接口没下发文案时，验证码提示退回本地兜底文案', (tester) async {
+    adapter = _StubAdapter(
+      (options) async => ResponseBody.fromString(
+        _envelope(note: ''),
+        200,
+        headers: _jsonHeaders,
+      ),
+    );
+    await pumpLogin(tester);
+
+    await tester.enterText(find.byKey(const Key('login-phone')), '9171234567');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('login-send-code')));
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(adapter.codeRequests, 1);
+    await expectToast(tester, codeSentHint);
+    await tester.pump(const Duration(seconds: 65));
+    await drainToast(tester);
+  });
+
+  testWidgets('HTTP 状态码 >= 400 时展示接口下发的错误文案，并复位验证码', (tester) async {
+    final reported = <FlutterErrorDetails>[];
+    final previous = FlutterError.onError;
+    FlutterError.onError = reported.add;
+    addTearDown(() => FlutterError.onError = previous);
+
+    adapter = _StubAdapter(
+      (options) async => ResponseBody.fromString(
+        jsonEncode(<String, dynamic>{
+          'unaccepted': 500,
+          'unstably': 'The service is busy, please try again later',
+          'indulgences': <String, dynamic>{},
+        }),
+        500,
+        headers: _jsonHeaders,
+      ),
+    );
+    await pumpLogin(tester);
+
+    final controller = Get.find<LoginController>();
+    await tester.enterText(find.byKey(const Key('login-phone')), '9171234567');
+    await tester.pump();
+    await tester.enterText(find.byKey(const Key('login-code')), '111111');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+
+    // 500 的响应体里带着接口文案，优先展示它，而不是本地拼的「Request failed (500).」。
+    expect(adapter.loginRequests, 1);
+    expect(reported, isNotEmpty);
+    await expectToast(tester, 'The service is busy, please try again later');
+    expect(find.text('Request failed (500).'), findsNothing);
+
+    await drainToast(tester);
+    expect(controller.codeField.text, isEmpty);
+    expect(controller.codeFocus.hasFocus, isTrue);
   });
 
   testWidgets('协议链接按文档登记的 H5 混淆段打开', (tester) async {

@@ -20,7 +20,7 @@ const String invalidPhoneHint = 'Invalid phone number format.';
 const String agreementHint =
     'Please agree to the Privacy Policy and Terms of Service';
 
-/// 验证码已发出的提示。
+/// 验证码已发出的兜底文案：接口的 `unstably` 没给内容时才用它。
 const String codeSentHint = 'Verification code sent.';
 
 /// 手机号 + 短信验证码登录（设计稿 01-02 - 登录）。
@@ -123,11 +123,14 @@ class LoginController extends GetxController {
     try {
       // 只等请求，不等「转圈」动画：动画没跑完时请求也应该已经发出去了。
       unawaited(AppNavigator.showLoading());
-      await gatewayClient.requestSmsCode(phone: phoneDigits.value);
+      final reply = await gatewayClient.requestSmsCode(
+        phone: phoneDigits.value,
+      );
       await AppNavigator.dismissLoading();
       cooldown.restart();
       codeFocus.requestFocus();
-      _notify(codeSentHint);
+      // 文案优先用接口下发的（`unstably`），服务端没给才退回本地兜底。
+      _notify(reply.note.isEmpty ? codeSentHint : reply.note);
     } on GatewayFailure catch (error) {
       await AppNavigator.dismissLoading();
       _notify(error.message);
@@ -145,15 +148,23 @@ class LoginController extends GetxController {
     if (signingIn.value) return;
     // 设计稿的已输入态与提示态都没有键盘遮挡表单；提交时先收起键盘。
     FocusManager.instance.primaryFocus?.unfocus();
+
+    // 这一轮没能走到服务端的提交，同样要复位验证码：只给提示、把填满的验证码
+    // 留在框里，用户改完手机号或勾上协议后会以为能直接再提交一次。
     if (!PhoneNumber.parse(phoneDigits.value).isMobile) {
-      _notify(invalidPhoneHint);
+      await _notifyThenReset(invalidPhoneHint);
       return;
     }
     if (!privacyAccepted.value) {
-      _notify(agreementHint);
+      await _notifyThenReset(agreementHint);
       return;
     }
-    if (codeDigits.value.length != 6) return;
+    if (codeDigits.value.length != 6) {
+      // 位数不够只是还没填完：不清空已输入的数字，但光标要回到验证码框
+      // （提交时刚收起了键盘）。
+      codeFocus.requestFocus();
+      return;
+    }
 
     signingIn.value = true;
     AnalyticsService.logEvent(AppEvents.loginSubmit, {
@@ -183,22 +194,37 @@ class LoginController extends GetxController {
         await AppNavigator.toMain();
       }
     } on GatewayFailure catch (error) {
-      await AppNavigator.dismissLoading();
-      _notify(error.message);
       CrashReporter.record(error, StackTrace.current);
-      _resetCodeEntry();
+      await AppNavigator.dismissLoading();
+      await _notifyThenReset(error.message);
     } catch (error) {
-      await AppNavigator.dismissLoading();
-      _notify(FailureMessage.describe(error));
       CrashReporter.record(error, StackTrace.current);
-      _resetCodeEntry();
+      await AppNavigator.dismissLoading();
+      await _notifyThenReset(FailureMessage.describe(error));
     } finally {
       signingIn.value = false;
     }
   }
 
-  /// 验证码是一次性的：登录失败后清空并让光标回到验证码框，用户重新获取。
+  /// 先提示、等提示播完再复位。
+  ///
+  /// 服务端下发的错误文案要完整给用户看完；提示还在屏上就把验证码清掉、把光标
+  /// 拽回输入框，用户会以为提示说的是别的事（参考端也是在提示的完成回调里复位）。
+  Future<void> _notifyThenReset(String message) async {
+    if (message.trim().isEmpty) {
+      _resetCodeEntry();
+      return;
+    }
+    await AppNavigator.showHintAndWait(message);
+    _resetCodeEntry();
+  }
+
+  /// 提交走不通时的复位：验证码是一次性的，一律清空并让光标回到验证码框，
+  /// 让用户重新获取。手机号保留——那是用户接下来要改的东西。
+  ///
+  /// 提示播完才调用，期间用户可能已经离开登录页，所以先看控制器是否已关闭。
   void _resetCodeEntry() {
+    if (isClosed) return;
     codeField.clear();
     codeDigits.value = '';
     codeFocus.requestFocus();

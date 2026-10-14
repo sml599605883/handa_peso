@@ -39,6 +39,13 @@ abstract final class AppHint {
   static const Duration fadeDuration = Duration(milliseconds: 200);
 
   static OverlayEntry? _entry;
+  static Completer<void>? _completion;
+
+  /// 上一条提示播完（含淡出）后完成；当前没有提示时立即完成。
+  ///
+  /// 「提示播完再动界面」的动作（例如登录失败后复位输入框）靠它挂接。
+  static Future<void> get dismissed =>
+      _completion?.future ?? Future<void>.value();
 
   /// 在屏幕正中弹一条提示；空文案直接忽略。
   ///
@@ -57,13 +64,16 @@ abstract final class AppHint {
         ? 1.0
         : MediaQuery.sizeOf(context).width / designWidth;
     dismiss();
+    _completion = Completer<void>();
     late final OverlayEntry entry;
     entry = OverlayEntry(
       builder: (_) => _HintOverlay(
         message: text,
         scale: scale,
         onDismissed: () {
-          if (identical(_entry, entry)) _entry = null;
+          if (!identical(_entry, entry)) return;
+          _entry = null;
+          _complete();
         },
       ),
     );
@@ -78,6 +88,13 @@ abstract final class AppHint {
     _entry = null;
     // Overlay 已经随着页面销毁时 `mounted` 为 false，直接丢引用即可。
     if (entry != null && entry.mounted) entry.remove();
+    _complete();
+  }
+
+  static void _complete() {
+    final pending = _completion;
+    _completion = null;
+    if (pending != null && !pending.isCompleted) pending.complete();
   }
 }
 

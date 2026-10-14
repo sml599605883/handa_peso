@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:handa_peso/core/client/platform_bridge.dart';
@@ -22,6 +25,26 @@ GatewaySettings buildConfig({String secret = 'unit-test-secret'}) {
     noiseDigits: (length) => '1' * length,
   );
 }
+
+/// 脚本化 Dio 适配器：按测试给的脚本决定状态码与响应体。
+class _StubAdapter implements HttpClientAdapter {
+  _StubAdapter(this.handler);
+
+  final Future<ResponseBody> Function(RequestOptions options) handler;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) => handler(options);
+
+  @override
+  void close({bool force = false}) {}
+}
+
+GatewayClient _stubbedClient(_StubAdapter adapter) =>
+    GatewayClient(buildConfig(), dio: Dio()..httpClientAdapter = adapter);
 
 void main() {
   group('RequestSigner', () {
@@ -143,6 +166,79 @@ void main() {
       final response = GatewayReply.parse('<html>gateway error</html>');
       expect(response.status, GatewayReply.malformedStatus);
       expect(response.isAccepted, isFalse);
+    });
+  });
+
+  group('GatewayTransport 的 HTTP 错误', () {
+    test('优先展示响应体里接口下发的文案', () async {
+      final adapter = _StubAdapter(
+        (options) async => ResponseBody.fromString(
+          jsonEncode(<String, dynamic>{
+            WireFormat.statusField: 500,
+            WireFormat.noteField: 'Verification code has expired',
+          }),
+          500,
+          headers: const <String, List<String>>{
+            Headers.contentTypeHeader: <String>[Headers.jsonContentType],
+          },
+        ),
+      );
+
+      await expectLater(
+        _stubbedClient(adapter).requestSmsCode(phone: '9171234567'),
+        throwsA(
+          isA<GatewayFailure>()
+              .having(
+                (e) => e.message,
+                'message',
+                'Verification code has expired',
+              )
+              .having((e) => e.code, 'code', 'http_500')
+              .having((e) => e.statusCode, 'statusCode', 500),
+        ),
+      );
+    });
+
+    test('响应体不是网关信封时退回本地文案', () async {
+      final adapter = _StubAdapter(
+        (options) async =>
+            ResponseBody.fromString('<html>502 Bad Gateway</html>', 502),
+      );
+
+      await expectLater(
+        _stubbedClient(adapter).requestSmsCode(phone: '9171234567'),
+        throwsA(
+          isA<GatewayFailure>()
+              .having((e) => e.message, 'message', 'Request failed (502).')
+              .having((e) => e.code, 'code', 'http_502'),
+        ),
+      );
+    });
+
+    test('401 仍然按会话失效处理', () async {
+      final adapter = _StubAdapter(
+        (options) async => ResponseBody.fromString(
+          jsonEncode(<String, dynamic>{
+            WireFormat.statusField: 401,
+            WireFormat.noteField: 'Unauthorized',
+          }),
+          401,
+          headers: const <String, List<String>>{
+            Headers.contentTypeHeader: <String>[Headers.jsonContentType],
+          },
+        ),
+      );
+
+      await expectLater(
+        _stubbedClient(adapter).requestSmsCode(phone: '9171234567'),
+        throwsA(
+          isA<GatewayFailure>().having(
+            (e) => e.isUnauthorized,
+            'isUnauthorized',
+            isTrue,
+          ),
+        ),
+      );
     });
   });
 
