@@ -493,14 +493,14 @@ void main() {
     await tester.enterText(codeField, '11111');
     await tester.pump();
     final controller = Get.find<LoginController>();
-    expect(controller.codeFocusNode.hasFocus, isTrue);
+    expect(controller.codeFocus.hasFocus, isTrue);
 
     // 第 6 位触发自动登录，提交时收起键盘（设计稿的已输入态没有键盘）。
     await tester.enterText(codeField, '111111');
     await tester.pump(const Duration(milliseconds: 10));
 
     expect(adapter.loginRequests, 1);
-    expect(controller.codeFocusNode.hasFocus, isFalse);
+    expect(controller.codeFocus.hasFocus, isFalse);
   });
 
   testWidgets('合法手机号可获取验证码并进入 60 秒倒计时', (tester) async {
@@ -541,27 +541,48 @@ void main() {
     expect(Get.currentRoute, _homeRoute);
   });
 
-  testWidgets('未勾选协议时填满验证码也不会调用登录接口', (tester) async {
+  testWidgets('未勾选协议时填满验证码立刻提示，且不调用登录接口', (tester) async {
     await pumpLogin(tester);
 
     await tester.enterText(find.byKey(const Key('login-phone')), '9171234567');
     await tester.pump();
     await tester.enterText(find.byKey(const Key('login-code')), '111111');
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 10));
 
-    expect(adapter.loginRequests, 0);
-    expect(Get.find<LoginController>().canSubmit, isFalse);
-
-    // 主动点击主按钮时会给出「先勾选协议」的提示，而不是直接登录。
-    await tester.tap(find.byKey(const Key('login-submit')));
-    await tester.pump(const Duration(milliseconds: 250));
-    expect(adapter.loginRequests, 0);
+    // 不需要再点主按钮：填满第 6 位就给出「先勾选协议」的提示（与 Dali 系列一致）。
     await expectToast(
       tester,
       'Please agree to the Privacy Policy and Terms of Service',
     );
+    expect(adapter.loginRequests, 0);
+    expect(Get.find<LoginController>().isSignInReady, isFalse);
     await drainToast(tester);
+
+    // 勾选协议后主按钮转为可用态，点击即登录。
+    await tester.tap(find.byKey(const Key('login-agreement')));
+    await tester.pump();
+    expect(Get.find<LoginController>().isSignInReady, isTrue);
+    await tester.tap(find.byKey(const Key('login-submit')));
+    await tester.pump(const Duration(milliseconds: 10));
+    expect(adapter.loginRequests, 1);
+    expect(Get.currentRoute, _homeRoute);
+    await drainToast(tester);
+  });
+
+  testWidgets('手机号为空时填满验证码既不提示也不登录', (tester) async {
+    await pumpLogin(tester);
+
+    await tester.enterText(find.byKey(const Key('login-code')), '111111');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+
+    // 还没填手机号就先把验证码填满时，不该冒出「手机号格式无效」。
+    expect(adapter.loginRequests, 0);
+    expect(find.text('Invalid phone number format.'), findsNothing);
+    expect(
+      find.text('Please agree to the Privacy Policy and Terms of Service'),
+      findsNothing,
+    );
   });
 
   testWidgets('请求进行中展示 Loading，回来后收起再提示', (tester) async {
@@ -600,8 +621,8 @@ void main() {
 
     // 接口文档「值映射 -> Scheme -> h5页面混淆」：域名取服务端下发，路径用混淆段。
     final controller = Get.find<LoginController>();
-    expect(controller.privacyPolicyUrl, 'http://web.test/#/Pederast');
-    expect(controller.termsOfServiceUrl, 'http://web.test/#/Carbonate');
+    expect(controller.privacyUrl, 'http://web.test/#/Pederast');
+    expect(controller.termsUrl, 'http://web.test/#/Carbonate');
 
     await tester.tapOnText(find.textRange.ofSubstring('Privacy Policy'));
     await tester.pumpAndSettle();
@@ -625,6 +646,6 @@ void main() {
     await pumpLogin(tester);
 
     expect(find.text('9179998888'), findsOneWidget);
-    expect(Get.find<LoginController>().phone.value, '9179998888');
+    expect(Get.find<LoginController>().phoneDigits.value, '9179998888');
   });
 }
