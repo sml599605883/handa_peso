@@ -14,6 +14,9 @@ import '../home/home_data.dart';
 /// 用于主卡片行动号召（CTA）的埋点/会话标签。
 const String _homeApplyProductId = 'home_card';
 
+/// 游客也能停留的 Tab：首页允许未登录浏览，其余 Tab 都要先登录。
+const int _guestTabIndex = 0;
+
 /// 管理三 Tab 外壳及共享首页信息流的状态。
 ///
 /// 首页数据的刷新时机与 Handa Peso 其它端保持一致：
@@ -36,6 +39,7 @@ class MainController extends GetxController with WidgetsBindingObserver {
 
   bool _loadedOnce = false;
   bool _openingBanner = false;
+  bool _openingLogin = false;
   bool _leftForeground = false;
   bool _wentToBackground = false;
   bool _resumeAfterDialogConsumed = false;
@@ -69,11 +73,33 @@ class MainController extends GetxController with WidgetsBindingObserver {
   /// 二级页面覆盖首页时暂停首页上的一切定时行为。
   void onRouteLeft() => homeOnScreen.value = false;
 
-  void switchTab(int index) {
+  /// 切换 Tab：受保护的 Tab 在未登录时先弹登录页，且不改变当前 Tab。
+  ///
+  /// 门禁语义与 Salmon Loan 的 tabbar 一致——登录页关闭后不补切 Tab，用户
+  /// 需要重新点击；因此这里有意不看登录结果，只看点击发生时有没有会话。
+  Future<void> switchTab(int index) async {
     if (activeTab.value == index) return;
+    if (index != _guestTabIndex && !await _hasSession()) {
+      await _promptLogin();
+      return;
+    }
     activeTab.value = index;
-    homeOnScreen.value = index == 0;
-    if (index == 0) unawaited(refreshOverview());
+    homeOnScreen.value = index == _guestTabIndex;
+    if (index == _guestTabIndex) unawaited(refreshOverview());
+  }
+
+  Future<bool> _hasSession() async =>
+      (await localSession.readSessionId()).isNotEmpty;
+
+  /// 打开登录页；连点只保留一个登录路由，避免叠加。
+  Future<void> _promptLogin() async {
+    if (_openingLogin) return;
+    _openingLogin = true;
+    try {
+      await AppNavigator.toLogin();
+    } finally {
+      _openingLogin = false;
+    }
   }
 
   /// 应用生命周期：回到前台后补一次首页刷新。

@@ -264,6 +264,10 @@ Future<void> _pumpShell(
           name: AppRoutes.orders,
           page: () => const Scaffold(body: Center(child: Text('orders'))),
         ),
+        GetPage<void>(
+          name: AppRoutes.login,
+          page: () => const Scaffold(body: Center(child: Text('login'))),
+        ),
       ],
     ),
   );
@@ -620,15 +624,17 @@ void main() {
     });
 
     testWidgets('切回首页 Tab 会刷新', (tester) async {
+      final config = _config();
+      await config.localSession.writeSessionId('session-1');
       final adapter = _StubAdapter(
         (options) async =>
             ResponseBody.fromString(_plainBody(), 200, headers: _jsonHeaders),
       );
-      await _pumpShell(tester, _client(_config(), adapter));
+      await _pumpShell(tester, _client(config, adapter));
       final controller = Get.find<MainController>();
 
-      controller.switchTab(1);
-      controller.switchTab(0);
+      await controller.switchTab(1);
+      await controller.switchTab(0);
       await tester.pumpAndSettle();
 
       expect(adapter.homeCalls, 2);
@@ -702,6 +708,78 @@ void main() {
       Get.back<void>();
       await tester.pumpAndSettle();
       expect(adapter.homeCalls, 2);
+    });
+  });
+
+  group('Tab 登录门禁', () {
+    testWidgets('游客点击 Loan Tab 只弹登录页，不切换 Tab', (tester) async {
+      final adapter = _StubAdapter(
+        (options) async =>
+            ResponseBody.fromString(_plainBody(), 200, headers: _jsonHeaders),
+      );
+      await _pumpShell(tester, _client(_config(), adapter));
+
+      await tester.tap(find.byKey(const Key('tab-loan')));
+      await tester.pumpAndSettle();
+
+      expect(Get.currentRoute, AppRoutes.login);
+      expect(find.text('login'), findsOneWidget);
+      expect(Get.find<MainController>().activeTab.value, 0);
+    });
+
+    testWidgets('游客点击 Mine Tab 只弹登录页，不切换 Tab', (tester) async {
+      final adapter = _StubAdapter(
+        (options) async =>
+            ResponseBody.fromString(_plainBody(), 200, headers: _jsonHeaders),
+      );
+      await _pumpShell(tester, _client(_config(), adapter));
+
+      await tester.tap(find.byKey(const Key('tab-mine')));
+      await tester.pumpAndSettle();
+
+      expect(Get.currentRoute, AppRoutes.login);
+      expect(Get.find<MainController>().activeTab.value, 0);
+    });
+
+    testWidgets('连点受保护 Tab 只叠加一个登录页', (tester) async {
+      final adapter = _StubAdapter(
+        (options) async =>
+            ResponseBody.fromString(_plainBody(), 200, headers: _jsonHeaders),
+      );
+      await _pumpShell(tester, _client(_config(), adapter));
+      final controller = Get.find<MainController>();
+
+      // 连点：门禁只应留下一个登录路由。登录页关闭前 switchTab 的 Future 不会
+      // 结束，这里不能 await 它，否则测试会卡在导航上。
+      unawaited(controller.switchTab(1));
+      unawaited(controller.switchTab(2));
+      await tester.pumpAndSettle();
+      expect(Get.currentRoute, AppRoutes.login);
+
+      Get.back<void>();
+      await tester.pumpAndSettle();
+
+      expect(Get.currentRoute, AppRoutes.main);
+      expect(controller.activeTab.value, 0);
+    });
+
+    testWidgets('登录态点击受保护 Tab 直接切换，不再弹登录页', (tester) async {
+      final config = _config();
+      await config.localSession.writeSessionId('session-1');
+      await config.localSession.writePhone('09170000000');
+      final adapter = _StubAdapter(
+        (options) async =>
+            ResponseBody.fromString(_plainBody(), 200, headers: _jsonHeaders),
+      );
+      await _pumpShell(tester, _client(config, adapter));
+
+      await tester.tap(find.byKey(const Key('tab-mine')));
+      await tester.pumpAndSettle();
+
+      expect(Get.currentRoute, AppRoutes.main);
+      expect(Get.find<MainController>().activeTab.value, 2);
+      expect(find.text('09170000000'), findsOneWidget);
+      expect(find.text('Browsing as guest'), findsNothing);
     });
   });
 }
