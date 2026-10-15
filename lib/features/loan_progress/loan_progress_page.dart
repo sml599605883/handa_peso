@@ -42,6 +42,15 @@ class LoanProgressPage extends GetView<MainController> {
   static const double _emptyButtonRadius = 28;
   static const double _emptyButtonBottom = 48;
 
+  /// 按钮上方的纸飞机插画（设计稿导出的 200x200 切片 `block_1`）：水平居中，
+  /// 与按钮之间留 24，因此上沿落在设计稿的 174。
+  static const String _emptyIllustration =
+      'assets/loan_progress_empty_illustration.png';
+  static const double _emptyIllustrationSize = 200;
+  static const double _emptyIllustrationGap = 24;
+  static const double _emptyIllustrationTop =
+      _emptyButtonTop - _emptyIllustrationGap - _emptyIllustrationSize;
+
   @override
   Widget build(BuildContext context) {
     return Obx(() {
@@ -196,11 +205,7 @@ class _ProgressBody extends StatelessWidget {
   }
 }
 
-/// 无订单（设计稿 02- 贷款-订单进度-无订单）。
-///
-/// 设计稿在按钮上方（约 y 178~378、x 67~267）还有一张纸飞机 + 星星的插画
-/// （Lanhu 里的 `block_1`，200x200），这张切图没有随素材一起提供，所以这里
-/// 只还原了按钮与标题的位置；插画到位后在按钮上方补一个 [SizedBox] 即可。
+/// 无订单（设计稿 02- 贷款-订单进度-无订单）：纸飞机插画 + Apply Now 按钮。
 class _EmptyProgress extends StatelessWidget {
   const _EmptyProgress({
     required this.scale,
@@ -221,8 +226,20 @@ class _EmptyProgress extends StatelessWidget {
       child: Column(
         children: [
           SizedBox(
-            height: px(math.max(0, LoanProgressPage._emptyButtonTop - listTop)),
+            height: px(
+              math.max(0, LoanProgressPage._emptyIllustrationTop - listTop),
+            ),
           ),
+          SizedBox(
+            width: px(LoanProgressPage._emptyIllustrationSize),
+            height: px(LoanProgressPage._emptyIllustrationSize),
+            child: const Image(
+              key: Key('loan-progress-empty-illustration'),
+              image: AssetImage(LoanProgressPage._emptyIllustration),
+              fit: BoxFit.fill,
+            ),
+          ),
+          SizedBox(height: px(LoanProgressPage._emptyIllustrationGap)),
           _ApplyNowButton(scale: scale, onTap: onApply),
           SizedBox(height: px(LoanProgressPage._emptyButtonBottom)),
         ],

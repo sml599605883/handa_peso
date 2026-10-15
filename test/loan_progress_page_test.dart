@@ -573,6 +573,21 @@ void main() {
       expect(button.top, closeTo(398, 0.01));
       expect(button.left, closeTo((375 - 220) / 2, 0.01));
 
+      // 设计稿：纸飞机插画 200x200，水平居中，上沿在按钮上方 224（200 + 24）。
+      final illustrationFinder = find.byKey(
+        const Key('loan-progress-empty-illustration'),
+      );
+      final illustration = tester.getRect(illustrationFinder);
+      expect(illustration.width, closeTo(200, 0.01));
+      expect(illustration.height, closeTo(200, 0.01));
+      expect(illustration.left, closeTo((375 - 200) / 2, 0.01));
+      expect(illustration.bottom, closeTo(398 - 24, 0.01));
+      expect(
+        (tester.widget<Image>(illustrationFinder).image as AssetImage)
+            .assetName,
+        'assets/loan_progress_empty_illustration.png',
+      );
+
       await tester.tap(find.byKey(const Key('loan-progress-apply')));
       await tester.pumpAndSettle();
 
