@@ -7,8 +7,8 @@ import '../../app/navigation/app_route_observer.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
 import '../home/home_page.dart';
+import '../loan_progress/loan_progress_page.dart';
 import '../mine/mine_page.dart';
-import '../orders/orders_page.dart';
 import 'main_controller.dart';
 
 class MainShellPage extends GetView<MainController> {
@@ -43,7 +43,7 @@ class MainShellPage extends GetView<MainController> {
         return Scaffold(
           body: IndexedStack(
             index: tabIndex,
-            children: const [HomePage(), OrdersPage(), MinePage()],
+            children: const [HomePage(), LoanProgressPage(), MinePage()],
           ),
           bottomNavigationBar: _ShellNavigationBar(
             entries: _tabs,

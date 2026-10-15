@@ -99,7 +99,10 @@ final class DeviceBridgeRegistrar: NSObject {
 
   /// 缓存在 Keychain 中的 IDFV，使标识在重装应用后依然保留，
   /// 从而让同一设备的签名公有参数保持稳定。
-  private func stableVendorIdentifier() -> String {
+  ///
+  /// 上报通道也要用同一个标识（IDFV 既是签名公有参数，也是设备详情的设备号），
+  /// 因此这里对外开放。
+  func stableVendorIdentifier() -> String {
     if let stored = keychainValue(service: keychainService, account: keychainAccount),
        !stored.isEmpty {
       return stored

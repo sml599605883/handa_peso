@@ -1,4 +1,5 @@
 import '../../core/json/json_utils.dart';
+import '../loan_progress/loan_progress_item.dart';
 
 /// 首页信息流（`/dropcloth/indulgences`）。
 ///
@@ -10,14 +11,17 @@ class HomeData {
     this.loanCard,
     List<HomeBannerData> banners = const <HomeBannerData>[],
     List<HomeProductOffer> offers = const <HomeProductOffer>[],
+    List<LoanProgressItem> progressItems = const <LoanProgressItem>[],
   }) : banners = List.unmodifiable(banners),
-       offers = List.unmodifiable(offers);
+       offers = List.unmodifiable(offers),
+       progressItems = List.unmodifiable(progressItems);
 
   factory HomeData.fromJson(Map<String, dynamic> json) {
     HomeLoanCard? largeCard;
     HomeLoanCard? smallCard;
     final banners = <HomeBannerData>[];
     final offers = <HomeProductOffer>[];
+    final progressItems = <LoanProgressItem>[];
 
     for (final module in json.listValue('latchstrings').maps) {
       final items = module.listValue('ranulas').maps;
@@ -37,6 +41,8 @@ class HomeData {
           smallCard ??= HomeLoanCard.fromJson(items.first);
         case _HomeModule.productList:
           offers.addAll(items.map(HomeProductOffer.fromJson));
+        case _HomeModule.processList:
+          progressItems.addAll(items.map(LoanProgressItem.fromJson));
       }
     }
 
@@ -45,6 +51,7 @@ class HomeData {
       loanCard: largeCard ?? smallCard,
       banners: banners,
       offers: offers,
+      progressItems: progressItems,
     );
   }
 
@@ -54,6 +61,10 @@ class HomeData {
   final List<HomeBannerData> banners;
 
   final List<HomeProductOffer> offers;
+
+  /// 借款进度卡片（`PROCESS_LIST`）：Loan Progress 页面与首页共用同一份数据，
+  /// 游客（未登录）下发空数组。
+  final List<LoanProgressItem> progressItems;
 
   bool get isEmpty => loanCard == null && banners.isEmpty && offers.isEmpty;
 }
@@ -70,6 +81,7 @@ abstract final class _HomeModule {
   static const largeCard = 'Jailbirds';
   static const smallCard = 'DetentionsEndemically';
   static const productList = 'InspissateDismantling';
+  static const processList = 'PeriplasmAddition';
 }
 
 /// 首页 Banner（`BANNER`）里的一张轮播图。

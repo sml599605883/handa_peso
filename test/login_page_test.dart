@@ -15,6 +15,9 @@ import 'package:handa_peso/app/theme/app_colors.dart';
 import 'package:handa_peso/app/theme/app_theme.dart';
 import 'package:handa_peso/core/network/gateway_client.dart';
 import 'package:handa_peso/core/network/gateway_settings.dart';
+import 'package:handa_peso/core/report/report_bridge.dart';
+import 'package:handa_peso/core/report/report_service.dart';
+import 'package:handa_peso/core/report/report_store.dart';
 import 'package:handa_peso/core/session/local_session.dart';
 import 'package:handa_peso/features/login/login_controller.dart';
 import 'package:handa_peso/features/login/login_page.dart';
@@ -59,6 +62,23 @@ class _Pixels {
       _data.getUint8(offset + 1),
       _data.getUint8(offset + 2),
     );
+  }
+}
+
+/// 只记录调用参数的假上报服务：用于断言登录页把“进入登录页的时间”交给了注册埋点。
+class _SpyReportService extends ReportService {
+  _SpyReportService(GatewayClient client)
+    : super(
+        gatewayClient: client,
+        store: ReportStore.memory(),
+        bridge: ReportNativeBridge(available: false),
+      );
+
+  int? registrationStartedAtSeconds;
+
+  @override
+  Future<void> loginSucceeded({int? registeredAtSeconds}) async {
+    registrationStartedAtSeconds = registeredAtSeconds;
   }
 }
 
@@ -206,6 +226,8 @@ void main() {
     WidgetTester tester, {
     Size canvas = const Size(375, 812),
     double topInset = 0,
+    ReportService Function(GatewayClient client)? reporter,
+    int Function()? clock,
   }) async {
     tester.view.physicalSize = canvas;
     tester.view.devicePixelRatio = 1;
@@ -242,7 +264,12 @@ void main() {
             page: () => const LoginPage(),
             binding: BindingsBuilder<void>(
               () => Get.put<LoginController>(
-                LoginController(gatewayClient: client, localSession: store),
+                LoginController(
+                  gatewayClient: client,
+                  localSession: store,
+                  reportService: reporter?.call(client),
+                  clock: clock,
+                ),
               ),
             ),
           ),
@@ -556,6 +583,54 @@ void main() {
     expect(await store.readSessionId(), 'session-123');
     expect(await store.readPhone(), '9171234567');
     expect(Get.currentRoute, _homeRoute);
+  });
+
+  testWidgets('重新获取验证码后，注册埋点的开始时间跟着刷新', (tester) async {
+    var nowSeconds = 1700000000;
+    late _SpyReportService spy;
+    await pumpLogin(
+      tester,
+      clock: () => nowSeconds,
+      reporter: (client) => spy = _SpyReportService(client),
+    );
+
+    await tester.enterText(find.byKey(const Key('login-phone')), '9171234567');
+    await tester.pump();
+
+    // 发码前把时钟推后：注册埋点要用「最近一次拿到验证码」的时刻。
+    nowSeconds = 1700000060;
+    await tester.tap(find.byKey(const Key('login-send-code')));
+    await tester.pump(const Duration(milliseconds: 250));
+    await drainToast(tester);
+
+    await tester.enterText(find.byKey(const Key('login-code')), '111111');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 10));
+
+    expect(spy.registrationStartedAtSeconds, 1700000060);
+  });
+
+  testWidgets('登录成功把进入登录页的时间交给上报服务做注册埋点', (tester) async {
+    final openedAfter = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    late _SpyReportService spy;
+    await pumpLogin(
+      tester,
+      reporter: (client) => spy = _SpyReportService(client),
+    );
+
+    await tester.enterText(find.byKey(const Key('login-phone')), '9171234567');
+    await tester.pump();
+    await tester.enterText(find.byKey(const Key('login-code')), '111111');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 10));
+
+    // 注册埋点的开始时间 = 打开登录页的时刻，必须早于提交时刻且不为空。
+    expect(spy.registrationStartedAtSeconds, isNotNull);
+    expect(spy.registrationStartedAtSeconds, greaterThanOrEqualTo(openedAfter));
+    expect(
+      spy.registrationStartedAtSeconds,
+      lessThanOrEqualTo(DateTime.now().millisecondsSinceEpoch ~/ 1000 + 1),
+    );
   });
 
   testWidgets('登录失败后提示错误、清空验证码，重试仍可登录成功', (tester) async {

@@ -10,12 +10,22 @@ import '../../core/network/gateway_client.dart';
 import '../../core/network/gateway_failure.dart';
 import '../../core/session/local_session.dart';
 import '../home/home_data.dart';
+import '../loan_progress/loan_progress_item.dart';
 
 /// 用于主卡片行动号召（CTA）的埋点/会话标签。
 const String _homeApplyProductId = 'home_card';
 
 /// 游客也能停留的 Tab：首页允许未登录浏览，其余 Tab 都要先登录。
 const int _guestTabIndex = 0;
+
+/// 借款进度所在的 Tab（设计稿 02- 贷款-订单进度）。
+const int _loanTabIndex = 1;
+
+/// 进度卡片按钮打开的 H5 页面标题。
+const String _repaymentTitle = 'Repayment';
+
+/// 订单详情页标题。
+const String _loanDetailTitle = 'Loan detail';
 
 /// 管理三 Tab 外壳及共享首页信息流的状态。
 ///
@@ -39,6 +49,7 @@ class MainController extends GetxController with WidgetsBindingObserver {
 
   bool _loadedOnce = false;
   bool _openingBanner = false;
+  bool _progressRequesting = false;
   bool _openingLogin = false;
   bool _leftForeground = false;
   bool _wentToBackground = false;
@@ -64,10 +75,10 @@ class MainController extends GetxController with WidgetsBindingObserver {
     await loadOverview(force: true);
   }
 
-  /// 从二级页面返回外壳时同步首页数据。
+  /// 从二级页面返回外壳时同步当前 Tab 的数据。
   Future<void> onRouteReturned() {
-    homeOnScreen.value = true;
-    return refreshOverview();
+    homeOnScreen.value = activeTab.value == _guestTabIndex;
+    return _refreshVisibleTab();
   }
 
   /// 二级页面覆盖首页时暂停首页上的一切定时行为。
@@ -85,7 +96,7 @@ class MainController extends GetxController with WidgetsBindingObserver {
     }
     activeTab.value = index;
     homeOnScreen.value = index == _guestTabIndex;
-    if (index == _guestTabIndex) unawaited(refreshOverview());
+    unawaited(_refreshVisibleTab());
   }
 
   Future<bool> _hasSession() async =>
@@ -128,11 +139,78 @@ class MainController extends GetxController with WidgetsBindingObserver {
     _leftForeground = false;
     if (!fromBackground && !fromDialog) return;
     if (fromDialog) _resumeAfterDialogConsumed = true;
-    unawaited(refreshOverview());
+    unawaited(_refreshVisibleTab());
   }
 
   Future<void> _restoreProfile() async {
     sessionPhone.value = await localSession.readPhone();
+  }
+
+  /// 按当前可见的 Tab 决定刷新哪一份数据。
+  ///
+  /// 首页与进度页共用同一条信息流接口（`/dropcloth/indulgences`，进度卡片在
+  /// `PROCESS_LIST` 模块里），因此两边的刷新时机收敛到这一个入口，避免切 Tab
+  /// 时对同一份数据发两次请求。
+  Future<void> _refreshVisibleTab() {
+    return activeTab.value == _loanTabIndex
+        ? refreshProgress()
+        : refreshOverview();
+  }
+
+  /// 拉取进度卡片数据；只有 Loan Tab 露在外面时才会真正请求。
+  Future<void> refreshProgress() async {
+    if (activeTab.value != _loanTabIndex) return;
+    await loadOverview(force: true);
+  }
+
+  /// 点击进度卡片：优先按服务端下发的订单详情地址跳转，没有地址时回到产品
+  /// 申请流程（与其它支线的进度卡片保持一致）。
+  Future<void> openLoanProgress(LoanProgressItem item) {
+    return _runProgressRequest(() => _openLoanProgressTarget(item));
+  }
+
+  /// 点击进度卡片上的按钮。
+  ///
+  /// `repay` / `early_repay` 由服务端下发跳转地址，直接打开；`retry`（原卡重试）
+  /// 与 `change`（更换账户）不下发地址，改为进订单详情页，由详情页内的原卡
+  /// 重试与换绑入口承接。
+  Future<void> tapLoanProgressAction(
+    LoanProgressItem item,
+    LoanProgressAction action,
+  ) {
+    return _runProgressRequest(() async {
+      final target = action.route.trim();
+      if (target.isNotEmpty) {
+        await AppNavigator.openTarget(target, title: _repaymentTitle);
+        return;
+      }
+      await _openLoanProgressTarget(item);
+    });
+  }
+
+  Future<void> _openLoanProgressTarget(LoanProgressItem item) async {
+    final target = item.detailRoute.trim();
+    if (target.isNotEmpty) {
+      await AppNavigator.openTarget(target, title: _loanDetailTitle);
+      return;
+    }
+    final productId = item.productId.trim();
+    if (productId.isEmpty) return;
+    await applyNow(productId);
+  }
+
+  /// 进度卡片只允许一次跳转在途，避免连点叠出多个落地页。
+  Future<void> _runProgressRequest(Future<void> Function() action) async {
+    if (_progressRequesting) return;
+    _progressRequesting = true;
+    try {
+      await action();
+    } catch (error) {
+      CrashReporter.record(error, StackTrace.current);
+      AppNavigator.showError('Unable to open link');
+    } finally {
+      _progressRequesting = false;
+    }
   }
 
   /// 拉取首页信息流；[force] 为 false 时只在首次进入时请求。
@@ -181,7 +259,7 @@ class MainController extends GetxController with WidgetsBindingObserver {
       } catch (_) {
         // 上报失败不影响跳转。
       }
-      await AppNavigator.openBannerTarget(target);
+      await AppNavigator.openTarget(target);
     } catch (error) {
       CrashReporter.record(error, StackTrace.current);
       AppNavigator.showError('Unable to open link');
@@ -191,15 +269,18 @@ class MainController extends GetxController with WidgetsBindingObserver {
   }
 
   Future<void> applyNow(String productId) async {
+    final appliedProductId = productId.isEmpty
+        ? _homeApplyProductId
+        : productId;
     AnalyticsService.logEvent(AppEvents.applyNowTapped, {
-      'product_id': productId.isEmpty ? _homeApplyProductId : productId,
+      'product_id': appliedProductId,
     });
     if (!await AppNavigator.requireSession(redirect: productId)) {
       return;
     }
     final profileComplete = await localSession.readCertified();
     if (!profileComplete) {
-      await AppNavigator.toCertification();
+      await AppNavigator.toCertification(productId: appliedProductId);
       return;
     }
     await AppNavigator.toCalculator();

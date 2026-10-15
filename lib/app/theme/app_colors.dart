@@ -107,6 +107,29 @@ abstract final class AppColors {
   static const homeLogoPlaceholder = Color(0xFFD8D8D8);
   static const homeLogoPlaceholderBorder = Color(0xFF979797);
 
+  // 借款进度（设计稿 02- 贷款-订单进度）
+  /// 进度卡片底板：奶油色面板 + 1px 描边，两侧各切一个票券缺口。
+  static const progressCardSurface = Color(0xFFFFF9F2);
+  static const progressCardBorder = Color(0xFFEBE7E2);
+
+  /// 卡片里的日期 / 金额数据块。
+  static const progressValueSurface = Color(0xFFFFFFFF);
+  static const progressValueLabel = Color(0xFF716F5F);
+  static const progressValueText = Color(0xFF151200);
+
+  /// 产品 Logo 缺失时的占位方块。
+  static const progressLogoSurface = Color(0xFFD8D8D8);
+  static const progressLogoBorder = Color(0xFF979797);
+
+  /// 卡片按钮（设计稿 02- 贷款-订单进度）：主按钮是暖橙渐变，次要按钮是灰色。
+  /// 卡片里的两枚按钮铺的是同款切片，这里保留色值给空态的 Apply Now 按钮。
+  static const progressPrimaryGradient = LinearGradient(
+    begin: Alignment.centerRight,
+    end: Alignment.centerLeft,
+    colors: [Color(0xFFE39149), Color(0xFF9E3E10)],
+  );
+  static const progressMutedAction = Color(0xFFBCB7B2);
+
   // 登录页（设计稿 01-02 - 登录）
   /// 表单标签、「+63」右侧的占位提示等次要文字。
   static const loginLabelText = Color(0xFF716F5F);

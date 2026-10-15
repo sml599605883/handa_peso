@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import '../../core/network/gateway_client.dart';
 import '../../core/session/local_session.dart';
 import '../routes/app_routes.dart';
+import 'h5_paths.dart';
 import '../widgets/app_hint.dart';
 
 /// 供各业务控制器共用的导航与反馈辅助方法。
@@ -48,33 +49,50 @@ abstract final class AppNavigator {
 
   static void switchMainTab(int index) => mainTabSelector?.call(index);
 
-  static Future<void>? toCalculator() => Get.toNamed<void>(AppRoutes.calculator);
+  static Future<void>? toCalculator() =>
+      Get.toNamed<void>(AppRoutes.calculator);
 
-  static Future<void>? toCertification() => Get.toNamed<void>(AppRoutes.certification);
+  /// 打开认证流程。[productId] 是用户申请的产品：认证过程中的风控埋点要带上它，
+  /// 缺了产品维度的埋点数据无法归因到具体产品。
+  static Future<void>? toCertification({String productId = ''}) =>
+      Get.toNamed<void>(
+        AppRoutes.certification,
+        arguments: {'productId': productId},
+      );
 
   static Future<void>? toOrders() => Get.toNamed<void>(AppRoutes.orders);
 
   static Future<void>? toSupport() => Get.toNamed<void>(AppRoutes.support);
 
-  static Future<void>? toAnnouncements() => Get.toNamed<void>(AppRoutes.announcements);
+  static Future<void>? toAnnouncements() =>
+      Get.toNamed<void>(AppRoutes.announcements);
 
-  static Future<void>? toWebView({
-    required String url,
-    required String title,
-  }) {
-    return Get.toNamed<void>(AppRoutes.webView, arguments: {'url': url, 'title': title});
+  static Future<void>? toWebView({required String url, required String title}) {
+    return Get.toNamed<void>(
+      AppRoutes.webView,
+      arguments: {'url': url, 'title': title},
+    );
   }
 
-  /// 打开首页 Banner（以及后续的弹窗）下发的跳转链接。
+  /// 打开服务端下发的跳转地址：Banner 落地页、进度卡片按钮与订单详情都用它。
   ///
   /// 链接形态见接口文档「值映射 -> Scheme」：
   /// - `http` / `https`：H5 落地页，交给内置 WebView；
+  /// - `/#/<混淆段>` 这类相对路径：拼上服务端下发的 H5 域名再进 WebView；
   /// - `ph://handa-peso/ios/<混淆段>`：映射到对应的原生页面；
   /// - 其它（包括文档里已登记、但当前版本还没有落地页的混淆段）：明确提示
   ///   打不开，而不是悄悄当成 H5 打开。
-  static Future<void> openBannerTarget(String target) async {
+  static Future<void> openTarget(
+    String target, {
+    String title = 'Activity',
+  }) async {
     final link = target.trim();
     if (link.isEmpty) return;
+
+    if (link.startsWith('/')) {
+      await toWebView(url: H5Paths.resolve(_webOrigin(), link), title: title);
+      return;
+    }
 
     final uri = Uri.tryParse(link);
     final scheme = uri?.scheme.toLowerCase() ?? '';
@@ -83,7 +101,7 @@ abstract final class AppNavigator {
         showError(_unopenableLink);
         return;
       }
-      await toWebView(url: link, title: 'Activity');
+      await toWebView(url: link, title: title);
       return;
     }
 
@@ -139,6 +157,14 @@ abstract final class AppNavigator {
   }
 
   static void showError(String message) => EasyLoading.showError(message);
+
+  /// H5 域名（服务端可在启动后换址），拼相对跳转路径时使用。
+  static String _webOrigin() {
+    if (Get.isRegistered<GatewayClient>()) {
+      return Get.find<GatewayClient>().settings.webOrigin;
+    }
+    return '';
+  }
 
   static LocalSession? _localSession() {
     if (Get.isRegistered<GatewayClient>()) {

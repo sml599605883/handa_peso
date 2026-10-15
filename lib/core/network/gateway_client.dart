@@ -423,9 +423,13 @@ class GatewayClient extends GatewayTransport {
   // 风控与埋点上报
   // ---------------------------------------------------------------------------
 
-  /// 上报定位快照。
+  /// 上报定位快照。定位接口的 `chads` / `elastases` 是文档登记过的混淆字段。
   Future<GatewayReply> reportLocation({required Map<String, dynamic> body}) {
-    return write(GatewayRoutes.uploadLocation, body: body);
+    return write(
+      GatewayRoutes.uploadLocation,
+      body: body,
+      noise: const <String>['chads', 'elastases'],
+    );
   }
 
   /// google_market 上报：渠道归因用的设备标识。

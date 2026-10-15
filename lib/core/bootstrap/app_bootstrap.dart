@@ -6,6 +6,9 @@ import '../client/platform_bridge.dart';
 import '../device/device_info_sync.dart';
 import '../network/gateway_client.dart';
 import '../network/gateway_settings.dart';
+import '../report/report_bridge.dart';
+import '../report/report_service.dart';
+import '../report/report_store.dart';
 import '../session/local_session.dart';
 
 /// 承载首帧渲染之前就已创建好的各项依赖。
@@ -13,11 +16,15 @@ class AppDependencies {
   AppDependencies({
     required this.gatewayClient,
     required this.localSession,
+    this.reportService,
     Future<void> Function()? syncDeviceName,
   }) : syncDeviceName = syncDeviceName ?? _noop;
 
   final GatewayClient gatewayClient;
   final LocalSession localSession;
+
+  /// 数据上报入口；由启动流程负责 `start()`，页面只按需追加业务埋点。
+  final ReportService? reportService;
 
   /// 尽力而为地向网关查询可读的设备名称。
   ///
@@ -41,6 +48,8 @@ abstract final class AppBootstrap {
     String? signatureSecret,
     SessionExpiredCallback? onSessionExpired,
     PlatformBridge? platformBridge,
+    ReportNativeBridge? reportBridge,
+    ReportStore? reportStore,
   }) async {
     final localSession =
         localSessionFactory?.call() ?? LocalSession(SharedPreferencesAsync());
@@ -75,6 +84,11 @@ abstract final class AppBootstrap {
     return AppDependencies(
       gatewayClient: gatewayClient,
       localSession: localSession,
+      reportService: ReportService(
+        gatewayClient: gatewayClient,
+        bridge: reportBridge,
+        store: reportStore,
+      ),
       syncDeviceName: model == null || model.isEmpty
           ? null
           : () => deviceSync.resolveDeviceName(settings, model),

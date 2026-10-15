@@ -8,6 +8,7 @@ import '../../app/navigation/h5_paths.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/network/gateway_client.dart';
 import '../../core/network/gateway_failure.dart';
+import '../../core/report/report_service.dart';
 import '../../core/session/local_session.dart';
 import '../main_shell/main_controller.dart';
 import 'login_cooldown.dart';
@@ -29,10 +30,28 @@ const String codeSentHint = 'Verification code sent.';
 /// 请求与登录态：`+63` 前缀固定展示，验证码填满 6 位自动提交，手机号格式不对
 /// 或没勾选协议时立刻给浮层提示，而不是让主按钮点了没反应。
 class LoginController extends GetxController {
-  LoginController({required this.gatewayClient, required this.localSession});
+  LoginController({
+    required this.gatewayClient,
+    required this.localSession,
+    this.reportService,
+    int Function()? clock,
+  }) : _clock = clock ?? ReportService.nowSeconds;
 
   final GatewayClient gatewayClient;
   final LocalSession localSession;
+
+  /// 登录成功后的上报入口；未接入上报时为空。
+  final ReportService? reportService;
+
+  /// 秒级时钟；只在测试里注入，用来断言注册埋点取的是哪个时刻。
+  final int Function() _clock;
+
+  /// 注册埋点的开始时间：控制器创建时取一次（= 进入登录页），之后每次成功
+  /// 获取验证码都重置。
+  ///
+  /// 重置与参考端一致（它的 `timeStr` 同样在发码成功后重新取值）：这条埋点量的是
+  /// 「最近一次拿到验证码」到登录成功之间的时长。
+  late int _registeredAtSeconds = _clock();
 
   /// 输入框的文本控制器：控制器持有它们是为了回填上次的手机号、登录失败后
   /// 清空验证码；输入变化本身走 [onPhoneTyped] / [onCodeTyped]，不再挂监听。
@@ -128,6 +147,8 @@ class LoginController extends GetxController {
       );
       await AppNavigator.dismissLoading();
       cooldown.restart();
+      // 验证码已发出：注册埋点的开始时间跟着挪到这一刻。
+      _registeredAtSeconds = _clock();
       codeFocus.requestFocus();
       // 文案优先用接口下发的（`unstably`），服务端没给才退回本地兜底。
       _notify(reply.note.isEmpty ? codeSentHint : reply.note);
@@ -185,6 +206,12 @@ class LoginController extends GetxController {
       await localSession.writePhone(phoneDigits.value);
       AnalyticsService.setUserId(phoneDigits.value);
       AnalyticsService.logEvent(AppEvents.loginSuccess);
+      // 注册埋点的时长 = 最近一次拿到验证码（没发过码就是进入登录页）-> 登录成功。
+      unawaited(
+        reportService?.loginSucceeded(
+          registeredAtSeconds: _registeredAtSeconds,
+        ),
+      );
       if (Get.isRegistered<MainController>()) {
         await Get.find<MainController>().onSessionStarted(phoneDigits.value);
       }
