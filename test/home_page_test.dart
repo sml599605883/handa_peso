@@ -11,6 +11,7 @@ import 'package:handa_peso/app/navigation/app_route_observer.dart';
 import 'package:handa_peso/app/routes/app_routes.dart';
 import 'package:handa_peso/core/network/gateway_client.dart';
 import 'package:handa_peso/core/network/gateway_settings.dart';
+import 'package:handa_peso/core/permissions/permission_coordinator.dart';
 import 'package:handa_peso/core/session/local_session.dart';
 import 'package:handa_peso/features/home/home_big_card.dart';
 import 'package:handa_peso/features/home/home_banner.dart';
@@ -38,6 +39,9 @@ class _StubAdapter implements HttpClientAdapter {
   /// Banner 点击上报（`/dropcloth/fluorochromes`）的调用次数。
   int get bannerClickCalls =>
       urls.where((url) => url.contains('fluorochromes')).length;
+
+  /// 准入接口（`/dropcloth/legongs`，文档「点击申请」）的调用次数。
+  int get applyCalls => urls.where((url) => url.contains('legongs')).length;
 
   @override
   Future<ResponseBody> fetch(
@@ -96,6 +100,25 @@ String _envelope(List<Map<String, dynamic>> modules) {
     'unaccepted': 0,
     'unstably': 'success',
     'indulgences': <String, dynamic>{'latchstrings': modules},
+  });
+}
+
+/// 组装准入接口信封；字段名与接口文档「点击申请」一致。
+String _applyBody({
+  int code = 200,
+  String target = '',
+  String message = '',
+  int jumpType = 1,
+}) {
+  return jsonEncode(<String, dynamic>{
+    'unaccepted': 0,
+    'unstably': 'success',
+    'indulgences': <String, dynamic>{
+      'murdering': code,
+      'tidewaters': target,
+      'trollopy': jumpType,
+      'bioscope': message,
+    },
   });
 }
 
@@ -234,11 +257,67 @@ GatewayClient _client(GatewaySettings config, HttpClientAdapter adapter) {
   return GatewayClient(config, dio: Dio()..httpClientAdapter = adapter);
 }
 
+/// 定位授权的替身：申请前的定位准入不能真去打系统弹窗。
+class _StubPermissions extends PermissionCoordinator {
+  _StubPermissions(this.decision);
+
+  final LocationAccessDecision decision;
+  int requests = 0;
+  bool settingsOpened = false;
+
+  @override
+  Future<LocationAccessDecision> requestLocationAccess() async {
+    requests += 1;
+    return decision;
+  }
+
+  @override
+  Future<bool> openSettings() async {
+    settingsOpened = true;
+    return true;
+  }
+}
+
+/// 一直挂着的定位授权弹窗：模拟用户还没在系统弹窗上做选择。
+class _PendingPermissions extends PermissionCoordinator {
+  final Completer<LocationAccessDecision> gate =
+      Completer<LocationAccessDecision>();
+  int requests = 0;
+
+  @override
+  Future<LocationAccessDecision> requestLocationAccess() {
+    requests += 1;
+    return gate.future;
+  }
+}
+
+/// 首页接口正常返回，准入接口按 [applyBody] 应答。
+_StubAdapter _adapterWithApply(String applyBody) {
+  return _StubAdapter((options) async {
+    final body = options.uri.toString().contains('legongs')
+        ? applyBody
+        : _plainBody();
+    return ResponseBody.fromString(body, 200, headers: _jsonHeaders);
+  });
+}
+
+/// 以登录态启动外壳。
+Future<void> _pumpLoggedIn(
+  WidgetTester tester,
+  _StubAdapter adapter, {
+  PermissionCoordinator? permissions,
+}) async {
+  final config = _config();
+  await config.localSession.writeSessionId('session-1');
+  await _pumpShell(tester, _client(config, adapter), permissions: permissions);
+}
+
 /// 用真实路由启动外壳，使 `Get.currentRoute` 与设计一致（`/main`）。
 Future<void> _pumpShell(
   WidgetTester tester,
   GatewayClient client, {
   bool settle = true,
+  PermissionCoordinator? permissions,
 }) async {
   tester.view.physicalSize = const Size(375, 812);
   tester.view.devicePixelRatio = 1;
@@ -249,7 +328,12 @@ Future<void> _pumpShell(
       initialRoute: AppRoutes.main,
       builder: EasyLoading.init(),
       navigatorObservers: <NavigatorObserver>[appRouteObserver],
-      initialBinding: MainBinding(gatewayClient: client),
+      initialBinding: MainBinding(
+        gatewayClient: client,
+        // 申请前的定位准入默认放行，个别用例自己传替身。
+        permissionCoordinator:
+            permissions ?? _StubPermissions(LocationAccessDecision.granted),
+      ),
       getPages: <GetPage<dynamic>>[
         GetPage<void>(name: AppRoutes.main, page: () => const MainShellPage()),
         GetPage<void>(
@@ -267,6 +351,15 @@ Future<void> _pumpShell(
         GetPage<void>(
           name: AppRoutes.login,
           page: () => const Scaffold(body: Center(child: Text('login'))),
+        ),
+        GetPage<void>(
+          name: AppRoutes.certification,
+          page: () =>
+              const Scaffold(body: Center(child: Text('certification'))),
+        ),
+        GetPage<void>(
+          name: AppRoutes.calculator,
+          page: () => const Scaffold(body: Center(child: Text('calculator'))),
         ),
       ],
     ),
@@ -394,6 +487,24 @@ void main() {
             )
             .onTap,
         isNotNull,
+      );
+
+      // 整张卡片也是申请入口（与大小卡一致），置灰卡片整卡不响应。
+      expect(
+        tester
+            .widget<GestureDetector>(
+              find.byKey(const Key('home-offer-card-tap-offer-1')),
+            )
+            .onTap,
+        isNotNull,
+      );
+      expect(
+        tester
+            .widget<GestureDetector>(
+              find.byKey(const Key('home-offer-card-tap-offer-3')),
+            )
+            .onTap,
+        isNull,
       );
     });
 
@@ -708,6 +819,214 @@ void main() {
       Get.back<void>();
       await tester.pumpAndSettle();
       expect(adapter.homeCalls, 2);
+    });
+  });
+
+  group('首页大卡点击', () {
+    testWidgets('点击大卡任意位置都走准入接口并按下发地址跳转', (tester) async {
+      final adapter = _adapterWithApply(
+        _applyBody(target: 'http://example.test/admission'),
+      );
+      await _pumpLoggedIn(tester, adapter);
+
+      // 设计稿金额面板（20~352, 174~322），点这里等价于点 Apply Now。
+      await tester.tapAt(const Offset(180, 200));
+      await tester.pumpAndSettle();
+
+      expect(adapter.applyCalls, 1);
+      expect(Get.currentRoute, AppRoutes.webView);
+      expect(find.text('webview'), findsOneWidget);
+    });
+
+    testWidgets('游客点击大卡只弹登录页，不发准入请求', (tester) async {
+      final adapter = _adapterWithApply(
+        _applyBody(target: 'http://example.test/admission'),
+      );
+      await _pumpShell(tester, _client(_config(), adapter));
+
+      await tester.tapAt(const Offset(180, 200));
+      await tester.pumpAndSettle();
+
+      expect(Get.currentRoute, AppRoutes.login);
+      expect(adapter.applyCalls, 0);
+    });
+
+    testWidgets('连点大卡只发一次准入请求', (tester) async {
+      final adapter = _adapterWithApply(
+        _applyBody(target: 'http://example.test/admission'),
+      );
+      await _pumpLoggedIn(tester, adapter);
+
+      final controller = Get.find<MainController>();
+      // 第一次点击会一路跳到落地页，导航 Future 要等落地页关闭才结束，因此不能
+      // await（与「连点受保护 Tab」用例同理）；第二次点击应被连点保护挡下。
+      unawaited(controller.applyNow('main'));
+      unawaited(controller.applyNow('main'));
+      await tester.pumpAndSettle();
+
+      expect(adapter.applyCalls, 1);
+    });
+
+    testWidgets('准入失败且没有跳转地址时提示服务端文案', (tester) async {
+      final adapter = _adapterWithApply(
+        _applyBody(code: 505, message: 'Not eligible for this product'),
+      );
+      await _pumpLoggedIn(tester, adapter);
+
+      await tester.tapAt(const Offset(180, 200));
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Not eligible for this product'), findsOneWidget);
+      expect(Get.currentRoute, AppRoutes.main);
+
+      // 等提示的自动消失计时器跑完，避免测试结束时留下未完成的定时器。
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('准入通过但没有跳转地址时按本地认证状态继续', (tester) async {
+      final adapter = _adapterWithApply(_applyBody());
+      await _pumpLoggedIn(tester, adapter);
+
+      await tester.tapAt(const Offset(180, 200));
+      await tester.pumpAndSettle();
+
+      expect(adapter.applyCalls, 1);
+      expect(Get.currentRoute, AppRoutes.certification);
+      expect(find.text('certification'), findsOneWidget);
+    });
+  });
+
+  group('推荐卡点击', () {
+    testWidgets('点击推荐卡任意位置都走准入接口并按下发地址跳转', (tester) async {
+      final adapter = _StubAdapter((options) async {
+        final body = options.uri.toString().contains('legongs')
+            ? _applyBody(target: 'http://example.test/admission')
+            : _plainBody(withOffers: true);
+        return ResponseBody.fromString(body, 200, headers: _jsonHeaders);
+      });
+      await _pumpLoggedIn(tester, adapter);
+
+      // 推荐区落在首屏之下：先把它滚上来，再点卡片本体的标题行（不是
+      // Apply Now），验证整卡都是热区。
+      await tester.drag(find.byType(ListView), const Offset(0, -220));
+      await tester.pumpAndSettle();
+
+      final card = tester.getRect(
+        find.byKey(const Key('home-offer-card-offer-1')),
+      );
+      await tester.tapAt(Offset(card.left + 40, card.top + 20));
+      await tester.pumpAndSettle();
+
+      expect(adapter.applyCalls, 1);
+      expect(Get.currentRoute, AppRoutes.webView);
+    });
+  });
+
+  group('申请前的定位准入', () {
+    testWidgets('先要一次定位权限，授权通过后照常走准入接口', (tester) async {
+      final adapter = _adapterWithApply(
+        _applyBody(target: 'http://example.test/admission'),
+      );
+      final permissions = _StubPermissions(LocationAccessDecision.granted);
+      await _pumpLoggedIn(tester, adapter, permissions: permissions);
+
+      await tester.tapAt(const Offset(180, 200));
+      await tester.pumpAndSettle();
+
+      expect(permissions.requests, 1);
+      expect(adapter.applyCalls, 1);
+      expect(Get.currentRoute, AppRoutes.webView);
+    });
+
+    testWidgets('权限被拒时先弹二次说明，取消后照常申请', (tester) async {
+      final adapter = _adapterWithApply(
+        _applyBody(target: 'http://example.test/admission'),
+      );
+      final permissions = _StubPermissions(LocationAccessDecision.denied);
+      await _pumpLoggedIn(tester, adapter, permissions: permissions);
+
+      await tester.tapAt(const Offset(180, 200));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Location Access Is Off'), findsOneWidget);
+      expect(adapter.applyCalls, 0);
+
+      await tester.tap(find.text('Not Now'));
+      await tester.pumpAndSettle();
+
+      expect(permissions.settingsOpened, isFalse);
+      expect(adapter.applyCalls, 1);
+      expect(Get.currentRoute, AppRoutes.webView);
+    });
+
+    testWidgets('权限被拒时选择去系统设置则中止本次申请', (tester) async {
+      final adapter = _adapterWithApply(
+        _applyBody(target: 'http://example.test/admission'),
+      );
+      final permissions = _StubPermissions(LocationAccessDecision.denied);
+      await _pumpLoggedIn(tester, adapter, permissions: permissions);
+
+      await tester.tapAt(const Offset(180, 200));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Open Settings'));
+      await tester.pumpAndSettle();
+
+      expect(permissions.settingsOpened, isTrue);
+      expect(adapter.applyCalls, 0);
+      expect(Get.currentRoute, AppRoutes.main);
+    });
+
+    testWidgets('定位服务没打开时给出对应的说明', (tester) async {
+      final adapter = _adapterWithApply(
+        _applyBody(target: 'http://example.test/admission'),
+      );
+      final permissions = _StubPermissions(
+        LocationAccessDecision.serviceDisabled,
+      );
+      await _pumpLoggedIn(tester, adapter, permissions: permissions);
+
+      await tester.tapAt(const Offset(180, 200));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Location Services Are Off'), findsOneWidget);
+
+      await tester.tap(find.text('Not Now'));
+      await tester.pumpAndSettle();
+
+      expect(adapter.applyCalls, 1);
+    });
+
+    testWidgets('定位弹窗期间被切到后台：本次申请作废，入口不会被锁住', (tester) async {
+      final adapter = _adapterWithApply(
+        _applyBody(target: 'http://example.test/admission'),
+      );
+      final permissions = _PendingPermissions();
+      await _pumpLoggedIn(tester, adapter, permissions: permissions);
+
+      await tester.tapAt(const Offset(180, 200));
+      await tester.pump();
+      expect(permissions.requests, 1);
+
+      // 用户还没在系统弹窗上做选择就把应用切到后台：原生回调不会再回来，
+      // 这次申请要干净地结束，不能把申请入口锁在一次挂着的等待上。
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(adapter.applyCalls, 0);
+
+      // 再点一次：重新走一遍定位准入与准入接口。
+      permissions.gate.complete(LocationAccessDecision.granted);
+      await tester.pumpAndSettle();
+      await tester.tapAt(const Offset(180, 200));
+      await tester.pumpAndSettle();
+
+      expect(permissions.requests, 2);
+      expect(adapter.applyCalls, 1);
+      expect(Get.currentRoute, AppRoutes.webView);
     });
   });
 

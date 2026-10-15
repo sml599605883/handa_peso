@@ -12,6 +12,7 @@ import 'package:handa_peso/app/routes/app_routes.dart';
 import 'package:handa_peso/app/widgets/app_empty_state.dart';
 import 'package:handa_peso/core/network/gateway_client.dart';
 import 'package:handa_peso/core/network/gateway_settings.dart';
+import 'package:handa_peso/core/permissions/permission_coordinator.dart';
 import 'package:handa_peso/core/session/local_session.dart';
 import 'package:handa_peso/features/loan_progress/loan_progress_card.dart';
 import 'package:handa_peso/features/loan_progress/loan_progress_item.dart';
@@ -33,6 +34,9 @@ class _StubAdapter implements HttpClientAdapter {
   final List<String> urls = <String>[];
 
   int get homeCalls => urls.where((url) => url.contains('indulgences')).length;
+
+  /// 准入接口（`/dropcloth/legongs`，文档「点击申请」）的调用次数。
+  int get applyCalls => urls.where((url) => url.contains('legongs')).length;
 
   @override
   Future<ResponseBody> fetch(
@@ -185,6 +189,20 @@ List<Map<String, dynamic>> _designCards() {
   ];
 }
 
+/// 组装准入通过且有跳转地址的信封；字段名与接口文档「点击申请」一致。
+String _applyBody({required String target}) {
+  return jsonEncode(<String, dynamic>{
+    'unaccepted': 0,
+    'unstably': 'success',
+    'indulgences': <String, dynamic>{
+      'murdering': 200,
+      'tidewaters': target,
+      'trollopy': 1,
+      'bioscope': 'success',
+    },
+  });
+}
+
 GatewaySettings _config() {
   return GatewaySettings(
     apiOrigin: 'http://home.test',
@@ -200,6 +218,17 @@ GatewayClient _client(GatewaySettings config, HttpClientAdapter adapter) {
   return GatewayClient(config, dio: Dio()..httpClientAdapter = adapter);
 }
 
+/// 定位授权的替身：申请前的定位准入不能真去打系统弹窗。
+class _StubPermissions extends PermissionCoordinator {
+  int requests = 0;
+
+  @override
+  Future<LocationAccessDecision> requestLocationAccess() async {
+    requests += 1;
+    return LocationAccessDecision.granted;
+  }
+}
+
 /// 以登录态启动外壳并切到 Loan Tab（进度数据在 Tab 可见时才请求）。
 ///
 /// 进度页按宽度等比缩放，因此加高视口不会改变卡片几何，只会让更多卡片进入
@@ -209,6 +238,7 @@ Future<void> _pumpLoanTab(
   GatewayClient client, {
   bool settle = true,
   double height = 1400,
+  PermissionCoordinator? permissions,
 }) async {
   tester.view.physicalSize = Size(375, height);
   tester.view.devicePixelRatio = 1;
@@ -219,7 +249,11 @@ Future<void> _pumpLoanTab(
       initialRoute: AppRoutes.main,
       builder: EasyLoading.init(),
       navigatorObservers: <NavigatorObserver>[appRouteObserver],
-      initialBinding: MainBinding(gatewayClient: client),
+      initialBinding: MainBinding(
+        gatewayClient: client,
+        // 申请前的定位准入默认放行，个别用例自己传替身。
+        permissionCoordinator: permissions ?? _StubPermissions(),
+      ),
       getPages: <GetPage<dynamic>>[
         GetPage<void>(name: AppRoutes.main, page: () => const MainShellPage()),
         GetPage<void>(
@@ -506,8 +540,17 @@ void main() {
     testWidgets('没有订单详情地址时回到产品申请流程', (tester) async {
       final config = _config();
       await config.localSession.writeSessionId('session-1');
-      final adapter = _StubAdapter(
-        (options) async => ResponseBody.fromString(
+      final adapter = _StubAdapter((options) async {
+        // 没有详情地址时卡片回到产品申请流程：与大小卡一样先走准入接口，
+        // 再按服务端下发的地址跳转。
+        if (options.uri.toString().contains('legongs')) {
+          return ResponseBody.fromString(
+            _applyBody(target: 'http://example.test/admission'),
+            200,
+            headers: _jsonHeaders,
+          );
+        }
+        return ResponseBody.fromString(
           _body(<Map<String, dynamic>>[
             _progressCard(
               orderNo: 'B1',
@@ -520,8 +563,8 @@ void main() {
           ]),
           200,
           headers: _jsonHeaders,
-        ),
-      );
+        );
+      });
       await _pumpLoanTab(tester, _client(config, adapter));
 
       await tester.tap(
@@ -529,7 +572,12 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(Get.currentRoute, AppRoutes.certification);
+      expect(adapter.applyCalls, 1);
+      expect(Get.currentRoute, AppRoutes.webView);
+      expect(
+        find.text('webview:http://example.test/admission'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('游客进入 Loan Tab 仍走登录门禁，不发进度请求', (tester) async {

@@ -139,13 +139,13 @@ class LoginController extends GetxController {
     }
     if (!canRequestCode) return;
     requestingCode.value = true;
+    final loading = _acquireLoading();
     try {
-      // 只等请求，不等「转圈」动画：动画没跑完时请求也应该已经发出去了。
-      unawaited(AppNavigator.showLoading());
       final reply = await gatewayClient.requestSmsCode(
         phone: phoneDigits.value,
       );
-      await AppNavigator.dismissLoading();
+      // 提示要浮在转圈之上，所以先收起浮层再提示。
+      await _releaseLoading(loading);
       cooldown.restart();
       // 验证码已发出：注册埋点的开始时间跟着挪到这一刻。
       _registeredAtSeconds = _clock();
@@ -153,14 +153,16 @@ class LoginController extends GetxController {
       // 文案优先用接口下发的（`unstably`），服务端没给才退回本地兜底。
       _notify(reply.note.isEmpty ? codeSentHint : reply.note);
     } on GatewayFailure catch (error) {
-      await AppNavigator.dismissLoading();
+      await _releaseLoading(loading);
       _notify(error.message);
       CrashReporter.record(error, StackTrace.current);
     } catch (error) {
-      await AppNavigator.dismissLoading();
+      await _releaseLoading(loading);
       _notify(FailureMessage.describe(error));
       CrashReporter.record(error, StackTrace.current);
     } finally {
+      // 兜底：上面任何一步抛异常，也不能把转圈留在屏幕上（重复调用是空操作）。
+      await _releaseLoading(loading);
       requestingCode.value = false;
     }
   }
@@ -191,8 +193,8 @@ class LoginController extends GetxController {
     AnalyticsService.logEvent(AppEvents.loginSubmit, {
       'length': phoneDigits.value.length,
     });
+    final loading = _acquireLoading();
     try {
-      unawaited(AppNavigator.showLoading());
       final response = await gatewayClient.signInWithSmsCode(
         phone: phoneDigits.value,
         code: codeDigits.value,
@@ -201,7 +203,8 @@ class LoginController extends GetxController {
       if (sessionId.isEmpty) {
         throw const GatewayFailure('Invalid login response');
       }
-      await AppNavigator.dismissLoading();
+      // 会话已经拿到：后面都是本地收尾，先把浮层收掉。
+      await _releaseLoading(loading);
       await localSession.writeSessionId(sessionId);
       await localSession.writePhone(phoneDigits.value);
       AnalyticsService.setUserId(phoneDigits.value);
@@ -212,9 +215,10 @@ class LoginController extends GetxController {
           registeredAtSeconds: _registeredAtSeconds,
         ),
       );
-      if (Get.isRegistered<MainController>()) {
-        await Get.find<MainController>().onSessionStarted(phoneDigits.value);
-      }
+      // 外壳的数据要跟着登录态同步一次，但这不能挡住登录页收尾：接口慢的时候
+      // 用户会一直停在登录页上等（看起来就是「登录成功了页面还在 loading」）。
+      // 首页 / 进度页自己会渲染 loading 与失败态，这里只把刷新发出去。
+      unawaited(_syncShellAfterLogin());
       if (Get.key.currentState?.canPop() ?? false) {
         Get.back<void>();
       } else {
@@ -222,15 +226,55 @@ class LoginController extends GetxController {
       }
     } on GatewayFailure catch (error) {
       CrashReporter.record(error, StackTrace.current);
-      await AppNavigator.dismissLoading();
+      await _releaseLoading(loading);
       await _notifyThenReset(error.message);
     } catch (error) {
       CrashReporter.record(error, StackTrace.current);
-      await AppNavigator.dismissLoading();
+      await _releaseLoading(loading);
       await _notifyThenReset(FailureMessage.describe(error));
     } finally {
+      // 兜底：上面任何一步抛异常，也不能把转圈留在屏幕上（重复调用是空操作）。
+      await _releaseLoading(loading);
       signingIn.value = false;
     }
+  }
+
+  /// 登录成功后让外壳重新同步一次数据（首页与进度页共用同一条信息流接口）。
+  ///
+  /// 有意不 await：这条请求的耗时不该决定登录页什么时候收尾；失败也只上报，
+  /// 外壳页面自己会显示失败态。
+  Future<void> _syncShellAfterLogin() async {
+    if (!Get.isRegistered<MainController>()) return;
+    try {
+      await Get.find<MainController>().onSessionStarted(phoneDigits.value);
+    } catch (error) {
+      CrashReporter.record(error, StackTrace.current);
+    }
+  }
+
+  /// 还在途的 Loading 凭据。`EasyLoading` 是全局单例、没有引用计数，而发码与
+  /// 提交会撞在一起（验证码先到、用户直接填满自动提交）：谁最后关谁就决定浮层的
+  /// 去留——前一个操作会把后一个还在跑的转圈收掉，漏关则让页面一直转圈。
+  /// 每个操作拿着自己的凭据关自己那一次，浮层只在最后一个在途操作结束时收。
+  final Set<int> _loadingTokens = <int>{};
+  int _nextLoadingToken = 0;
+
+  /// 开一次 Loading，返回本次操作的凭据。
+  ///
+  /// 有意不 await 弹出动画：动画没跑完时请求也应该已经发出去了。
+  int _acquireLoading() {
+    if (_loadingTokens.isEmpty) unawaited(AppNavigator.showLoading());
+    final token = ++_nextLoadingToken;
+    _loadingTokens.add(token);
+    return token;
+  }
+
+  /// 关掉 [token] 这一次 Loading。同一凭据重复调用是空操作，兜底路径不会误伤
+  /// 其它还在途操作的转圈。
+  Future<void> _releaseLoading(int token) async {
+    if (!_loadingTokens.remove(token)) return;
+    if (_loadingTokens.isNotEmpty) return;
+    await AppNavigator.dismissLoading();
   }
 
   /// 先提示、等提示播完再复位。

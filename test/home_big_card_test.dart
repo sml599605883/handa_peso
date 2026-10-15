@@ -146,4 +146,53 @@ void main() {
     await tester.tap(find.byKey(HomeBigCard.applyButtonKey));
     expect(taps, 1);
   });
+
+  testWidgets('点击大卡任意位置都触发申请，而不只是按钮', (tester) async {
+    var taps = 0;
+    await _pumpCard(tester, _card(), onApply: () => taps++);
+
+    // 热区按设计稿覆盖卡片底板到按钮底部（14~361 / 142~514）。
+    final hitArea = tester.getRect(find.byKey(HomeBigCard.cardTapKey));
+    expect(hitArea.left, closeTo(14, 0.01));
+    expect(hitArea.right, closeTo(361, 0.01));
+    expect(hitArea.top, closeTo(142, 0.01));
+    expect(hitArea.bottom, closeTo(514, 0.01));
+
+    // 卡片底板内的金额面板（设计稿 332x148 @20,174）。
+    await tester.tapAt(const Offset(180, 200));
+    expect(taps, 1);
+
+    // 卡片底板内的条款条（设计稿 323x58 @26,332）。
+    await tester.tapAt(const Offset(180, 360));
+    expect(taps, 2);
+
+    // 底板下方的按钮同样是申请入口。
+    await tester.tap(find.byKey(HomeBigCard.applyButtonKey));
+    expect(taps, 3);
+  });
+
+  testWidgets('认证进度票据也在大卡热区内', (tester) async {
+    var taps = 0;
+    await _pumpCard(
+      tester,
+      _card(
+        limitSteps: const <HomeLimitStep>[
+          HomeLimitStep(title: '₱30,000', amountText: '₱30,000', reached: true),
+        ],
+      ),
+      onApply: () => taps++,
+    );
+
+    // 票据区（设计稿 323x108 @26,404）随卡片一起属于大卡。
+    await tester.tapAt(const Offset(180, 440));
+    expect(taps, 1);
+  });
+
+  testWidgets('大卡上方的插画不是申请入口', (tester) async {
+    var taps = 0;
+    await _pumpCard(tester, _card(), onApply: () => taps++);
+
+    await tester.tapAt(const Offset(180, 60));
+    expect(taps, 0);
+  });
 }

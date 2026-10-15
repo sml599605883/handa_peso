@@ -20,6 +20,9 @@ class HomeBigCard extends StatelessWidget {
   /// 「立即申请」按钮的稳定标识（测试 / 命中测试用）。
   static const Key applyButtonKey = Key('home-big-card-apply');
 
+  /// 整张大卡的点击热区标识（测试 / 命中测试用）。
+  static const Key cardTapKey = Key('home-big-card-tap');
+
   static const double _designWidth = 375;
 
   // 插画（设计稿 330x276 @ 22.5,20）。
@@ -184,6 +187,20 @@ class HomeBigCard extends StatelessWidget {
                     fontSize: px(12),
                     height: 16 / 12,
                   ),
+                ),
+              ),
+              // 整张大卡都是申请入口，与其它支线一致：点卡片任意位置等价于点
+              // Apply Now（按钮本身是同一回调，视觉上只是更强的引导）。
+              // 热区覆盖卡片底板到按钮底部，不盖住上方的 HELLO WELCOME 插画。
+              Positioned(
+                left: px(_frameLeft),
+                right: px(_frameLeft),
+                top: px(_frameTop),
+                height: px(applyTop + _applyHeight - _frameTop),
+                child: GestureDetector(
+                  key: cardTapKey,
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onApply,
                 ),
               ),
               Positioned(

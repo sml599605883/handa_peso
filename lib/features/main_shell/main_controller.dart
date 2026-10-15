@@ -8,6 +8,9 @@ import '../../app/routes/app_routes.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/network/gateway_client.dart';
 import '../../core/network/gateway_failure.dart';
+import '../../core/permissions/permission_coordinator.dart';
+import '../../core/product/product_apply_outcome.dart';
+import '../../core/report/report_service.dart';
 import '../../core/session/local_session.dart';
 import '../home/home_data.dart';
 import '../loan_progress/loan_progress_item.dart';
@@ -27,16 +30,24 @@ const String _repaymentTitle = 'Repayment';
 /// 订单详情页标题。
 const String _loanDetailTitle = 'Loan detail';
 
+/// 准入失败且服务端没有下发文案时的兜底提示。
+const String _applyFailedHint = 'You are not eligible right now';
+
 /// 管理三 Tab 外壳及共享首页信息流的状态。
 ///
 /// 首页数据的刷新时机与 Handa Peso 其它端保持一致：
 /// 首次进入、切回首页 Tab、从二级页面返回、下拉刷新、回到前台，
 /// 以及登录 / 退出后重新同步。
 class MainController extends GetxController with WidgetsBindingObserver {
-  MainController({required this.gatewayClient, required this.localSession});
+  MainController({
+    required this.gatewayClient,
+    required this.localSession,
+    PermissionCoordinator? permissionCoordinator,
+  }) : permissionCoordinator = permissionCoordinator ?? PermissionCoordinator();
 
   final GatewayClient gatewayClient;
   final LocalSession localSession;
+  final PermissionCoordinator permissionCoordinator;
 
   final activeTab = 0.obs;
   final sessionPhone = ''.obs;
@@ -49,11 +60,20 @@ class MainController extends GetxController with WidgetsBindingObserver {
 
   bool _loadedOnce = false;
   bool _openingBanner = false;
+  bool _applying = false;
   bool _progressRequesting = false;
   bool _openingLogin = false;
   bool _leftForeground = false;
   bool _wentToBackground = false;
   bool _resumeAfterDialogConsumed = false;
+
+  /// 正在等待系统定位授权弹窗；用户把应用切走就放弃这次等待，避免申请入口被
+  /// 一个不会再返回的原生回调长期锁住。
+  Completer<void>? _locationPromptInterrupt;
+
+  /// 定位授权弹窗结束后紧跟的那次 `resumed` 已经处理过（见
+  /// [didChangeAppLifecycleState]）。
+  bool _ignoreLocationPromptResume = false;
 
   @override
   void onInit() {
@@ -122,14 +142,21 @@ class MainController extends GetxController with WidgetsBindingObserver {
     switch (state) {
       case AppLifecycleState.inactive:
         _leftForeground = true;
+        // 系统定位授权弹窗也会让应用先 inactive 再 resumed：那次恢复不是用户
+        // 离开页面又回来，标记掉，免得白刷一次首页。
+        if (_locationPromptInterrupt != null) {
+          _ignoreLocationPromptResume = true;
+        }
         return;
       case AppLifecycleState.hidden:
       case AppLifecycleState.paused:
         _wentToBackground = true;
+        _interruptLocationPrompt();
         return;
       case AppLifecycleState.resumed:
         break;
       case AppLifecycleState.detached:
+        _interruptLocationPrompt();
         return;
     }
 
@@ -137,9 +164,22 @@ class MainController extends GetxController with WidgetsBindingObserver {
     final fromDialog = _leftForeground && !_resumeAfterDialogConsumed;
     _wentToBackground = false;
     _leftForeground = false;
+
+    // 定位弹窗带来的恢复既不刷新，也不消耗「弹窗恢复」的那次刷新机会；用户真
+    // 的从后台回来（fromBackground）时不在此列。
+    final fromLocationPrompt = _ignoreLocationPromptResume && !fromBackground;
+    _ignoreLocationPromptResume = false;
+    if (fromLocationPrompt) return;
+
     if (!fromBackground && !fromDialog) return;
     if (fromDialog) _resumeAfterDialogConsumed = true;
     unawaited(_refreshVisibleTab());
+  }
+
+  /// 放弃正在等待的定位授权弹窗（用户把应用切到后台或关掉）。
+  void _interruptLocationPrompt() {
+    final pending = _locationPromptInterrupt;
+    if (pending != null && !pending.isCompleted) pending.complete();
   }
 
   Future<void> _restoreProfile() async {
@@ -268,22 +308,131 @@ class MainController extends GetxController with WidgetsBindingObserver {
     }
   }
 
+  /// 点击首页大卡 / 推荐卡：先过登录门禁，再走准入接口（文档「点击申请」）。
+  ///
+  /// 与其它支线一致——跳转目标由服务端决定：准入失败会下发 H5 错误页，需要
+  /// 授信或借款详情时下发 H5 或原生深链。只有当服务端只回结果码、不给地址时，
+  /// 才按本地认证状态继续（未认证进认证流程，已认证进借款计算页），避免服务端
+  /// 配置缺省时点击毫无反应。
+  ///
+  /// 走准入之前先要一次定位权限：风控要看这一次申请发生时的位置，用户拒绝也
+  /// 不硬拦（取消二次说明后照常申请，与其它支线同款）。
   Future<void> applyNow(String productId) async {
-    final appliedProductId = productId.isEmpty
+    final appliedProductId = productId.trim().isEmpty
         ? _homeApplyProductId
-        : productId;
+        : productId.trim();
+    // 连点只走一次：准入会在服务端留痕，重复请求既脏数据也会叠出多个落地页。
+    if (_applying) return;
+    _applying = true;
     AnalyticsService.logEvent(AppEvents.applyNowTapped, {
       'product_id': appliedProductId,
     });
-    if (!await AppNavigator.requireSession(redirect: productId)) {
+    try {
+      if (!await AppNavigator.requireSession(redirect: appliedProductId)) {
+        return;
+      }
+      if (!await _ensureLocationAccess()) return;
+      // 转圈只罩住这次请求：提示与转圈共用同一个浮层，请求一结束就收起，
+      // 后面的提示与跳转才不会被它关掉。
+      final ProductApplyOutcome outcome;
+      await AppNavigator.showLoading();
+      try {
+        // 用户可能刚在这次定位弹窗里放开权限：先把最新定位补报一次再走准入。
+        // 上报是尽力而为，失败不影响申请。
+        unawaited(_reportLocationBeforeApply());
+        outcome = ProductApplyOutcome.fromReply(
+          await gatewayClient.startProductApplication(
+            productId: appliedProductId,
+          ),
+        );
+      } finally {
+        await AppNavigator.dismissLoading();
+      }
+
+      if (outcome.hasTarget) {
+        await AppNavigator.openTarget(outcome.target);
+        return;
+      }
+      if (!outcome.isAdmitted) {
+        AppNavigator.showToast(
+          outcome.message.isEmpty ? _applyFailedHint : outcome.message,
+        );
+        return;
+      }
+      await _continueApply(appliedProductId);
+    } on GatewayFailure catch (error) {
+      CrashReporter.record(error, StackTrace.current);
+      AppNavigator.showError(error.message);
+    } catch (error) {
+      CrashReporter.record(error, StackTrace.current);
+      AppNavigator.showError(FailureMessage.describe(error));
+    } finally {
+      _applying = false;
+    }
+  }
+
+  /// 服务端没下发跳转地址时的兜底入口。
+  Future<void> _continueApply(String productId) async {
+    if (await localSession.readCertified()) {
+      await AppNavigator.toCalculator();
       return;
     }
-    final profileComplete = await localSession.readCertified();
-    if (!profileComplete) {
-      await AppNavigator.toCertification(productId: appliedProductId);
-      return;
+    await AppNavigator.toCertification(productId: productId);
+  }
+
+  /// 申请前的定位准入：拿到授权就继续，拿不到权限也不硬拦。
+  ///
+  /// 与其它支线一致——定位只补全风控数据，不参与准入判断：权限被拒或被系统
+  /// 限制时给出一次去设置的说明，用户选择取消就照常申请，选择「Settings」则由
+  /// 系统设置页接管本次流程。等待弹窗期间被切到后台时本次申请直接作废（用户再
+  /// 点一次即可），不能把入口挂在一个不再返回的原生回调上。
+  Future<bool> _ensureLocationAccess() async {
+    final decision = await _awaitLocationDecision();
+    switch (decision) {
+      case null:
+        return false;
+      case LocationAccessDecision.granted:
+      case LocationAccessDecision.unavailable:
+        return true;
+      case LocationAccessDecision.denied:
+      case LocationAccessDecision.serviceDisabled:
+        break;
     }
-    await AppNavigator.toCalculator();
+
+    final toSettings = await AppNavigator.showLocationPermissionPrompt(
+      serviceDisabled: decision == LocationAccessDecision.serviceDisabled,
+    );
+    if (!toSettings) return true;
+    await permissionCoordinator.openSettings();
+    return false;
+  }
+
+  /// 等一次定位授权弹窗的结果；被切到后台时返回 `null`（本次申请作废）。
+  Future<LocationAccessDecision?> _awaitLocationDecision() async {
+    final interrupted = Completer<void>();
+    _locationPromptInterrupt = interrupted;
+    try {
+      return await Future.any<LocationAccessDecision?>(
+        <Future<LocationAccessDecision?>>[
+          permissionCoordinator.requestLocationAccess(),
+          interrupted.future.then<LocationAccessDecision?>((_) => null),
+        ],
+      );
+    } finally {
+      _locationPromptInterrupt = null;
+    }
+  }
+
+  /// 申请前补报一次定位与设备详情。
+  Future<void> _reportLocationBeforeApply() async {
+    final reporter = Get.isRegistered<ReportService>()
+        ? Get.find<ReportService>()
+        : null;
+    try {
+      await reporter?.reportLocationAndDevice();
+    } catch (error) {
+      CrashReporter.record(error, StackTrace.current);
+    }
   }
 
   Future<void> logout() async {

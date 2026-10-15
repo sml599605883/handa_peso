@@ -80,14 +80,40 @@ abstract final class AnalyticsService {
 }
 
 /// 崩溃上报的专用入口，确保失败始终可追溯。
+///
+/// 上报是旁路能力：它出问题绝不能影响业务，更不能把调用方后面的错误提示吃掉。
 abstract final class CrashReporter {
   static TelemetrySink get _sink => AnalyticsService._sink;
 
-  static void record(Object error, StackTrace stackTrace, {bool fatal = false}) {
-    _sink.recordError(error, stackTrace, fatal: fatal);
+  /// 是否正在把一条错误交给出口。
+  ///
+  /// 出口有可能绕回 `FlutterError.onError`：debug 出口就是
+  /// `FlutterError.reportError`，而 `main()` 又把框架错误交回这里上报。不设闸
+  /// 就会无限递归，栈溢出会打断调用点后面的流程——例如登录失败时，接口下发的
+  /// 「验证码错误」文案还没来得及弹出来，异常就先把提示那一段掀掉了。
+  static bool _forwarding = false;
+
+  static void record(
+    Object error,
+    StackTrace stackTrace, {
+    bool fatal = false,
+  }) {
+    // 递归进来的那一层直接丢弃：它上报的就是正在处理中的同一条错误。
+    if (_forwarding) return;
+    _forwarding = true;
+    try {
+      _sink.recordError(error, stackTrace, fatal: fatal);
+    } catch (failure) {
+      // 出口自己坏了只留一行日志：这里再抛就会一路掀掉业务代码的错误处理。
+      if (kDebugMode) {
+        debugPrint('[telemetry] crash report failed: $failure');
+      }
+    } finally {
+      _forwarding = false;
+    }
   }
 
   static void recordMessage(String message, {bool fatal = false}) {
-    _sink.recordError(message, StackTrace.current, fatal: fatal);
+    record(message, StackTrace.current, fatal: fatal);
   }
 }

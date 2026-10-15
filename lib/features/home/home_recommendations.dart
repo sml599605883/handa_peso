@@ -121,61 +121,68 @@ class _OfferCard extends StatelessWidget {
     return SizedBox(
       key: Key('home-offer-card-${offer.productId}'),
       height: _designHeight * scale,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: AppColors.homeCardRow,
-          borderRadius: BorderRadius.circular(14 * scale),
-        ),
-        child: Padding(
-          padding: EdgeInsets.all(_padding * scale),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  _logo(),
-                  SizedBox(width: 10 * scale),
-                  Expanded(
-                    child: Text(
-                      offer.productName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: AppColors.heroValue,
-                        fontSize: 12 * scale,
-                        height: 14 / 12,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 10 * scale),
-              Container(height: 1, color: AppColors.homeCardDivider),
-              SizedBox(height: 13 * scale),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _amountBlock(),
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _termsBlock(),
-                            SizedBox(width: 17 * scale),
-                            _applyButton(enabled),
-                          ],
+      // 整张推荐卡都是申请入口，与大小卡一致：点卡片任意位置等价于点 Apply Now。
+      // Apply Now 只是同一回调上更强的视觉引导，置灰的卡片整卡不响应。
+      child: GestureDetector(
+        key: Key('home-offer-card-tap-${offer.productId}'),
+        behavior: HitTestBehavior.opaque,
+        onTap: enabled ? onApply : null,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: AppColors.homeCardRow,
+            borderRadius: BorderRadius.circular(14 * scale),
+          ),
+          child: Padding(
+            padding: EdgeInsets.all(_padding * scale),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    _logo(),
+                    SizedBox(width: 10 * scale),
+                    Expanded(
+                      child: Text(
+                        offer.productName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: AppColors.heroValue,
+                          fontSize: 12 * scale,
+                          height: 14 / 12,
                         ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+                SizedBox(height: 10 * scale),
+                Container(height: 1, color: AppColors.homeCardDivider),
+                SizedBox(height: 13 * scale),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _amountBlock(),
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _termsBlock(),
+                              SizedBox(width: 17 * scale),
+                              _applyButton(enabled),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

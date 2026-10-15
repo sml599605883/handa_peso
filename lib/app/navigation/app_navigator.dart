@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:get/get.dart';
 
@@ -157,6 +158,53 @@ abstract final class AppNavigator {
   }
 
   static void showError(String message) => EasyLoading.showError(message);
+
+  /// 位置权限被系统挡下时的二次说明，返回用户是否选择去系统设置。
+  ///
+  /// 系统弹窗只会出现一次，之后拒绝过的用户在设置里才能改回来，因此这里补一条
+  /// 说明并提供入口。选择「Not Now」不算拒绝：调用方照常继续申请。
+  ///
+  /// 文案按本应用自己的口径写，不要从别的工程整段搬运——用户可见的长文案是
+  /// 跨应用比对时最直接的特征。
+  static Future<bool> showLocationPermissionPrompt({
+    required bool serviceDisabled,
+  }) async {
+    final context = Get.context;
+    if (context == null || !context.mounted) return false;
+
+    final toSettings = await showCupertinoDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: Text(
+          serviceDisabled
+              ? 'Location Services Are Off'
+              : 'Location Access Is Off',
+        ),
+        content: Text(
+          serviceDisabled
+              ? 'Location Services is switched off on this device. Turn it on '
+                    'in Settings to finish the location check, or continue '
+                    'without it.'
+              : 'Your location is collected once during review to confirm '
+                    'your address and protect your account. Allow it in '
+                    'Settings, or continue without it.',
+        ),
+        actions: <Widget>[
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Not Now'),
+          ),
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Open Settings'),
+          ),
+        ],
+      ),
+    );
+    return toSettings ?? false;
+  }
 
   /// H5 域名（服务端可在启动后换址），拼相对跳转路径时使用。
   static String _webOrigin() {

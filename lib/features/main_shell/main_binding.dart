@@ -2,6 +2,7 @@ import 'package:get/get.dart';
 
 import '../../core/bootstrap/app_bootstrap.dart';
 import '../../core/network/gateway_client.dart';
+import '../../core/permissions/permission_coordinator.dart';
 import 'main_controller.dart';
 
 /// 外壳页的依赖装配。
@@ -9,10 +10,17 @@ import 'main_controller.dart';
 /// 网关客户端按「调用方注入 → 启动阶段注册」的次序取用；两者都不存在时
 /// 直接抛错，宁可启动即失败，也不要让页面在没有网络层的情况下运行。
 class MainBinding extends Bindings {
-  MainBinding({this.gatewayClient, this.appDependencies});
+  MainBinding({
+    this.gatewayClient,
+    this.appDependencies,
+    this.permissionCoordinator,
+  });
 
   final GatewayClient? gatewayClient;
   final AppDependencies? appDependencies;
+
+  /// 申请前的定位权限走这里；不传就用真实实现（测试注入替身）。
+  final PermissionCoordinator? permissionCoordinator;
 
   @override
   void dependencies() {
@@ -22,6 +30,7 @@ class MainBinding extends Bindings {
       () => MainController(
         gatewayClient: gateway,
         localSession: gateway.settings.localSession,
+        permissionCoordinator: permissionCoordinator,
       ),
     );
   }

@@ -19,8 +19,10 @@ import 'package:handa_peso/core/report/report_bridge.dart';
 import 'package:handa_peso/core/report/report_service.dart';
 import 'package:handa_peso/core/report/report_store.dart';
 import 'package:handa_peso/core/session/local_session.dart';
+import 'package:handa_peso/core/analytics/analytics_service.dart';
 import 'package:handa_peso/features/login/login_controller.dart';
 import 'package:handa_peso/features/login/login_page.dart';
+import 'package:handa_peso/features/main_shell/main_controller.dart';
 
 const Map<String, List<String>> _jsonHeaders = <String, List<String>>{
   Headers.contentTypeHeader: <String>[Headers.jsonContentType],
@@ -98,6 +100,9 @@ class _StubAdapter implements HttpClientAdapter {
 
   int get loginRequests =>
       urls.where((url) => url.contains('checkreins')).length;
+
+  int get homeRequests =>
+      urls.where((url) => url.contains('indulgences')).length;
 
   @override
   Future<ResponseBody> fetch(
@@ -222,7 +227,7 @@ void main() {
   /// 以 375x812 的设计画布渲染登录页。
   ///
   /// [canvas] / [topInset] 用来模拟其它机型：设计稿画布假设状态栏 50。
-  Future<void> pumpLogin(
+  Future<GatewayClient> pumpLogin(
     WidgetTester tester, {
     Size canvas = const Size(375, 812),
     double topInset = 0,
@@ -290,6 +295,7 @@ void main() {
     await tester.pumpAndSettle();
     Get.toNamed<void>(AppRoutes.login);
     await tester.pumpAndSettle();
+    return client;
   }
 
   testWidgets('按设计稿坐标渲染登录页各层', (tester) async {
@@ -585,6 +591,117 @@ void main() {
     expect(Get.currentRoute, _homeRoute);
   });
 
+  testWidgets('登录成功不等外壳刷新：刷新还在路上，也要收起 Loading 并离开登录页', (tester) async {
+    final homeGate = Completer<void>();
+    adapter = _StubAdapter((options) async {
+      final path = options.uri.path;
+      if (path.contains('indulgences')) {
+        // 首次（外壳初始化）立刻回来，登录后的那次挂起，模拟慢接口。
+        if (adapter.homeRequests > 1) await homeGate.future;
+        return ResponseBody.fromString(_envelope(), 200, headers: _jsonHeaders);
+      }
+      if (path.contains('checkreins')) {
+        return ResponseBody.fromString(
+          _envelope(data: <String, dynamic>{'sandman': 'session-123'}),
+          200,
+          headers: _jsonHeaders,
+        );
+      }
+      return ResponseBody.fromString(
+        _envelope(note: _codeSentNote),
+        200,
+        headers: _jsonHeaders,
+      );
+    });
+
+    final client = await pumpLogin(tester);
+    final shell = MainController(gatewayClient: client, localSession: store);
+    Get.put<MainController>(shell);
+    addTearDown(() {
+      if (Get.isRegistered<MainController>()) {
+        Get.delete<MainController>(force: true);
+      }
+    });
+    await tester.pumpAndSettle();
+    expect(adapter.homeRequests, 1);
+    expect(shell.overviewLoading.value, isFalse);
+
+    await tester.enterText(find.byKey(const Key('login-phone')), '9171234567');
+    await tester.pump();
+    await tester.enterText(find.byKey(const Key('login-code')), '111111');
+    await tester.pump();
+    for (var frame = 0; frame < 8; frame++) {
+      await tester.pump(const Duration(milliseconds: 250));
+    }
+
+    // 外壳那条刷新还挂着，登录页也必须已经收尾：不然用户会一直停在登录页上等。
+    expect(adapter.homeRequests, 2);
+    expect(shell.overviewLoading.value, isTrue);
+    expect(find.text('Loading...'), findsNothing);
+    expect(Get.currentRoute, _homeRoute);
+    expect(await store.readSessionId(), 'session-123');
+
+    homeGate.complete();
+    await tester.pumpAndSettle();
+    expect(shell.overviewLoading.value, isFalse);
+  });
+
+  testWidgets('发码还没回来就自动登录，转圈要留到登录请求回来才收', (tester) async {
+    final codeGate = Completer<void>();
+    final loginGate = Completer<void>();
+    adapter = _StubAdapter((options) async {
+      final path = options.uri.path;
+      if (path.contains('fishtailed')) {
+        await codeGate.future;
+        return ResponseBody.fromString(
+          _envelope(note: _codeSentNote),
+          200,
+          headers: _jsonHeaders,
+        );
+      }
+      if (path.contains('checkreins')) {
+        await loginGate.future;
+        return ResponseBody.fromString(
+          _envelope(data: <String, dynamic>{'sandman': 'session-123'}),
+          200,
+          headers: _jsonHeaders,
+        );
+      }
+      return ResponseBody.fromString(_envelope(), 200, headers: _jsonHeaders);
+    });
+    await pumpLogin(tester);
+
+    await tester.enterText(find.byKey(const Key('login-phone')), '9171234567');
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('login-send-code')));
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.text('Loading...'), findsOneWidget);
+
+    // 验证码还没到，用户直接把 6 位码填进去触发自动登录。
+    await tester.enterText(find.byKey(const Key('login-code')), '111111');
+    await tester.pump();
+
+    // 发码先回来：登录还在路上，转圈不能被发码那次收掉。
+    codeGate.complete();
+    for (var frame = 0; frame < 4; frame++) {
+      await tester.pump(const Duration(milliseconds: 250));
+    }
+    expect(adapter.loginRequests, 1);
+    expect(find.text('Loading...'), findsOneWidget);
+
+    loginGate.complete();
+    for (var frame = 0; frame < 6; frame++) {
+      await tester.pump(const Duration(milliseconds: 250));
+    }
+    expect(find.text('Loading...'), findsNothing);
+    expect(Get.currentRoute, _homeRoute);
+    expect(await store.readSessionId(), 'session-123');
+
+    // 倒计时与提示跑完，避免留下未完成的 Timer。
+    await tester.pump(const Duration(seconds: 65));
+    await drainToast(tester);
+  });
+
   testWidgets('重新获取验证码后，注册埋点的开始时间跟着刷新', (tester) async {
     var nowSeconds = 1700000000;
     late _SpyReportService spy;
@@ -846,6 +963,61 @@ void main() {
     await drainToast(tester);
     expect(controller.codeField.text, isEmpty);
     expect(controller.codeFocus.hasFocus, isTrue);
+  });
+
+  testWidgets('业务码 -1 的验证码错误：框架错误上报不得吃掉接口文案', (tester) async {
+    // 真机上 `main()` 把 `FlutterError.onError` 接到了崩溃上报上，而上报出口
+    // （debug 出口是 `FlutterError.reportError`）会再绕回 onError。这里按同样
+    // 的接法跑：上报一旦递归，栈溢出会把下面这段「弹提示 + 复位验证码」掀掉，
+    // 用户就只看到接口报错、页面上什么都没有。
+    final previous = FlutterError.onError;
+    var onErrorCalls = 0;
+    FlutterError.onError = (details) {
+      onErrorCalls += 1;
+      expect(onErrorCalls, lessThan(5));
+      CrashReporter.record(
+        details.exception,
+        details.stack ?? StackTrace.current,
+      );
+    };
+    addTearDown(() => FlutterError.onError = previous);
+
+    // 抓包实测：HTTP 200，业务码是字符串 "-1"。
+    adapter = _StubAdapter(
+      (options) async => ResponseBody.fromString(
+        jsonEncode(<String, dynamic>{
+          'unaccepted': '-1',
+          'unstably': 'Verification code is invalid, please try again',
+          'indulgences': <String, dynamic>{
+            'EGE6xy': 'ltZZ680',
+            'f5SIV7Zy2o': null,
+            'lqo5': 'false',
+            'ufY1ixe0RQ8V': 94766762,
+            'ranulas': <String, dynamic>{},
+          },
+        }),
+        200,
+        headers: _jsonHeaders,
+      ),
+    );
+    await pumpLogin(tester);
+
+    final controller = Get.find<LoginController>();
+    await tester.enterText(find.byKey(const Key('login-phone')), '9171234567');
+    await tester.pump();
+    await tester.enterText(find.byKey(const Key('login-code')), '111111');
+    await tester.pump();
+
+    expect(adapter.loginRequests, 1);
+    await expectToast(tester, 'Verification code is invalid, please try again');
+    expect(await store.readSessionId(), isEmpty);
+    expect(Get.currentRoute, AppRoutes.login);
+
+    // 提示播完才复位：验证码清空、光标回到验证码框。
+    await drainToast(tester);
+    expect(controller.codeField.text, isEmpty);
+    expect(controller.codeFocus.hasFocus, isTrue);
+    expect(controller.signingIn.value, isFalse);
   });
 
   testWidgets('协议链接按文档登记的 H5 混淆段打开', (tester) async {
