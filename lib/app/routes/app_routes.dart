@@ -7,6 +7,7 @@ abstract final class AppRoutes {
   static const orders = '/orders';
   static const support = '/support';
   static const announcements = '/announcements';
+  static const account = '/account';
   static const accountDeletion = '/account/delete';
   static const webView = '/webview';
 }

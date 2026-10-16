@@ -153,6 +153,73 @@ abstract final class AppColors {
   /// 提示浮层底色：设计稿里是 64% 黑，叠在任意背景上。（见 `lib/app/widgets/app_hint.dart`）
   static const hintSurface = Color(0xA3000000);
 
+  // 个人中心 / 账号 / 订单列表（设计稿 07-01 个人中心、05-01 订单列表）
+  /// 这三页共用的页面底色：顶部鲑鱼色 → 奶油色 → 纯白到底。
+  ///
+  /// 设计稿画布是 375x812：`0` 处 `#F6BB9F`、`200` 处 `#FEE8C4`、`420` 处已经到
+  /// 纯白（画布再往下就是白的）。这三个位置换算成画布比例铺满整页，这样任何
+  /// 机型都是「顶部一段暖色、中段就到白」，不会在中间接出一条色带。
+  static const accountPageGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Color(0xFFF6BB9F), Color(0xFFFEE8C4), Color(0xFFFFFFFF)],
+    stops: [0, 0.246, 0.517],
+  );
+
+  /// 个人中心头部卡片与设置页主按钮共用的暖橙渐变（设计稿 `矩形`：
+  /// 右侧浅橙 → 左侧深棕，2px 白描边）。与首页卡片同款，故与
+  /// [homeWarmGradient] 取同一组色值。
+  static const accountWarmGradient = homeWarmGradient;
+
+  /// 个人中心快捷入口（All / Outstanding / Settled）的文案色。
+  static const accountEntryLabel = Color(0xFF716F5F);
+
+  /// 设置页顶部弧形面板上的应用名（设计稿 `text-wrapper_3`）。
+  static const accountCurtainTitle = Color(0xFF011706);
+
+  /// 设置页版本号文案（设计稿 `V1.1.1`）与设置页次要按钮底色。
+  static const accountVersionLabel = Color(0xFF716F5F);
+  static const accountMutedAction = progressMutedAction;
+
+  /// 设置页卡片底板与描边（设计稿 `box_4`：`#FFF9F2` + `#EBDBCA`）。
+  static const accountCardSurface = progressCardSurface;
+  static const accountCardBorder = homeCardBorder;
+
+  /// 退出 / 注销挽留弹窗的遮罩（设计稿 `section_1` 是 50% 黑）。
+  static const accountDialogBarrier = Color(0x80000000);
+
+  /// 底部导航栏的向上阴影（设计稿 07-01 `box_7`：`0 -1 8 rgba(0,0,0,0.1)`）。
+  static const tabBarShadow = Color(0x1A000000);
+
+  // 订单列表（设计稿 05-01 - 订单列表-有订单 / -暂无订单）
+  /// 筛选条轨道与未选中文案（设计稿 `group_3` / `text_6`）。
+  static const ordersFilterTrack = Color(0xFFDAB495);
+  static const ordersFilterLabel = Color(0xFFFBEADB);
+
+  /// 筛选条选中项的文案色。
+  static const ordersFilterActiveLabel = Color(0xFF151200);
+
+  /// 订单状态标签：待还款 / 逾期共用的红橙渐变（设计稿 `矩形` 94x22，
+  /// 底部 `#FF4542` → 中部 `#F9302E` → 顶部 `#E62014`）。
+  static const ordersStatusDangerGradient = LinearGradient(
+    begin: Alignment.bottomCenter,
+    end: Alignment.topCenter,
+    colors: [Color(0xFFFF4542), Color(0xFFF9302E), Color(0xFFE62014)],
+    stops: [0, 0.46, 1],
+  );
+
+  /// 终态（已结清）状态标签的灰底灰字。
+  static const ordersStatusNeutralSurface = Color(0xFFE5DDD5);
+  static const ordersStatusNeutralLabel = Color(0xFFAFAD9F);
+
+  /// 订单卡片底与描边、产品 Logo 占位：与借款进度卡片同款色值。
+  static const ordersCardSurface = progressCardSurface;
+  static const ordersCardBorder = progressCardBorder;
+  static const ordersCardDivider = progressCardBorder;
+  static const ordersLogoSurface = progressLogoSurface;
+  static const ordersLogoBorder = progressLogoBorder;
+  static const ordersActionGradient = progressPrimaryGradient;
+
   // 效果
   static const shadow = Color(0x140F2B25);
   static const barrier = Color(0x66000000);

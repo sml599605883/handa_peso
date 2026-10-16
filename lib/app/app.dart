@@ -17,6 +17,7 @@ import '../features/login/login_page.dart';
 import '../features/main_shell/main_binding.dart';
 import '../features/main_shell/main_shell_page.dart';
 import '../features/mine/account_deletion_page.dart';
+import '../features/mine/account_page.dart';
 import '../features/orders/orders_page.dart';
 import '../features/support/support_page.dart';
 import '../features/webview/app_webview_page.dart';
@@ -60,6 +61,7 @@ class HandaPesoApp extends StatelessWidget {
         GetPage(name: AppRoutes.orders, page: () => const OrdersPage()),
         GetPage(name: AppRoutes.support, page: () => const SupportPage()),
         GetPage(name: AppRoutes.announcements, page: () => const AnnouncementsPage()),
+        GetPage(name: AppRoutes.account, page: () => const AccountPage()),
         GetPage(name: AppRoutes.accountDeletion, page: () => const AccountDeletionPage()),
         GetPage(name: AppRoutes.webView, page: () => const AppWebViewPage()),
       ],

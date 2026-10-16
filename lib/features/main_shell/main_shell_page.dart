@@ -138,10 +138,18 @@ class _ShellNavigationBar extends StatelessWidget {
   final int activeIndex;
   final ValueChanged<int> onSelect;
 
-  /// 导航栏底板：白色圆角面板。
+  /// 导航栏底板：白色圆角面板 + 设计稿的向上阴影
+  /// （07-01 `box_7` / 02- 订单进度 `group_6`：`0 -1 8 rgba(0,0,0,0.1)`）。
   static const BoxDecoration _surface = BoxDecoration(
     color: AppColors.surface,
     borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+    boxShadow: [
+      BoxShadow(
+        color: AppColors.tabBarShadow,
+        offset: Offset(0, -1),
+        blurRadius: 8,
+      ),
+    ],
   );
 
   @override

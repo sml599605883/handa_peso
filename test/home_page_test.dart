@@ -361,6 +361,10 @@ Future<void> _pumpShell(
           name: AppRoutes.calculator,
           page: () => const Scaffold(body: Center(child: Text('calculator'))),
         ),
+        GetPage<void>(
+          name: AppRoutes.account,
+          page: () => const Scaffold(body: Center(child: Text('account'))),
+        ),
       ],
     ),
   );
@@ -667,7 +671,8 @@ void main() {
       final adapter = _StubAdapter(
         (options) async => ResponseBody.fromString(
           _bannerBody(<Map<String, dynamic>>[
-            _bannerItem(5, link: 'ph://handa-peso/ios/HelistopSaintliest'),
+            // 产品详情（`Sputterers`）当前版本还没有原生落地页。
+            _bannerItem(5, link: 'ph://handa-peso/ios/Sputterers'),
           ]),
           200,
           headers: _jsonHeaders,
@@ -685,6 +690,25 @@ void main() {
       // 等错误提示的自动消失计时器跑完，避免测试结束时留下未完成的定时器。
       await tester.pump(const Duration(seconds: 3));
       await tester.pumpAndSettle();
+    });
+
+    testWidgets('Banner 下的设置深链打开账号页', (tester) async {
+      final adapter = _StubAdapter(
+        (options) async => ResponseBody.fromString(
+          _bannerBody(<Map<String, dynamic>>[
+            _bannerItem(6, link: 'ph://handa-peso/ios/HelistopSaintliest'),
+          ]),
+          200,
+          headers: _jsonHeaders,
+        ),
+      );
+      await _pumpShell(tester, _client(_config(), adapter));
+
+      await tester.tap(find.byKey(const ValueKey('home-banner-6')));
+      await tester.pumpAndSettle();
+
+      expect(Get.currentRoute, AppRoutes.account);
+      expect(find.text('account'), findsOneWidget);
     });
 
     testWidgets('多张 Banner 从第一张开始，每 3 秒自动翻页', (tester) async {
@@ -1097,7 +1121,8 @@ void main() {
 
       expect(Get.currentRoute, AppRoutes.main);
       expect(Get.find<MainController>().activeTab.value, 2);
-      expect(find.text('09170000000'), findsOneWidget);
+      // 个人中心的手机号按设计稿脱敏展示。
+      expect(find.text('091****0000'), findsOneWidget);
       expect(find.text('Browsing as guest'), findsNothing);
     });
   });

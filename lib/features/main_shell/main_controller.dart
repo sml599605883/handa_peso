@@ -450,8 +450,18 @@ class MainController extends GetxController with WidgetsBindingObserver {
     }
   }
 
-  Future<void> openAccountDeletion() async {
-    await Get.toNamed<void>(AppRoutes.accountDeletion);
+  /// 注销账号：服务端受理成功后才清本地会话，与退出登录共用同一套收尾。
+  ///
+  /// 接口失败时直接把异常抛给调用方——账号并没有注销，界面不能显示成已退出。
+  Future<void> deleteAccount() async {
+    await gatewayClient.closeAccount();
+    AnalyticsService.logEvent(AppEvents.accountDeleted);
+    await localSession.resetSession();
+    AnalyticsService.setUserId(null);
+    overviewData.value = null;
+    sessionPhone.value = '';
+    _loadedOnce = false;
+    await loadOverview(force: true);
   }
 
   /// 首页只有在选中且外壳路由位于顶层时才请求得到数据。

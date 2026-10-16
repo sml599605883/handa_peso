@@ -61,7 +61,17 @@ abstract final class AppNavigator {
         arguments: {'productId': productId},
       );
 
-  static Future<void>? toOrders() => Get.toNamed<void>(AppRoutes.orders);
+  /// 打开订单列表。[status] 是接口文档里的筛选状态码
+  /// （4 全部 / 7 进行中 / 6 待还款 / 5 已结清），空串表示默认「全部」。
+  static Future<void>? toOrders({String status = ''}) => Get.toNamed<void>(
+    AppRoutes.orders,
+    arguments: status.trim().isEmpty
+        ? null
+        : <String, dynamic>{'status': status.trim()},
+  );
+
+  /// 打开账号页（设计稿 07-01 - 个人中心-退出）。
+  static Future<void>? toAccount() => Get.toNamed<void>(AppRoutes.account);
 
   static Future<void>? toSupport() => Get.toNamed<void>(AppRoutes.support);
 
@@ -119,7 +129,10 @@ abstract final class AppNavigator {
           await toLogin();
           return;
         case _BannerTarget.order:
-          await toOrders();
+          await toOrders(status: _orderStatusOf(uri));
+          return;
+        case _BannerTarget.setting:
+          await toAccount();
           return;
       }
     }
@@ -129,6 +142,19 @@ abstract final class AppNavigator {
 
   static const String _schemeHost = 'handa-peso';
   static const String _unopenableLink = 'Unable to open link';
+
+  /// 订单列表深链携带筛选状态的参数名。
+  ///
+  /// 文档只登记了「订单列表页」这个别名，没有写状态参数；这里同时认业务字段
+  /// 名 `corequisites`（接口文档「订单列表」的筛选字段）与通用的 `status`。
+  static String _orderStatusOf(Uri? uri) {
+    if (uri == null) return '';
+    for (final key in const <String>['corequisites', 'status']) {
+      final value = uri.queryParameters[key];
+      if (value != null && value.trim().isNotEmpty) return value.trim();
+    }
+    return '';
+  }
 
   static Future<void> showLoading([String status = 'Loading...']) =>
       EasyLoading.show(status: status);
@@ -224,12 +250,12 @@ abstract final class AppNavigator {
 
 /// Banner 深链里的应用页面混淆段（接口文档「值映射 -> Scheme」）。
 ///
-/// 这里只登记当前版本真正有落地页的段。文档中同样登记过的设置页
-/// （`HelistopSaintliest`）、产品详情（`Sputterers`）、重新授信（`Herbivory`）
-/// 与准入（`PeacefulnessesQuesters`）还没有对应的原生页面，命中时会走
-/// 「打不开」提示，不会被误当成 H5 打开。
+/// 这里只登记当前版本真正有落地页的段。文档中同样登记过的产品详情
+/// （`Sputterers`）、重新授信（`Herbivory`）与准入（`PeacefulnessesQuesters`）
+/// 还没有对应的原生页面，命中时会走「打不开」提示，不会被误当成 H5 打开。
 abstract final class _BannerTarget {
   static const home = 'SoulsClodpole';
+  static const setting = 'HelistopSaintliest';
   static const login = 'Disaccording';
   static const order = 'Brusker';
 }
