@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../../app/navigation/app_navigator.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
 import '../../core/analytics/analytics_service.dart';
@@ -11,8 +12,9 @@ import '../../core/report/report_service.dart';
 
 /// 认证核对清单。
 ///
-/// 在完整产品中每个步骤都是一个原生页面；这里先给出流程骨架，配上贴近真实的
-/// 文案与完成状态，让该功能不止是一个 Web 包装层。
+/// 前两步「证件」「人脸」已经是真实流程：证件走类型选择、上传与确认，人脸走
+/// MyTools 契约的活体、上传与场景上报；只有服务端确认成功才把步骤标记完成。
+/// 其余步骤仍是流程骨架，等各自的设计稿落地后按同样的方式替换。
 ///
 /// 每一步完成时按接口文档上报风控埋点，产品 ID 由申请入口透传进来。
 class CertificationPage extends StatefulWidget {
@@ -28,14 +30,8 @@ class _CertificationPageState extends State<CertificationPage> {
   /// 只登记骨架能真实命中文档时序的三步——它们的语义是「进入页面 -> 提交成功」，
   /// 与这里的「上一步完成即进入本步 -> 点击本步完成」一致。
   ///
-  /// 证件（3）与人脸（4）在文档里的开始时间是「点击证件正面 / 点击开始人脸」，
-  /// 骨架里既没有子页面也没有提交动作，上报只会得到恒为 0 的时长，属于污染风控
-  /// 样本，因此这里不上报；紧急联系人（7）与申贷（9、10）同理，等真实页面落地
-  /// 后再接上 [ReportService.reportScene]。
-  ///
-  /// 认证选择（2）的语义是「进入选择页 -> 选择结束」，这里的列表同时承担选择页
-  /// 的角色：进入页面先取一次时间，用户第一次点击即选择结束，因此只在首个动作
-  /// 上报一次，后面的点击是步骤完成，不再重复算作选择。
+  /// 证件（2、3）与人脸（4）由各自的真实页面按文档时机上报，本清单只负责
+  /// 后续仍为骨架的个人信息、工作信息与银行卡场景。
   static const _sceneByStep = <int, String>{
     2: ReportScene.personalInfo,
     3: ReportScene.jobInfo,
@@ -90,19 +86,66 @@ class _CertificationPageState extends State<CertificationPage> {
   ReportService? get _reporter =>
       Get.isRegistered<ReportService>() ? Get.find<ReportService>() : null;
 
+  /// 证件流程是否正在打开：连点只保留一次。
+  bool _openingIdentity = false;
+
+  /// 人脸流程是否正在打开：连点只保留一次。
+  bool _openingFace = false;
+
+  /// 证件流程选中的卡种；人脸上传接口继续使用这个必填字段。
+  String _identityCardType = '';
+
+  void _onStepTap(int index) {
+    if (index != _completed) return;
+    if (index == 0) {
+      unawaited(_openIdentityFlow());
+      return;
+    }
+    if (index == 1) {
+      unawaited(_openFaceFlow());
+      return;
+    }
+    _completeStep(index);
+  }
+
+  /// 第一步「证件」进入真实的原生流程（设计稿 03-01 身份认证）。
+  ///
+  /// 流程内部自己上报场景 2（认证选择）与场景 3（证件信息）；这里只等它返回
+  /// 「证件信息已保存」，成功才把这一步标记完成。
+  Future<void> _openIdentityFlow() async {
+    if (_openingIdentity) return;
+    _openingIdentity = true;
+    try {
+      final outcome = await AppNavigator.toIdentityVerification(
+        productId: _productId,
+      );
+      if (!mounted || !outcome.completed) return;
+      _identityCardType = outcome.cardType;
+      _finishStep(0);
+      await _openFaceFlow();
+    } finally {
+      _openingIdentity = false;
+    }
+  }
+
+  /// 第二步「人脸」进入真实设计稿页面，上传成功后才标记完成。
+  Future<void> _openFaceFlow() async {
+    if (_openingFace) return;
+    _openingFace = true;
+    try {
+      final verified = await AppNavigator.toFaceVerification(
+        productId: _productId,
+        cardType: _identityCardType,
+      );
+      if (!mounted || !verified) return;
+      _finishStep(1);
+    } finally {
+      _openingFace = false;
+    }
+  }
+
   void _completeStep(int index) {
     if (index != _completed) return;
-
-    // 第一次点击既是「选择结束」，也是第一步开始，两条埋点用的是同一个开始时间。
-    if (index == 0) {
-      unawaited(
-        _reporter?.reportScene(
-          scene: ReportScene.certificationChoice,
-          productId: _productId,
-          startedAtSeconds: _stepStartedAtSeconds,
-        ),
-      );
-    }
 
     final scene = _sceneByStep[index];
     if (scene != null) {
@@ -120,6 +163,11 @@ class _CertificationPageState extends State<CertificationPage> {
       unawaited(_reporter?.reportDeviceContacts());
     }
 
+    _finishStep(index);
+  }
+
+  /// 标记某一步完成，并把下一步的开始时间重置为此刻。
+  void _finishStep(int index) {
     setState(() => _completed += 1);
     _stepStartedAtSeconds = ReportService.nowSeconds();
     AnalyticsService.logEvent(AppEvents.certificationStepCompleted, {
@@ -153,7 +201,7 @@ class _CertificationPageState extends State<CertificationPage> {
               index: index,
               done: index < _completed,
               active: index == _completed,
-              onTap: () => _completeStep(index),
+              onTap: () => _onStepTap(index),
             ),
         ],
       ),

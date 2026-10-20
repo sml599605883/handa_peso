@@ -671,8 +671,8 @@ void main() {
       final adapter = _StubAdapter(
         (options) async => ResponseBody.fromString(
           _bannerBody(<Map<String, dynamic>>[
-            // 产品详情（`Sputterers`）当前版本还没有原生落地页。
-            _bannerItem(5, link: 'ph://handa-peso/ios/Sputterers'),
+            // 重新授信（`Herbivory`）当前版本还没有原生落地页。
+            _bannerItem(5, link: 'ph://handa-peso/ios/Herbivory'),
           ]),
           200,
           headers: _jsonHeaders,

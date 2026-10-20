@@ -224,6 +224,62 @@ abstract final class AppColors {
   static const shadow = Color(0x140F2B25);
   static const barrier = Color(0x66000000);
 
+  // 证件认证流程（设计稿 03 - 认证流程模块、03-01 - 身份认证）
+  /// 上传证件、认证方式选择与上传成功三页共用的整页底色。
+  ///
+  /// 设计稿画布是 375x812：`0` 处 `#F5BB9F`、`200` 处 `#FDE8C4`、`420` 处已经到
+  /// 纯白，与个人中心/订单列表同款，因此直接复用同一组色标。
+  static const identityPageGradient = accountPageGradient;
+
+  /// 人脸识别页（设计稿 03-01 - 人脸识别）的整页底色。
+  ///
+  /// 设计稿的 375x812 画布从底部读取为：`#F09D87` → 60% 处 `#FEE7C2`
+  /// → 底部纯白。
+  static const facePageGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Color(0xFFF09D87), Color(0xFFFEE7C2), Color(0xFFFFFFFF)],
+    stops: [0, 0.6, 1],
+  );
+
+  /// 证件类型选择页的整页底色（设计稿画布 375x988）。
+  ///
+  /// 这一页比其它页更高，设计稿的底色在中段奶油色 `#FEE9C3` 之后又回到桃色
+  /// `#F7C5A7`，与外壳默认底色同款，故复用 [pageBackgroundGradient]。
+  static const identityTypePageGradient = pageBackgroundGradient;
+
+  /// 页面标题（设计稿 `ID Verification`）与卡片正文的深棕黑。
+  static const identityTitle = Color(0xFF151200);
+
+  /// 顶部引导文案的渐变字（设计稿 `text-group_1`：`#7F4209` → `#B65E15`）。
+  static const identityHeroTextGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Color(0xFF7F4209), Color(0xFFB65E15)],
+  );
+
+  /// 引导文案的 1px 描边（设计稿 `-webkit-text-stroke`）。
+  static const identityHeroTextStroke = Color(0xFFFFE2C8);
+
+  /// 卡片内的浅米色面板（设计稿 `block_1` / `box_3`，与首页卡片同款）
+  /// 与卡片底色（设计稿 `group_7` / `box_4`）及共用的描边。
+  static const identityPanelSurface = homeCardSurface;
+  static const identityCardSurface = progressCardSurface;
+  static const identityCardBorder = homeCardBorder;
+
+  /// 认证方式选择底部弹层的遮罩（设计稿 `section_7` 是 50% 黑）与顶部阴影。
+  static const identitySheetBarrier = Color(0x80000000);
+  static const identitySheetShadow = Color(0x1A000000);
+
+  /// 弹层中选中项右侧的圆点（设计稿 `block_4`）。
+  static const identitySheetMarker = Color(0xFF7F4209);
+
+  /// 弹层中未选中的取图方式文案（设计稿 `text_9`）。
+  static const identitySheetUnselectedText = Color(0xFF716F5F);
+
+  /// 上传成功页证件图缺省时的占位底色（设计稿 `矩形` `#F1EEEB`）。
+  static const identityPlaceholderSurface = Color(0xFFF1EEEB);
+
   // 渐变
   static const heroGradient = LinearGradient(
     begin: Alignment.topLeft,

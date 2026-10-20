@@ -3,7 +3,11 @@ import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:get/get.dart';
 
 import '../../core/network/gateway_client.dart';
+import '../../core/network/gateway_failure.dart';
+import '../../core/product/product_next_step.dart';
 import '../../core/session/local_session.dart';
+import '../../features/certification/face_models.dart';
+import '../../features/certification/identity_models.dart';
 import '../routes/app_routes.dart';
 import 'h5_paths.dart';
 import '../widgets/app_hint.dart';
@@ -61,6 +65,45 @@ abstract final class AppNavigator {
         arguments: {'productId': productId},
       );
 
+  /// 打开证件认证流程（设计稿 03-01 身份认证）。
+  ///
+  /// 流程是「证件类型选择 -> 上传证件 -> 上传成功」三段独立页面，返回用户是否
+  /// 走完（证件信息保存成功），调用方据此决定这一步算不算完成。完成与否用随
+  /// 路由参数带进去的 [IdentityFlowOutcome] 回传：GetX 的命名路由承载不了泛型
+  /// 回传值。
+  static Future<IdentityFlowOutcome> toIdentityVerification({
+    String productId = '',
+  }) async {
+    final outcome = IdentityFlowOutcome();
+    await Get.toNamed<void>(
+      AppRoutes.certificationIdentity,
+      arguments: <String, dynamic>{
+        'productId': productId,
+        IdentityFlowOutcome.argumentKey: outcome,
+      },
+    );
+    return outcome;
+  }
+
+  /// 打开人脸识别流程（设计稿 03-01 - 身份认证-人脸识别）。
+  static Future<bool> toFaceVerification({
+    required String productId,
+    String orderNo = '',
+    String cardType = '',
+  }) async {
+    final outcome = FaceVerificationOutcome();
+    await Get.toNamed<void>(
+      AppRoutes.certificationFace,
+      arguments: <String, dynamic>{
+        'productId': productId,
+        'orderNo': orderNo,
+        'cardType': cardType,
+        FaceVerificationOutcome.argumentKey: outcome,
+      },
+    );
+    return outcome.completed;
+  }
+
   /// 打开订单列表。[status] 是接口文档里的筛选状态码
   /// （4 全部 / 7 进行中 / 6 待还款 / 5 已结清），空串表示默认「全部」。
   static Future<void>? toOrders({String status = ''}) => Get.toNamed<void>(
@@ -91,6 +134,8 @@ abstract final class AppNavigator {
   /// - `http` / `https`：H5 落地页，交给内置 WebView；
   /// - `/#/<混淆段>` 这类相对路径：拼上服务端下发的 H5 域名再进 WebView；
   /// - `ph://handa-peso/ios/<混淆段>`：映射到对应的原生页面；
+  /// - `ph://handa-peso/ios/Sputterers?cotype=<产品id>`（产品详情）：只带产品 ID，
+  ///   真正的下一步由产品详情接口决定，见 [_openProductDetail]；
   /// - 其它（包括文档里已登记、但当前版本还没有落地页的混淆段）：明确提示
   ///   打不开，而不是悄悄当成 H5 打开。
   static Future<void> openTarget(
@@ -118,7 +163,8 @@ abstract final class AppNavigator {
 
     final segments = uri?.pathSegments ?? const <String>[];
     if (scheme == 'ph' &&
-        uri?.host == _schemeHost &&
+        uri != null &&
+        uri.host == _schemeHost &&
         segments.length == 2 &&
         segments.first == 'ios') {
       switch (segments.last) {
@@ -134,10 +180,92 @@ abstract final class AppNavigator {
         case _BannerTarget.setting:
           await toAccount();
           return;
+        case _BannerTarget.productDetail:
+          await _openProductDetail(uri);
+          return;
       }
     }
 
     showError(_unopenableLink);
+  }
+
+  /// 产品详情深链：首页大卡准入成功后服务端下发的就是这一段
+  /// （`ph://handa-peso/ios/Sputterers?cotype=1`）。
+  ///
+  /// 深链只给产品 ID，究竟该走哪一步认证由产品详情接口里的认证项列表决定，
+  /// 客户端不自行判断。当前版本已落地证件（第一项）与人脸（第二项）；其余步骤
+  /// 还没有设计稿对应页面时明确提示，而不是静默失败。
+  static Future<void> _openProductDetail(Uri uri) async {
+    final productId = _productIdOf(uri);
+    final client = Get.isRegistered<GatewayClient>()
+        ? Get.find<GatewayClient>()
+        : null;
+    if (productId.isEmpty || client == null) {
+      showError(_unopenableLink);
+      return;
+    }
+    await _openNextProductStep(
+      productId: productId,
+      client: client,
+      allowIdentity: true,
+    );
+  }
+
+  /// 按产品详情返回的下一步打开认证页。
+  ///
+  /// 证件保存成功后先让身份流程退出，再刷新一次产品详情；如果服务端返回
+  /// `face`，立即进入人脸页。`allowIdentity` 防止服务端状态尚未刷新时再次进入
+  /// 同一个证件流程。
+  static Future<void> _openNextProductStep({
+    required String productId,
+    required GatewayClient client,
+    required bool allowIdentity,
+  }) async {
+    await showLoading();
+    try {
+      final step = ProductNextStep.fromReply(
+        await client.fetchProductDetail(productId: productId),
+      );
+      await dismissLoading();
+      if (step.isIdentity) {
+        if (!allowIdentity) return;
+        final outcome = await toIdentityVerification(productId: productId);
+        if (outcome.completed) {
+          await _openNextProductStep(
+            productId: productId,
+            client: client,
+            allowIdentity: false,
+          );
+        }
+        return;
+      }
+      if (step.isFace) {
+        await toFaceVerification(productId: productId, orderNo: step.orderNo);
+        return;
+      }
+      // 文档「产品详情认证项目列表」里登记过、但本版本还没有落地页的步骤，按步骤名
+      // 明确提示；完全没登记过的取值说明协议对不上，退回统一的「打不开」。
+      final label = step.label;
+      showError(
+        label.isEmpty ? _unopenableLink : '$label is not available yet.',
+      );
+    } on GatewayFailure catch (error) {
+      await dismissLoading();
+      showError(error.message);
+    } catch (error) {
+      await dismissLoading();
+      showError(_unopenableLink);
+    }
+  }
+
+  /// 深链里的产品 ID。文档「产品详情」登记的参数名是 `cotype`；另外两个是通用
+  /// 写法，服务端换名时不至于整条链路打不开。
+  static String _productIdOf(Uri uri) {
+    for (final key in const <String>['cotype', 'productId', 'product_id']) {
+      final value = uri.queryParameters[key];
+      if (value != null && value.trim().isNotEmpty) return value.trim();
+    }
+    return '';
   }
 
   static const String _schemeHost = 'handa-peso';
@@ -250,12 +378,14 @@ abstract final class AppNavigator {
 
 /// Banner 深链里的应用页面混淆段（接口文档「值映射 -> Scheme」）。
 ///
-/// 这里只登记当前版本真正有落地页的段。文档中同样登记过的产品详情
-/// （`Sputterers`）、重新授信（`Herbivory`）与准入（`PeacefulnessesQuesters`）
-/// 还没有对应的原生页面，命中时会走「打不开」提示，不会被误当成 H5 打开。
+/// 产品详情（`Sputterers`）没有独立页面：它的深链只带产品 ID，进来之后由产品详情
+/// 接口决定下一步，因此仍归在导航层。文档中同样登记过的重新授信（`Herbivory`）与
+/// 准入（`PeacefulnessesQuesters`）还没有对应的原生页面，命中时会走「打不开」提示，
+/// 不会被误当成 H5 打开。
 abstract final class _BannerTarget {
   static const home = 'SoulsClodpole';
   static const setting = 'HelistopSaintliest';
   static const login = 'Disaccording';
   static const order = 'Brusker';
+  static const productDetail = 'Sputterers';
 }

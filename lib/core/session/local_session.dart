@@ -17,6 +17,7 @@ class LocalSession {
   static const _sessionIdCell = 'session.id';
   static const _phoneCell = 'session.phone';
   static const _certifiedCell = 'session.profile_complete';
+  static const _identityCardTypeCell = 'session.identity_card_type';
   static const _deviceLabelCell = 'device.name';
 
   /// 退出登录/注销时要抹掉的账号事实；设备名与账号无关，保留。
@@ -24,6 +25,7 @@ class LocalSession {
     _sessionIdCell,
     _phoneCell,
     _certifiedCell,
+    _identityCardTypeCell,
   ];
 
   final SharedPreferencesAsync? _devicePrefs;
@@ -47,6 +49,12 @@ class LocalSession {
 
   Future<void> writeCertified(bool value) =>
       _put(_certifiedCell, value ? '1' : '0');
+
+  /// 证件流程选中的卡种；人脸上传接口的必填字段 `scarriest` 从这里取。
+  Future<String> readIdentityCardType() => _text(_identityCardTypeCell);
+
+  Future<void> writeIdentityCardType(String value) =>
+      _put(_identityCardTypeCell, value);
 
   /// 清掉本次账号留下的状态。
   Future<void> resetSession() async {

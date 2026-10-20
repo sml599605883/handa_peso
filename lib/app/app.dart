@@ -10,6 +10,10 @@ import 'routes/app_routes.dart';
 import 'theme/app_theme.dart';
 import '../features/announcements/announcements_page.dart';
 import '../features/certification/certification_page.dart';
+import '../features/certification/face_recognition_page.dart';
+import '../features/certification/identity_result_page.dart';
+import '../features/certification/identity_type_page.dart';
+import '../features/certification/identity_upload_page.dart';
 import '../features/calculator/loan_calculator_binding.dart';
 import '../features/calculator/loan_calculator_page.dart';
 import '../features/login/login_binding.dart';
@@ -38,7 +42,9 @@ class HandaPesoApp extends StatelessWidget {
       builder: (context, child) => _easyLoadingBuilder(
         context,
         DecoratedBox(
-          decoration: const BoxDecoration(gradient: AppColors.pageBackgroundGradient),
+          decoration: const BoxDecoration(
+            gradient: AppColors.pageBackgroundGradient,
+          ),
           child: child,
         ),
       ),
@@ -57,12 +63,37 @@ class HandaPesoApp extends StatelessWidget {
           page: () => const LoanCalculatorPage(),
           binding: LoanCalculatorBinding(),
         ),
-        GetPage(name: AppRoutes.certification, page: () => const CertificationPage()),
+        GetPage(
+          name: AppRoutes.certification,
+          page: () => const CertificationPage(),
+        ),
+        GetPage(
+          name: AppRoutes.certificationIdentity,
+          page: () => const IdentityTypePage(),
+        ),
+        GetPage(
+          name: AppRoutes.certificationIdentityUpload,
+          page: () => const IdentityUploadPage(),
+        ),
+        GetPage(
+          name: AppRoutes.certificationIdentityResult,
+          page: () => const IdentityResultPage(),
+        ),
+        GetPage(
+          name: AppRoutes.certificationFace,
+          page: () => const FaceRecognitionPage(),
+        ),
         GetPage(name: AppRoutes.orders, page: () => const OrdersPage()),
         GetPage(name: AppRoutes.support, page: () => const SupportPage()),
-        GetPage(name: AppRoutes.announcements, page: () => const AnnouncementsPage()),
+        GetPage(
+          name: AppRoutes.announcements,
+          page: () => const AnnouncementsPage(),
+        ),
         GetPage(name: AppRoutes.account, page: () => const AccountPage()),
-        GetPage(name: AppRoutes.accountDeletion, page: () => const AccountDeletionPage()),
+        GetPage(
+          name: AppRoutes.accountDeletion,
+          page: () => const AccountDeletionPage(),
+        ),
         GetPage(name: AppRoutes.webView, page: () => const AppWebViewPage()),
       ],
     );

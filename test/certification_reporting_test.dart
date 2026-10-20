@@ -9,6 +9,8 @@ import 'package:handa_peso/core/report/report_service.dart';
 import 'package:handa_peso/core/report/report_store.dart';
 import 'package:handa_peso/core/session/local_session.dart';
 import 'package:handa_peso/features/certification/certification_page.dart';
+import 'package:handa_peso/features/certification/face_models.dart';
+import 'package:handa_peso/features/certification/identity_models.dart';
 
 /// 一次风控埋点调用。
 class _SceneReport {
@@ -67,6 +69,10 @@ class _SpyReportService extends ReportService {
 
 const String _homeRoute = '/stub-home';
 
+/// 证件流程有没有被打开过（桩页面在 `initState` 里置位）。
+bool identityFlowOpened = false;
+bool faceFlowOpened = false;
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -95,6 +101,17 @@ void main() {
             name: AppRoutes.certification,
             page: () => const CertificationPage(),
           ),
+          // 证件流程是独立的三段页面（见 `identity_flow_test.dart`）。
+          // 这里只关心「认证清单」自己的契约：它把第一步交给那条流程，并在流程
+          // 返回成功后才标记完成，所以用一枚桩页面顶替。
+          GetPage<void>(
+            name: AppRoutes.certificationIdentity,
+            page: () => const _StubIdentityFlow(),
+          ),
+          GetPage<void>(
+            name: AppRoutes.certificationFace,
+            page: () => const _StubFaceFlow(),
+          ),
         ],
       ),
     );
@@ -113,21 +130,29 @@ void main() {
     await tester.pump(const Duration(seconds: 5));
   }
 
+  /// 走完证件流程：证件成功后认证清单应立即继续进入人脸流程。
+  Future<void> completeIdentity(WidgetTester tester) async {
+    identityFlowOpened = false;
+    faceFlowOpened = false;
+    await tester.tap(find.text('Identity'));
+    await tester.pumpAndSettle();
+    expect(identityFlowOpened, isTrue);
+    await tester.pump(const Duration(seconds: 5));
+    expect(faceFlowOpened, isTrue);
+  }
+
   testWidgets('每一步按文档场景上报，开始时长为进入该步到完成', (tester) async {
     final openedAfter = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     await pumpCertification(tester);
 
-    // 列表同时是「认证选择页」：第一次点击就是选择结束，只报一次场景 2。
-    await complete(tester, 'Identity');
-    expect(spy.reports.map((report) => report.scene), <String>['2']);
+    // 证件（场景 2、3）由证件流程自己的页面上报；这里只把它打开、等它回成功。
+    await completeIdentity(tester);
+    expect(spy.reports, isEmpty);
 
-    // 证件与人脸在文档里的开始时间是「点击证件正面 / 点击开始人脸」，
-    // 骨架里没有对应的子页面与提交动作，因此不上报。
-    await complete(tester, 'Face scan');
-    expect(spy.reports.map((report) => report.scene), <String>['2']);
+    expect(spy.reports, isEmpty);
 
     await complete(tester, 'Personal details');
-    expect(spy.reports.map((report) => report.scene), <String>['2', '5']);
+    expect(spy.reports.map((report) => report.scene), <String>['5']);
     // 个人信息这一步包含联系人：完成时顺带把本机通讯录交出去。
     expect(spy.contactUploads, 1);
     expect(spy.reports.first.productId, '1000460');
@@ -135,14 +160,9 @@ void main() {
       spy.reports.first.startedAtSeconds,
       greaterThanOrEqualTo(openedAfter),
     );
-    // 场景 5 的开始时间取自上一步完成，因此不会早于场景 2（页面打开）的时刻。
-    expect(
-      spy.reports[1].startedAtSeconds,
-      greaterThanOrEqualTo(spy.reports.first.startedAtSeconds),
-    );
 
     await complete(tester, 'Work information');
-    expect(spy.reports.map((report) => report.scene), <String>['2', '5', '6']);
+    expect(spy.reports.map((report) => report.scene), <String>['5', '6']);
     // 工作信息的开始时间 = 上一步完成的时刻，因此不会早于个人信息步的开始时间。
     expect(
       spy.reports.last.startedAtSeconds,
@@ -150,12 +170,7 @@ void main() {
     );
 
     await complete(tester, 'Payout account');
-    expect(spy.reports.map((report) => report.scene), <String>[
-      '2',
-      '5',
-      '6',
-      '8',
-    ]);
+    expect(spy.reports.map((report) => report.scene), <String>['5', '6', '8']);
     expect(
       spy.reports.every((report) => report.productId == '1000460'),
       isTrue,
@@ -165,11 +180,10 @@ void main() {
   testWidgets('没有产品 ID 时埋点照常发出，只是产品维度为空', (tester) async {
     await pumpCertification(tester, productId: '');
 
-    await complete(tester, 'Identity');
-    await complete(tester, 'Face scan');
+    await completeIdentity(tester);
     await complete(tester, 'Personal details');
 
-    expect(spy.reports.map((report) => report.scene), <String>['2', '5']);
+    expect(spy.reports.map((report) => report.scene), <String>['5']);
     expect(spy.reports.last.productId, '');
   });
 
@@ -178,8 +192,7 @@ void main() {
     expect(Get.isRegistered<ReportService>(), isFalse);
     await pumpCertification(tester);
 
-    await complete(tester, 'Identity');
-    await complete(tester, 'Face scan');
+    await completeIdentity(tester);
     await complete(tester, 'Personal details');
     await complete(tester, 'Work information');
     await complete(tester, 'Payout account');
@@ -188,4 +201,55 @@ void main() {
     expect(find.byIcon(Icons.verified_rounded), findsNWidgets(5));
     expect(spy.reports, isEmpty);
   });
+}
+
+/// 人脸流程的桩页面：真实上传与 SDK 见 `face_verification_test.dart`。
+class _StubFaceFlow extends StatefulWidget {
+  const _StubFaceFlow();
+
+  @override
+  State<_StubFaceFlow> createState() => _StubFaceFlowState();
+}
+
+class _StubFaceFlowState extends State<_StubFaceFlow> {
+  @override
+  void initState() {
+    super.initState();
+    faceFlowOpened = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      FaceVerificationOutcome.of(Get.arguments)?.completed = true;
+      Get.back<void>();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      const Scaffold(body: Center(child: Text('face flow')));
+}
+
+/// 证件流程的桩页面：真实流程见 `identity_flow_test.dart`。
+///
+/// 这里只模拟它对认证清单的契约——打开后立刻把「证件信息已保存」写进随参数带进来
+/// 的完成标记，然后退回清单。
+class _StubIdentityFlow extends StatefulWidget {
+  const _StubIdentityFlow();
+
+  @override
+  State<_StubIdentityFlow> createState() => _StubIdentityFlowState();
+}
+
+class _StubIdentityFlowState extends State<_StubIdentityFlow> {
+  @override
+  void initState() {
+    super.initState();
+    identityFlowOpened = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      IdentityFlowOutcome.of(Get.arguments)?.completed = true;
+      Get.back<void>();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      const Scaffold(body: Center(child: Text('identity flow')));
 }

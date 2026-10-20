@@ -4,6 +4,10 @@ abstract final class AppRoutes {
   static const main = '/main';
   static const calculator = '/calculator';
   static const certification = '/certification';
+  static const certificationIdentity = '/certification/identity';
+  static const certificationIdentityUpload = '/certification/identity/upload';
+  static const certificationIdentityResult = '/certification/identity/result';
+  static const certificationFace = '/certification/face';
   static const orders = '/orders';
   static const support = '/support';
   static const announcements = '/announcements';

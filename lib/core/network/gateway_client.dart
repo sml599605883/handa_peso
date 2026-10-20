@@ -219,10 +219,28 @@ class GatewayClient extends GatewayTransport {
   }
 
   /// 保存身份证信息。
-  Future<GatewayReply> submitBasicProfile({
-    required Map<String, dynamic> body,
+  ///
+  /// 参数名按接口文档「保存用户身份证信息（第一项）」：`definitively` 姓名、
+  /// `optically` 证件号、`gleeking` 出生日期（`d-m-Y`）、`trollopy` 11 证件正面、
+  /// `scarriest` 证件类型；`wrencher` 是文档登记的混淆字段。
+  Future<GatewayReply> saveBasicProfile({
+    required String name,
+    required String idNumber,
+    required String birthday,
+    required String cardType,
+    String tileType = '11',
   }) {
-    return write(GatewayRoutes.saveBasicInfo, body: body);
+    return write(
+      GatewayRoutes.saveBasicInfo,
+      body: <String, dynamic>{
+        'definitively': name,
+        'optically': idNumber,
+        'gleeking': birthday,
+        'trollopy': tileType,
+        'scarriest': cardType,
+      },
+      noise: const <String>['wrencher'],
+    );
   }
 
   /// 检查基础信息是否通过。

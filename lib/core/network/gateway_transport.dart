@@ -161,10 +161,19 @@ class GatewayTransport {
     }
 
     final signed = await signer.signedQuery(path: route, extra: query);
+    // 同步读入内存再交给 Dio：`MultipartFile.fromFile` 要先 await 一次真实的文件
+    // 读取，在 widget 测试的假时钟里那个 Future 永远不会完成；上传的图片在取图
+    // 时已经压过（长边 4096、质量 85），体积有界。
+    final bytes = file.readAsBytesSync();
     final form = FormData.fromMap(<String, dynamic>{
       ...body,
       ..._noise(noise),
-      field: await MultipartFile.fromFile(file.path),
+      field: MultipartFile.fromBytes(
+        bytes,
+        filename: file.uri.pathSegments.isEmpty
+            ? null
+            : file.uri.pathSegments.last,
+      ),
     });
     final response = await _guard(
       () => dio.post<dynamic>(
