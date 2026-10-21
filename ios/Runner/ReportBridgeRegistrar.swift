@@ -1,7 +1,6 @@
 import AdSupport
 import AppTrackingTransparency
 import CFNetwork
-import Contacts
 import CoreLocation
 import CoreTelephony
 import Darwin
@@ -14,7 +13,7 @@ import UserNotifications
 /// 数据上报通道：向 Dart 侧提供风控埋点所需的设备事实。
 ///
 /// 通道名 `handa_peso/report_bridge`，与签名用的 `handa_peso/device_bridge`
-/// 分开：前者给风控画像（电池、网络、存储、通讯录、定位），后者只给签名公有
+/// 分开：前者给风控画像（电池、网络、存储、定位），后者只给签名公有
 /// 参数，两者的生命周期与失败容忍度不同。
 ///
 /// 取不到的值一律返回空串或 0，绝不用占位数据冒充真实设备信息——服务端拿到
@@ -32,8 +31,6 @@ final class ReportBridgeRegistrar: NSObject, FlutterStreamHandler, CLLocationMan
   private var locationPermissionResult: FlutterResult?
   private var reverseGeocoder: CLGeocoder?
   private var isRegistered = false
-
-  private let contactStore = CNContactStore()
 
   private override init() {
     super.init()
@@ -59,8 +56,6 @@ final class ReportBridgeRegistrar: NSObject, FlutterStreamHandler, CLLocationMan
         self.collectLocation(result)
       case "requestLocationPermission":
         self.requestLocationPermission(result)
-      case "getContacts":
-        self.collectContacts(result)
       case "getPushToken":
         result(self.pushToken)
       case "getTrackingStatus":
@@ -267,82 +262,6 @@ final class ReportBridgeRegistrar: NSObject, FlutterStreamHandler, CLLocationMan
     case .notDetermined: return "not_determined"
     @unknown default: return ""
     }
-  }
-
-  // MARK: - 通讯录
-
-  private func collectContacts(_ result: @escaping FlutterResult) {
-    let status = CNContactStore.authorizationStatus(for: .contacts)
-    if status == .authorized {
-      fetchContacts(result)
-      return
-    }
-    if status == .denied || status == .restricted {
-      result([])
-      return
-    }
-
-    contactStore.requestAccess(for: .contacts) { [weak self] granted, _ in
-      guard granted, let self else {
-        DispatchQueue.main.async { result([]) }
-        return
-      }
-      self.fetchContacts(result)
-    }
-  }
-
-  private func fetchContacts(_ result: @escaping FlutterResult) {
-    let keys: [CNKeyDescriptor] = [
-      CNContactGivenNameKey as CNKeyDescriptor,
-      CNContactFamilyNameKey as CNKeyDescriptor,
-      CNContactPhoneNumbersKey as CNKeyDescriptor,
-      CNContactEmailAddressesKey as CNKeyDescriptor,
-      CNContactBirthdayKey as CNKeyDescriptor,
-      CNContactOrganizationNameKey as CNKeyDescriptor,
-    ]
-    let request = CNContactFetchRequest(keysToFetch: keys)
-    request.sortOrder = .givenName
-
-    DispatchQueue.global(qos: .utility).async { [weak self] in
-      guard let self else { return }
-      var rows: [[String: Any]] = []
-      do {
-        try self.contactStore.enumerateContacts(with: request) { contact, _ in
-          let phones = contact.phoneNumbers
-            .map { $0.value.stringValue.replacingOccurrences(of: " ", with: "") }
-            .filter { !$0.isEmpty }
-            .joined(separator: ",")
-          let name = [contact.givenName, contact.familyName]
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-          guard !phones.isEmpty || !name.isEmpty else { return }
-          rows.append([
-            "name": name,
-            "phone": phones,
-            "email": contact.emailAddresses.first?.value as String? ?? "",
-            // 备注/生日在通讯录里是可选项；创建时间与更新时间 iOS 不对外提供，
-            // 按 0 上报而不是用当前时间冒充。
-            "remark": contact.organizationName,
-            "birthday": self.birthdayText(contact.birthday),
-            "upTimeMillis": 0,
-            "createTimeMillis": 0,
-          ])
-        }
-      } catch {
-        rows = []
-      }
-      DispatchQueue.main.async { result(rows) }
-    }
-  }
-
-  private func birthdayText(_ components: DateComponents?) -> String {
-    guard let components, let month = components.month, let day = components.day else {
-      return ""
-    }
-    if let year = components.year {
-      return String(format: "%04d-%02d-%02d", year, month, day)
-    }
-    return String(format: "--%02d-%02d", month, day)
   }
 
   // MARK: - 设备快照

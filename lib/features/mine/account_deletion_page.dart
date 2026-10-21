@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import '../../app/navigation/app_navigator.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
+import '../../app/widgets/app_text_selection_menu.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/network/gateway_client.dart';
 import '../../core/network/gateway_failure.dart';
@@ -41,7 +42,9 @@ class _AccountDeletionPageState extends State<AccountDeletionPage> {
       await gatewayClient.settings.localSession.resetSession();
       AnalyticsService.setUserId(null);
       if (!mounted) return;
-      AppNavigator.showToast('Your account deletion request has been submitted.');
+      AppNavigator.showToast(
+        'Your account deletion request has been submitted.',
+      );
       await AppNavigator.toLogin();
     } on GatewayFailure catch (error) {
       CrashReporter.record(error, StackTrace.current);
@@ -69,6 +72,7 @@ class _AccountDeletionPageState extends State<AccountDeletionPage> {
           const SizedBox(height: AppSpacing.md),
           TextField(
             controller: _reasonController,
+            contextMenuBuilder: AppTextSelectionMenu.build,
             maxLines: 3,
             decoration: const InputDecoration(
               labelText: 'Reason (optional)',
@@ -85,7 +89,10 @@ class _AccountDeletionPageState extends State<AccountDeletionPage> {
           ),
           if (_error != null) ...[
             const SizedBox(height: AppSpacing.xs),
-            Text(_error!, style: textTheme.bodySmall?.copyWith(color: AppColors.danger)),
+            Text(
+              _error!,
+              style: textTheme.bodySmall?.copyWith(color: AppColors.danger),
+            ),
           ],
           const SizedBox(height: AppSpacing.md),
           FilledButton(

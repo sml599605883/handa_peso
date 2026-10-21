@@ -2,7 +2,7 @@ import 'package:encrypt/encrypt.dart';
 
 /// 上报类接口的载荷加密器（AES-CBC）。
 ///
-/// 设备详情、通讯录这类载荷必须在离开设备前加密，网关只接受密文。
+/// 设备详情这类载荷必须在离开设备前加密，网关只接受密文。
 /// 密钥与初始向量由构建期注入：不落盘、不写日志。
 class PayloadCipher {
   PayloadCipher({required String secret, required String vector})

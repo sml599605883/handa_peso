@@ -288,7 +288,7 @@ void main() {
           ),
           GetPage<void>(
             name: AppRoutes.certificationIdentityResult,
-            page: () => const IdentityResultPage(),
+            page: () => const IdentityResultPage(autoContinue: false),
           ),
         ],
       ),

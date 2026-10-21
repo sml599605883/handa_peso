@@ -37,8 +37,6 @@ class PermissionCoordinator {
 
   final LocationPermissionRequester _requestLocationPermission;
 
-  Future<PermissionDecision> requestContacts() => _request(Permission.contacts);
-
   Future<PermissionDecision> requestPhotos() => _request(Permission.photos);
 
   Future<PermissionDecision> requestCamera() => _request(Permission.camera);

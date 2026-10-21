@@ -116,7 +116,6 @@ class _NativeScript {
   void Function(String method)? onMethod;
   Map<String, Object?> snapshot = const <String, Object?>{};
   Map<String, Object?> location = const <String, Object?>{};
-  List<Object?> contacts = const <Object?>[];
   String pushToken = '';
   String trackingStatus = 'not_determined';
 
@@ -138,8 +137,6 @@ class _NativeScript {
               return snapshot;
             case 'getLocation':
               return location;
-            case 'getContacts':
-              return contacts;
             case 'getPushToken':
               return pushToken;
             case 'getTrackingStatus':
@@ -266,25 +263,6 @@ void main() {
       final storage = payload['biogenetically'] as Map;
       expect(storage['guardhouses'], '1000');
       expect(storage['ineffabilities'], '4000');
-    });
-
-    test('encrypts contacts and skips entries without a name or number', () {
-      final json = ReportPayload.contactsJson(const <ContactRecord>[
-        ContactRecord(
-          name: 'Ana',
-          phone: '+639170000001',
-          email: 'ana@example.com',
-        ),
-        ContactRecord(name: '', phone: ''),
-      ], noiseDigits: (length) => '9' * length);
-
-      final rows = jsonDecode(json) as List<dynamic>;
-      expect(rows, hasLength(1));
-      final row = rows.single as Map<String, dynamic>;
-      expect(row['definitively'], 'Ana');
-      expect(row['fishtailed'], '+639170000001');
-      expect(row['eyestrain'], 'ana@example.com');
-      expect(row['prebendaries'], '999999');
     });
   });
 
@@ -541,31 +519,5 @@ void main() {
         expect(harness.hasCall('/dropcloth/unglove'), isTrue);
       },
     );
-
-    test('skips the contacts upload when there is nothing to send', () async {
-      await service.reportContacts(const <ContactRecord>[]);
-
-      expect(harness.hasCall('/dropcloth/bioregional'), isFalse);
-    });
-
-    test('uploads encrypted contacts collected from the device', () async {
-      native.contacts = <Object?>[
-        <String, Object?>{
-          'name': 'Ana',
-          'phone': '+639170000001',
-          'upTimeMillis': 0,
-          'createTimeMillis': 0,
-        },
-      ];
-
-      await service.reportDeviceContacts();
-
-      final body = harness.callTo('/dropcloth/bioregional').body;
-      expect(body['trollopy'], '3');
-      final rows = jsonDecode(
-        harness.client.cipher.decipher(body['indulgences']!),
-      ) as List<dynamic>;
-      expect((rows.single as Map)['definitively'], 'Ana');
-    });
   });
 }

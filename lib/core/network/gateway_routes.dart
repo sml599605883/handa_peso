@@ -56,7 +56,6 @@ abstract final class GatewayRoutes {
   static const googleMarket = '/dropcloth/phalarope';
   static const buriedPoint = '/dropcloth/disgruntle';
   static const uploadDeviceInfo = '/dropcloth/unglove';
-  static const uploadContacts = '/dropcloth/bioregional';
   static const uploadAppleToken = '/dropcloth/calipash';
 
   // 客服中心

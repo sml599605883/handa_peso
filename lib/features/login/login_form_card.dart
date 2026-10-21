@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 
 import '../../app/theme/app_colors.dart';
+import '../../app/widgets/app_text_selection_menu.dart';
 import 'login_agreement_row.dart';
 import 'login_controller.dart';
 
@@ -84,6 +85,7 @@ class _PhoneRow extends StatelessWidget {
             child: TextField(
               key: const Key('login-phone'),
               controller: controller.phoneField,
+              contextMenuBuilder: AppTextSelectionMenu.build,
               keyboardType: TextInputType.phone,
               textInputAction: TextInputAction.next,
               // 只收数字，但不设长度上限：号码是否合法交给控制器提示（设计稿
@@ -117,6 +119,7 @@ class _CodeRow extends StatelessWidget {
             child: TextField(
               key: const Key('login-code'),
               controller: controller.codeField,
+              contextMenuBuilder: AppTextSelectionMenu.build,
               focusNode: controller.codeFocus,
               keyboardType: TextInputType.number,
               textInputAction: TextInputAction.done,

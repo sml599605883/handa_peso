@@ -53,6 +53,7 @@ abstract final class AppBootstrap {
   }) async {
     final localSession =
         localSessionFactory?.call() ?? LocalSession(SharedPreferencesAsync());
+    await localSession.restoreProductFlow();
 
     final settings = GatewaySettings(
       apiOrigin: apiBaseUrl ?? GatewaySettings.fallbackApiOrigin,

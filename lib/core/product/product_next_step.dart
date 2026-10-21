@@ -49,6 +49,7 @@ class ProductNextStep {
     'CivetsEspousals': _personal,
     'work': _work,
     'Denegation': _work,
+    'job': _work,
     'ext': _ext,
     'CloursConfitures': _ext,
     'bank': _bank,
@@ -75,6 +76,12 @@ class ProductNextStep {
 
   /// 下一步是不是人脸（第二项）。
   bool get isFace => _labels[taskType] == _face;
+
+  /// 下一步是不是个人信息（第二项）。
+  bool get isPersonal => _labels[taskType] == _personal;
+
+  /// 下一步是不是工作信息（第三项）。
+  bool get isWork => _labels[taskType] == _work;
 
   /// 这一步在提示里显示的名字；文档里没登记过的取值返回空串（服务端可能加了新步骤）。
   String get label => _labels[taskType] ?? '';

@@ -52,6 +52,8 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
 
+  shared_preferences_platform_interface: ^2.4.1
+
   # 下面的 "flutter_lints" 包包含一组推荐 lint，用于鼓励良好的编码实践。
   # 该包提供的 lint 集在包根目录的 `analysis_options.yaml` 文件中启用。
   # 关于如何停用特定 lint 规则和启用更多规则，请参阅该文件。

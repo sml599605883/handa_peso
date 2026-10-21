@@ -4,7 +4,7 @@ import 'package:get/get.dart';
 
 import '../../app/routes/app_routes.dart';
 import '../../app/theme/app_colors.dart';
-import '../../app/widgets/camera_permission_prompt.dart';
+import '../../app/widgets/ios_permission_prompt.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/network/gateway_client.dart';
 import '../../core/network/gateway_failure.dart';
@@ -98,7 +98,7 @@ class _IdentityUploadPageState extends State<IdentityUploadPage> {
       builder: (context, metrics) => IdentityPageChrome(
         metrics: metrics,
         contentTop: IdentityDesign.heroContentTop,
-        heroCopy: IdentityStrings.heroCopy,
+        heroCopy: _heroCopy,
         child: SizedBox(
           height: metrics.size(
             IdentityDesign.pageHeight - IdentityDesign.heroContentTop,
@@ -176,6 +176,11 @@ class _IdentityUploadPageState extends State<IdentityUploadPage> {
     );
   }
 
+  String get _heroCopy {
+    final copy = _apiClient.settings.localSession.productFlowCopy.identity;
+    return copy.isEmpty ? IdentityStrings.heroCopy : copy;
+  }
+
   /// 主按钮居中：设计稿 220x52 摆在 375 画布正中。
   static const double _submitLeft =
       (IdentityDesign.pageWidth - IdentityDesign.submitWidth) / 2;
@@ -207,12 +212,12 @@ class _IdentityUploadPageState extends State<IdentityUploadPage> {
       final decision = await _permissions.requestCamera();
       if (!mounted) return;
       if (decision != PermissionDecision.granted) {
-        await showCameraPermissionPrompt(
+        final openSettings = await showIosPermissionPrompt(
           context,
-          openSettings: _permissions.openSettings,
           title: IdentityStrings.cameraPermissionTitle,
           message: IdentityStrings.cameraPermissionBody,
         );
+        if (openSettings && mounted) _permissions.openSettings();
         return;
       }
     }

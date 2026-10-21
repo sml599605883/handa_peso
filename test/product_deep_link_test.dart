@@ -29,6 +29,25 @@ class _RecordedRequest {
   final Map<String, String> fields;
 }
 
+class _RouteSpy extends NavigatorObserver {
+  final pushedRoutes = <String>[];
+  final removedRoutes = <String>[];
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    final name = route.settings.name;
+    if (name != null) pushedRoutes.add(name);
+    super.didPush(route, previousRoute);
+  }
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    final name = route.settings.name;
+    if (name != null) removedRoutes.add(name);
+    super.didRemove(route, previousRoute);
+  }
+}
+
 /// 认证项列表（`thurl`）里的一项。`uppropped` 是「是否已完成」。
 Map<String, dynamic> _verifyItem(String taskType, {required int completed}) =>
     <String, dynamic>{
@@ -128,7 +147,10 @@ void main() {
     dio: Dio()..httpClientAdapter = stub,
   );
 
-  Future<void> pumpApp(WidgetTester tester) async {
+  Future<void> pumpApp(
+    WidgetTester tester, {
+    NavigatorObserver? observer,
+  }) async {
     tester.view.physicalSize = const Size(375, 812);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -136,6 +158,7 @@ void main() {
       GetMaterialApp(
         initialRoute: _homeRoute,
         builder: EasyLoading.init(),
+        navigatorObservers: <NavigatorObserver>[?observer],
         getPages: <GetPage<dynamic>>[
           GetPage<void>(
             name: _homeRoute,
@@ -149,7 +172,11 @@ void main() {
           ),
           GetPage<void>(
             name: AppRoutes.certificationFace,
-            page: () => const FaceRecognitionPage(),
+            page: () => const FaceRecognitionPage(autoContinue: false),
+          ),
+          GetPage<void>(
+            name: AppRoutes.workInformation,
+            page: () => const _WorkFlowProbe(),
           ),
         ],
       ),
@@ -245,6 +272,61 @@ void main() {
     expect(find.byType(IdentityTypePage), findsNothing);
   });
 
+  testWidgets('认证步骤使用顶层导航，下一项会先移除旧认证页', (tester) async {
+    completeIdentityOnOpen = true;
+    final routeSpy = _RouteSpy();
+    adapter = _StubAdapter(
+      _productDetailBody(const <Map<String, dynamic>>[]),
+      productDetailSequence: <String>[
+        _productDetailBody(<Map<String, dynamic>>[
+          _verifyItem('public', completed: 0),
+        ]),
+        _productDetailBody(<Map<String, dynamic>>[
+          _verifyItem('public', completed: 1),
+          _verifyItem('face', completed: 0),
+        ]),
+      ],
+    );
+    Get.put<GatewayClient>(clientFor(adapter), permanent: true);
+    await pumpApp(tester, observer: routeSpy);
+
+    unawaited(
+      AppNavigator.openTarget('ph://handa-peso/ios/Sputterers?cotype=1000460'),
+    );
+    await pumpUntil(
+      tester,
+      () => find.byType(FaceRecognitionPage).evaluate().isNotEmpty,
+    );
+
+    expect(routeSpy.removedRoutes, contains(AppRoutes.certificationIdentity));
+    expect(
+      routeSpy.pushedRoutes.where((route) => route == _homeRoute),
+      hasLength(1),
+    );
+    expect(find.text('home'), findsNothing);
+  });
+
+  testWidgets('产品详情深链：下一步为工作信息时进入工作信息页', (tester) async {
+    adapter = _StubAdapter(
+      _productDetailBody(<Map<String, dynamic>>[
+        _verifyItem('job', completed: 0),
+      ]),
+    );
+    Get.put<GatewayClient>(clientFor(adapter), permanent: true);
+    await pumpApp(tester);
+
+    unawaited(
+      AppNavigator.openTarget('ph://handa-peso/ios/Sputterers?cotype=1000460'),
+    );
+    await pumpUntil(
+      tester,
+      () => find.byType(_WorkFlowProbe).evaluate().isNotEmpty,
+    );
+
+    expect(find.byType(_WorkFlowProbe), findsOneWidget);
+    expect(find.byType(IdentityTypePage), findsNothing);
+  });
+
   testWidgets('产品详情深链：证件保存成功后刷新下一步并自动进入人脸页', (tester) async {
     completeIdentityOnOpen = true;
     adapter = _StubAdapter(
@@ -300,15 +382,31 @@ class _CompletingIdentityPage extends StatefulWidget {
       _CompletingIdentityPageState();
 }
 
+class _WorkFlowProbe extends StatelessWidget {
+  const _WorkFlowProbe();
+
+  @override
+  Widget build(BuildContext context) =>
+      const Scaffold(body: Center(child: Text('work flow')));
+}
+
 class _CompletingIdentityPageState extends State<_CompletingIdentityPage> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       final outcome = IdentityFlowOutcome.of(Get.arguments);
       outcome?.completed = true;
       outcome?.cardType = 'SSS ID';
-      Get.back<void>();
+      final arguments = Get.arguments is Map
+          ? Map<String, dynamic>.from(Get.arguments as Map)
+          : const <String, dynamic>{};
+      final productId = arguments['productId']?.toString() ?? '';
+      if (productId.isEmpty) {
+        Get.back<void>();
+        return;
+      }
+      await AppNavigator.continueProductCertification(productId: productId);
     });
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../app/theme/app_spacing.dart';
+import '../../app/widgets/app_text_selection_menu.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/network/gateway_client.dart';
 import '../../core/network/gateway_failure.dart';
@@ -52,12 +53,15 @@ class _SupportPageState extends State<SupportPage> {
       _messageController.clear();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ticket submitted. We will reply by SMS.')),
+        const SnackBar(
+          content: Text('Ticket submitted. We will reply by SMS.'),
+        ),
       );
     } on GatewayFailure catch (error) {
       CrashReporter.record(error, StackTrace.current);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -97,6 +101,7 @@ class _SupportPageState extends State<SupportPage> {
           const SizedBox(height: AppSpacing.xs),
           TextField(
             controller: _messageController,
+            contextMenuBuilder: AppTextSelectionMenu.build,
             maxLines: 4,
             decoration: const InputDecoration(
               hintText: 'Describe your issue',

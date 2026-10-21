@@ -33,8 +33,6 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Camera access is used to photograph your ID and complete face verification.</string>
-	<key>NSContactsUsageDescription</key>
-	<string>Contacts are used to complete the emergency-contact step required for your loan application.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Your location is collected once to verify your address during the loan review.</string>
 	<key>NSUserTrackingUsageDescription</key>

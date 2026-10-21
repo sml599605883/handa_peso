@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:get/get.dart';
 
+import '../../app/navigation/app_navigator.dart';
 import '../../app/theme/app_colors.dart';
+import '../../app/widgets/app_text_selection_menu.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/network/gateway_client.dart';
 import '../../core/network/gateway_failure.dart';
@@ -21,10 +23,15 @@ import 'widgets/identity_birthday_picker.dart';
 /// 保存（`/dropcloth/polybutadiene`）；保存成功后再核一遍基础信息
 /// （`/dropcloth/phellem`），然后带着成功结果逐层返回认证流程。
 class IdentityResultPage extends StatefulWidget {
-  const IdentityResultPage({this.apiClient, super.key});
+  const IdentityResultPage({
+    this.apiClient,
+    this.autoContinue = true,
+    super.key,
+  });
 
   /// 网关；缺省从容器取。
   final GatewayClient? apiClient;
+  final bool autoContinue;
 
   @override
   State<IdentityResultPage> createState() => _IdentityResultPageState();
@@ -91,7 +98,7 @@ class _IdentityResultPageState extends State<IdentityResultPage> {
       builder: (context, metrics) => IdentityPageChrome(
         metrics: metrics,
         contentTop: IdentityDesign.heroContentTop,
-        heroCopy: IdentityStrings.heroCopy,
+        heroCopy: _heroCopy,
         child: SizedBox(
           height: metrics.size(
             IdentityDesign.pageHeight - IdentityDesign.heroContentTop,
@@ -200,6 +207,12 @@ class _IdentityResultPageState extends State<IdentityResultPage> {
     );
   }
 
+  String get _heroCopy {
+    final copy =
+        _apiClient.settings.localSession.productFlowCopy.identityConfirmation;
+    return copy.isEmpty ? IdentityStrings.heroCopy : copy;
+  }
+
   /// 把一行识别信息摆到设计坐标上（454 起、行距 62）。
   Widget _row({
     required int index,
@@ -277,7 +290,11 @@ class _IdentityResultPageState extends State<IdentityResultPage> {
       if (!mounted) return;
       _outcome?.completed = true;
       _outcome?.cardType = _cardType;
-      Get.back<void>();
+      if (widget.autoContinue && _productId.isNotEmpty) {
+        await AppNavigator.continueProductCertification(productId: _productId);
+      } else {
+        Get.back<void>();
+      }
     } on GatewayFailure catch (error) {
       CrashReporter.record(error, StackTrace.current);
       await EasyLoading.showError(error.message);
@@ -401,6 +418,7 @@ class _ResultRow extends StatelessWidget {
       return TextField(
         key: fieldKey,
         controller: controller,
+        contextMenuBuilder: AppTextSelectionMenu.build,
         textAlign: TextAlign.right,
         maxLines: 1,
         style: style,

@@ -14,6 +14,8 @@ import '../features/certification/face_recognition_page.dart';
 import '../features/certification/identity_result_page.dart';
 import '../features/certification/identity_type_page.dart';
 import '../features/certification/identity_upload_page.dart';
+import '../features/certification/personal_information_page.dart';
+import '../features/certification/work_information_page.dart';
 import '../features/calculator/loan_calculator_binding.dart';
 import '../features/calculator/loan_calculator_page.dart';
 import '../features/login/login_binding.dart';
@@ -82,6 +84,14 @@ class HandaPesoApp extends StatelessWidget {
         GetPage(
           name: AppRoutes.certificationFace,
           page: () => const FaceRecognitionPage(),
+        ),
+        GetPage(
+          name: AppRoutes.personalInformation,
+          page: () => const PersonalInformationPage(),
+        ),
+        GetPage(
+          name: AppRoutes.workInformation,
+          page: () => const WorkInformationPage(),
         ),
         GetPage(name: AppRoutes.orders, page: () => const OrdersPage()),
         GetPage(name: AppRoutes.support, page: () => const SupportPage()),

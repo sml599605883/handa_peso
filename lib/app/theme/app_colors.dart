@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 /// 这样品牌换肤或深色模式改造只需改动单个文件。
 abstract final class AppColors {
   // 品牌色
-  static const primary = Color(0xFF0F7B6C);
+  static const primary = Color(0xFFF8C8A9);
   static const primaryDark = Color(0xFF0A5A4F);
   static const primarySoft = Color(0xFFE3F3F0);
   static const accent = Color(0xFFF2A93B);
@@ -279,6 +279,18 @@ abstract final class AppColors {
 
   /// 上传成功页证件图缺省时的占位底色（设计稿 `矩形` `#F1EEEB`）。
   static const identityPlaceholderSurface = Color(0xFFF1EEEB);
+
+  // 个人信息（设计稿 03-03）
+  static const personalInformationLabel = Color(0xFF716F5F);
+  static const personalInformationValue = Color(0xFF151200);
+  static const personalInformationHint = Color(0xFFAFAD9F);
+  static const personalInformationFieldSurface = Color(0xFFFFFFFF);
+  static const certificationProgressInactive = Color(0xFFF6BDA0);
+  static const certificationProgressActive = LinearGradient(
+    begin: Alignment.centerLeft,
+    end: Alignment.centerRight,
+    colors: [Color(0xFF7F4209), Color(0xFFB65E15)],
+  );
 
   // 渐变
   static const heroGradient = LinearGradient(

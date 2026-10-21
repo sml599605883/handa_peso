@@ -13,14 +13,14 @@ import 'report_store.dart';
 
 /// 数据上报的唯一入口。
 ///
-/// 负责把接口文档里的六条上报接口串成一条生命周期：启动/回前台、登录成功、
-/// 认证与申贷过程中的风控埋点、通讯录与 Apple token。业务页面只描述“发生了什么”，
+/// 负责把接口文档里的上报接口串成一条生命周期：启动/回前台、登录成功、
+/// 认证与申贷过程中的风控埋点与 Apple token。业务页面只描述“发生了什么”，
 /// 具体发哪条路由、字段如何拼、什么条件下跳过，全部收敛在这里。
 ///
 /// 设计约束（与接口文档一致，改动需回查文档）：
 /// - 位置与设备详情都要求登录态，没有会话时直接跳过；
 /// - 未授权的定位不上报，只有经纬度齐全的快照才算有效；
-/// - 设备详情与通讯录必须加密后放在信封锁载荷字段里，不加密会直接被服务端丢弃；
+/// - 设备详情必须加密后放在信封锁载荷字段里，不加密会直接被服务端丢弃；
 /// - 推送 token 原样上报（本机还没有就直接报空串），缓存与去重交给服务端；
 /// - 定位缓存只活在本次进程里，不落盘；
 /// - 所有上报都是尽力而为：任何失败都不得影响用户流程。
@@ -197,28 +197,6 @@ class ReportService {
         }
       }
       await _reportDeviceProfile(location);
-    } catch (error) {
-      _log(error);
-    }
-  }
-
-  /// 上报通讯录（密文数组）。没有可用条目时整次跳过。
-  Future<void> reportContacts(List<ContactRecord> contacts) async {
-    final payload = ReportPayload.contactsJson(contacts);
-    if (payload == '[]') return;
-    try {
-      await gatewayClient.reportContacts(
-        encryptedPayload: gatewayClient.cipher.encipher(payload),
-      );
-    } catch (error) {
-      _log(error);
-    }
-  }
-
-  /// 从原生通讯录采集并上报；未授权时原生返回空列表，等同于跳过。
-  Future<void> reportDeviceContacts() async {
-    try {
-      await reportContacts(await bridge.contacts());
     } catch (error) {
       _log(error);
     }

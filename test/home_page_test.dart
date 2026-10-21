@@ -3,12 +3,14 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:get/get.dart';
 import 'package:handa_peso/app/navigation/app_route_observer.dart';
 import 'package:handa_peso/app/routes/app_routes.dart';
+import 'package:handa_peso/app/theme/app_colors.dart';
 import 'package:handa_peso/core/network/gateway_client.dart';
 import 'package:handa_peso/core/network/gateway_settings.dart';
 import 'package:handa_peso/core/permissions/permission_coordinator.dart';
@@ -975,6 +977,15 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Location Access Is Off'), findsOneWidget);
+      expect(find.byType(CupertinoAlertDialog), findsOneWidget);
+      final cancel = tester.widget<CupertinoDialogAction>(
+        find.widgetWithText(CupertinoDialogAction, 'Not Now'),
+      );
+      final openSettings = tester.widget<CupertinoDialogAction>(
+        find.widgetWithText(CupertinoDialogAction, 'Open Settings'),
+      );
+      expect(cancel.textStyle?.color, AppColors.textMuted);
+      expect(openSettings.textStyle?.color, AppColors.identityTitle);
       expect(adapter.applyCalls, 0);
 
       await tester.tap(find.text('Not Now'));

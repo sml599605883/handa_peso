@@ -32,6 +32,9 @@ abstract final class IdentityAssets {
 
   /// 横幅右侧的箭头指示（设计稿 `编组 9备份 4` 18x10）。
   static const String ribbonChevron = 'assets/identity_ribbon_chevron.png';
+
+  /// 个人信息输入框右侧的箭头（设计稿 03-03）。
+  static const String fieldChevron = 'assets/personal_information_chevron.png';
 }
 
 /// 证件认证流程的几何常量。
@@ -358,11 +361,20 @@ class IdentityHeroBanner extends StatelessWidget {
   const IdentityHeroBanner({
     required this.text,
     required this.metrics,
+    this.moneyBagTopOffset =
+        IdentityDesign.moneyBagTop - IdentityDesign.heroTop,
+    this.maxLines,
+    this.minFontSize = IdentityDesign.heroSize,
+    this.maxFontSize = IdentityDesign.heroSize,
     super.key,
   });
 
   final String text;
   final IdentityMetrics metrics;
+  final double moneyBagTopOffset;
+  final int? maxLines;
+  final double minFontSize;
+  final double maxFontSize;
 
   @override
   Widget build(BuildContext context) {
@@ -374,11 +386,17 @@ class IdentityHeroBanner extends StatelessWidget {
           left: metrics.x(IdentityDesign.heroLeft),
           top: 0,
           width: metrics.size(IdentityDesign.heroWidth),
-          child: IdentityHeroText(text: text, metrics: metrics),
+          child: IdentityHeroText(
+            text: text,
+            metrics: metrics,
+            maxLines: maxLines,
+            minFontSize: minFontSize,
+            maxFontSize: maxFontSize,
+          ),
         ),
         Positioned(
           left: metrics.x(IdentityDesign.moneyBagLeft),
-          top: metrics.y(IdentityDesign.moneyBagTop - IdentityDesign.heroTop),
+          top: metrics.y(moneyBagTopOffset),
           width: metrics.size(IdentityDesign.moneyBagWidth),
           height: metrics.size(IdentityDesign.moneyBagHeight),
           child: const Image(
@@ -460,39 +478,92 @@ class IdentityHeroText extends StatelessWidget {
   const IdentityHeroText({
     required this.text,
     required this.metrics,
+    this.maxLines,
+    this.minFontSize = IdentityDesign.heroSize,
+    this.maxFontSize = IdentityDesign.heroSize,
     super.key,
   });
 
   final String text;
   final IdentityMetrics metrics;
+  final int? maxLines;
+  final double minFontSize;
+  final double maxFontSize;
 
   @override
   Widget build(BuildContext context) {
-    final base = TextStyle(
-      fontSize: metrics.size(IdentityDesign.heroSize),
-      fontWeight: FontWeight.w900,
-      fontStyle: FontStyle.italic,
-      height: IdentityDesign.heroLineHeight / IdentityDesign.heroSize,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final fontSize = _resolveFontSize(context, constraints);
+        final base = TextStyle(
+          fontSize: fontSize,
+          fontWeight: FontWeight.w900,
+          fontStyle: FontStyle.italic,
+          height: IdentityDesign.heroLineHeight / IdentityDesign.heroSize,
+        );
+        final overflow = maxLines == null
+            ? TextOverflow.clip
+            : TextOverflow.ellipsis;
+        return Stack(
+          children: <Widget>[
+            Text(
+              text,
+              maxLines: maxLines,
+              overflow: overflow,
+              style: base.copyWith(
+                foreground: Paint()
+                  ..style = PaintingStyle.stroke
+                  ..strokeWidth = metrics.size(1)
+                  ..color = AppColors.identityHeroTextStroke,
+              ),
+            ),
+            ShaderMask(
+              blendMode: BlendMode.srcIn,
+              shaderCallback: (rect) =>
+                  AppColors.identityHeroTextGradient.createShader(rect),
+              child: Text(
+                text,
+                maxLines: maxLines,
+                overflow: overflow,
+                style: base.copyWith(color: Colors.white),
+              ),
+            ),
+          ],
+        );
+      },
     );
-    return Stack(
-      children: <Widget>[
-        Text(
-          text,
-          style: base.copyWith(
-            foreground: Paint()
-              ..style = PaintingStyle.stroke
-              ..strokeWidth = metrics.size(1)
-              ..color = AppColors.identityHeroTextStroke,
-          ),
+  }
+
+  double _resolveFontSize(BuildContext context, BoxConstraints constraints) {
+    final maximum = metrics.size(math.max(minFontSize, maxFontSize));
+    if (maxLines == null || minFontSize >= maxFontSize) return maximum;
+
+    final minimum = metrics.size(minFontSize);
+    final lineHeight = IdentityDesign.heroLineHeight / IdentityDesign.heroSize;
+    for (
+      var designSize = maxFontSize;
+      designSize >= minFontSize;
+      designSize -= 1
+    ) {
+      final fontSize = metrics.size(designSize);
+      final effectiveStyle = DefaultTextStyle.of(context).style.merge(
+        TextStyle(
+          fontSize: fontSize,
+          fontWeight: FontWeight.w900,
+          fontStyle: FontStyle.italic,
+          height: lineHeight,
         ),
-        ShaderMask(
-          blendMode: BlendMode.srcIn,
-          shaderCallback: (rect) =>
-              AppColors.identityHeroTextGradient.createShader(rect),
-          child: Text(text, style: base.copyWith(color: Colors.white)),
-        ),
-      ],
-    );
+      );
+      final painter = TextPainter(
+        text: TextSpan(text: text, style: effectiveStyle),
+        maxLines: maxLines,
+        textDirection: Directionality.of(context),
+        textScaler: MediaQuery.textScalerOf(context),
+        locale: Localizations.maybeLocaleOf(context),
+      )..layout(maxWidth: constraints.maxWidth);
+      if (!painter.didExceedMaxLines) return fontSize;
+    }
+    return minimum;
   }
 }
 

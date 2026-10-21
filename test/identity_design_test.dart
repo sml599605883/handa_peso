@@ -335,7 +335,7 @@ void main() {
     await openPage(
       tester,
       route: AppRoutes.certificationFace,
-      page: const FaceRecognitionPage(),
+      page: const FaceRecognitionPage(autoContinue: false),
       arguments: <String, dynamic>{
         'productId': '1000460',
         'orderNo': 'ORDER-1000460',
@@ -394,7 +394,7 @@ void main() {
     await openPage(
       tester,
       route: AppRoutes.certificationIdentityResult,
-      page: const IdentityResultPage(),
+      page: const IdentityResultPage(autoContinue: false),
       arguments: <String, dynamic>{
         'productId': '1000460',
         'cardType': 'SSS ID',
@@ -578,7 +578,7 @@ void main() {
     await openPage(
       tester,
       route: AppRoutes.certificationIdentityResult,
-      page: const IdentityResultPage(),
+      page: const IdentityResultPage(autoContinue: false),
       arguments: <String, dynamic>{
         'productId': '1000460',
         'cardType': 'SSS ID',

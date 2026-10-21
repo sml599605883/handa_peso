@@ -66,44 +66,6 @@ class ReportLocation {
   bool get isValid => latitude.isNotEmpty && longitude.isNotEmpty;
 }
 
-/// 紧急联系人条目（接口文档「上报通讯录」的数组元素）。
-///
-/// 除了姓名与号码，文档还要求创建时间与设备上的更新时间，用来判断这条记录
-/// 是不是用户近期改过的。
-class ContactRecord {
-  const ContactRecord({
-    required this.name,
-    required this.phone,
-    this.email = '',
-    this.remark = '',
-    this.birthday = '',
-    this.upTimeMillis = 0,
-    this.createTimeMillis = 0,
-  });
-
-  factory ContactRecord.fromMap(Map<Object?, Object?> raw) => ContactRecord(
-    name: reportText(raw['name']),
-    phone: reportText(raw['phone']),
-    email: reportText(raw['email']),
-    remark: reportText(raw['remark']),
-    birthday: reportText(raw['birthday']),
-    upTimeMillis: reportInt(raw['upTimeMillis']),
-    createTimeMillis: reportInt(raw['createTimeMillis']),
-  );
-
-  final String name;
-
-  /// 多个号码时按文档示例用英文逗号拼接。
-  final String phone;
-  final String email;
-  final String remark;
-  final String birthday;
-  final int upTimeMillis;
-  final int createTimeMillis;
-
-  bool get isUsable => phone.isNotEmpty || name.isNotEmpty;
-}
-
 /// 设备快照：上报所需的全部本机事实。
 ///
 /// 字段与接口文档「设备信息上报详细信息」逐项对应；取不到的值保持空串/0，

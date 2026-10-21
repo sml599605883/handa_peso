@@ -11,6 +11,7 @@ import 'package:handa_peso/core/session/local_session.dart';
 import 'package:handa_peso/features/certification/certification_page.dart';
 import 'package:handa_peso/features/certification/face_models.dart';
 import 'package:handa_peso/features/certification/identity_models.dart';
+import 'package:handa_peso/features/certification/personal_information_models.dart';
 
 /// 一次风控埋点调用。
 class _SceneReport {
@@ -41,14 +42,6 @@ class _SpyReportService extends ReportService {
 
   final reports = <_SceneReport>[];
 
-  /// 通讯录上报次数；个人信息这一步应该带上它。
-  int contactUploads = 0;
-
-  @override
-  Future<void> reportDeviceContacts() async {
-    contactUploads += 1;
-  }
-
   @override
   Future<void> reportScene({
     required String scene,
@@ -68,10 +61,12 @@ class _SpyReportService extends ReportService {
 }
 
 const String _homeRoute = '/stub-home';
+const String _certificationTestRoute = '/stub-certification';
 
 /// 证件流程有没有被打开过（桩页面在 `initState` 里置位）。
 bool identityFlowOpened = false;
 bool faceFlowOpened = false;
+bool workFlowOpened = false;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -98,7 +93,8 @@ void main() {
             page: () => const Scaffold(body: Center(child: Text('home'))),
           ),
           GetPage<void>(
-            name: AppRoutes.certification,
+            // 用不参与顶层替换的测试路由保留清单页，单独验证清单的埋点状态机。
+            name: _certificationTestRoute,
             page: () => const CertificationPage(),
           ),
           // 证件流程是独立的三段页面（见 `identity_flow_test.dart`）。
@@ -112,12 +108,20 @@ void main() {
             name: AppRoutes.certificationFace,
             page: () => const _StubFaceFlow(),
           ),
+          GetPage<void>(
+            name: AppRoutes.personalInformation,
+            page: () => const _StubPersonalFlow(),
+          ),
+          GetPage<void>(
+            name: AppRoutes.workInformation,
+            page: () => const _StubWorkFlow(),
+          ),
         ],
       ),
     );
     await tester.pumpAndSettle();
     Get.toNamed<void>(
-      AppRoutes.certification,
+      _certificationTestRoute,
       arguments: {'productId': productId},
     );
     await tester.pumpAndSettle();
@@ -153,8 +157,6 @@ void main() {
 
     await complete(tester, 'Personal details');
     expect(spy.reports.map((report) => report.scene), <String>['5']);
-    // 个人信息这一步包含联系人：完成时顺带把本机通讯录交出去。
-    expect(spy.contactUploads, 1);
     expect(spy.reports.first.productId, '1000460');
     expect(
       spy.reports.first.startedAtSeconds,
@@ -162,6 +164,7 @@ void main() {
     );
 
     await complete(tester, 'Work information');
+    expect(workFlowOpened, isTrue);
     expect(spy.reports.map((report) => report.scene), <String>['5', '6']);
     // 工作信息的开始时间 = 上一步完成的时刻，因此不会早于个人信息步的开始时间。
     expect(
@@ -225,6 +228,79 @@ class _StubFaceFlowState extends State<_StubFaceFlow> {
   @override
   Widget build(BuildContext context) =>
       const Scaffold(body: Center(child: Text('face flow')));
+}
+
+/// 个人信息页在真实实现里负责场景 5；这里用同样契约的桩页验证清单只在成功
+/// 回传后才把第三步标成完成。
+class _StubPersonalFlow extends StatefulWidget {
+  const _StubPersonalFlow();
+
+  @override
+  State<_StubPersonalFlow> createState() => _StubPersonalFlowState();
+}
+
+class _StubPersonalFlowState extends State<_StubPersonalFlow> {
+  @override
+  void initState() {
+    super.initState();
+    final startedAt = ReportService.nowSeconds();
+    final arguments = Get.arguments is Map
+        ? Map<String, dynamic>.from(Get.arguments as Map)
+        : const <String, dynamic>{};
+    final productId = arguments['productId']?.toString() ?? '';
+    final reporter = Get.isRegistered<ReportService>()
+        ? Get.find<ReportService>()
+        : null;
+    reporter?.reportScene(
+      scene: '5',
+      productId: productId,
+      startedAtSeconds: startedAt,
+    );
+    PersonalInformationFlowOutcome.of(Get.arguments)?.completed = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Get.back<void>();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox();
+}
+
+/// 工作信息页复用动态表单实现，真实页面自行上报场景 6；这里只验证清单是否
+/// 正确等待它成功回传，再推进到下一步。
+class _StubWorkFlow extends StatefulWidget {
+  const _StubWorkFlow();
+
+  @override
+  State<_StubWorkFlow> createState() => _StubWorkFlowState();
+}
+
+class _StubWorkFlowState extends State<_StubWorkFlow> {
+  @override
+  void initState() {
+    super.initState();
+    workFlowOpened = true;
+    final startedAt = ReportService.nowSeconds();
+    final arguments = Get.arguments is Map
+        ? Map<String, dynamic>.from(Get.arguments as Map)
+        : const <String, dynamic>{};
+    final productId = arguments['productId']?.toString() ?? '';
+    final reporter = Get.isRegistered<ReportService>()
+        ? Get.find<ReportService>()
+        : null;
+    reporter?.reportScene(
+      scene: '6',
+      productId: productId,
+      startedAtSeconds: startedAt,
+    );
+    PersonalInformationFlowOutcome.of(Get.arguments)?.completed = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Get.back<void>();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox();
 }
 
 /// 证件流程的桩页面：真实流程见 `identity_flow_test.dart`。

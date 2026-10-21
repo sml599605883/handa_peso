@@ -188,7 +188,11 @@ void main() {
       final cancel = tester.widget<CupertinoDialogAction>(
         find.widgetWithText(CupertinoDialogAction, 'Not Now'),
       );
+      final openSettings = tester.widget<CupertinoDialogAction>(
+        find.widgetWithText(CupertinoDialogAction, 'Open Settings'),
+      );
       expect(cancel.textStyle?.color, AppColors.textMuted);
+      expect(openSettings.textStyle?.color, AppColors.identityTitle);
 
       await tester.tap(find.text('Not Now'));
       await tester.pumpAndSettle();
@@ -360,6 +364,7 @@ Future<void> _pumpFacePage(
             liveness: _FaceLivenessStub(),
             permissions: permissions ?? _GrantCamera(),
             reporter: reporter,
+            autoContinue: false,
             imageWriter: (_) {
               final file = File(
                 '${Directory.systemTemp.path}/handa-face-test-'

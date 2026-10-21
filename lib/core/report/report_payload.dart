@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import '../network/request_signer.dart';
 import 'report_models.dart';
 
 /// 上报请求体的组装。
@@ -81,16 +80,6 @@ abstract final class ReportPayload {
   static const _storageTotal = 'wobblinesses';
   static const _memoryTotal = 'overwarms';
   static const _memoryFree = 'ineffabilities';
-
-  // --- 上报通讯录 /dropcloth/bioregional（数组整体加密）-----------------------
-  static const _contactPhone = 'fishtailed';
-  static const _contactUpTime = 'freed';
-  static const _contactRemark = 'nucleosomal';
-  static const _contactBirthday = 'gleeking';
-  static const _contactEmail = 'eyestrain';
-  static const _contactCreateTime = 'donkeywork';
-  static const _contactName = 'definitively';
-  static const _contactNoise = 'prebendaries';
 
   /// 位置上报的请求体；文档把经纬度列为必填，缺失时由调用方跳过整次上报。
   static Map<String, dynamic> locationBody(ReportLocation location) =>
@@ -210,30 +199,5 @@ abstract final class ReportPayload {
       },
     };
     return jsonEncode(payload);
-  }
-
-  /// 通讯录明文数组（调用方加密后再发送）。
-  ///
-  /// [noiseDigits] 用于生成逐条干扰数字，默认取安全随机数；测试里可注入固定值。
-  static String contactsJson(
-    List<ContactRecord> contacts, {
-    String Function(int length)? noiseDigits,
-  }) {
-    final noise = noiseDigits ?? RequestSigner.secureDigits;
-    final rows = <Map<String, Object?>>[];
-    for (final contact in contacts) {
-      if (!contact.isUsable) continue;
-      rows.add(<String, Object?>{
-        _contactPhone: contact.phone,
-        _contactUpTime: contact.upTimeMillis,
-        _contactRemark: contact.remark,
-        _contactBirthday: contact.birthday,
-        _contactEmail: contact.email,
-        _contactCreateTime: contact.createTimeMillis,
-        _contactName: contact.name,
-        _contactNoise: noise(6),
-      });
-    }
-    return jsonEncode(rows);
   }
 }

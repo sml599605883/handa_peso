@@ -1,14 +1,18 @@
-import 'package:flutter/cupertino.dart';
+import 'dart:async';
+
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:get/get.dart';
 
 import '../../core/network/gateway_client.dart';
 import '../../core/network/gateway_failure.dart';
 import '../../core/product/product_next_step.dart';
+import '../../core/product/product_detail_loader.dart';
 import '../../core/session/local_session.dart';
 import '../../features/certification/face_models.dart';
 import '../../features/certification/identity_models.dart';
+import '../../features/certification/personal_information_models.dart';
 import '../routes/app_routes.dart';
+import '../widgets/ios_permission_prompt.dart';
 import 'h5_paths.dart';
 import '../widgets/app_hint.dart';
 
@@ -68,14 +72,13 @@ abstract final class AppNavigator {
   /// 打开证件认证流程（设计稿 03-01 身份认证）。
   ///
   /// 流程是「证件类型选择 -> 上传证件 -> 上传成功」三段独立页面，返回用户是否
-  /// 走完（证件信息保存成功），调用方据此决定这一步算不算完成。完成与否用随
-  /// 路由参数带进去的 [IdentityFlowOutcome] 回传：GetX 的命名路由承载不了泛型
-  /// 回传值。
+  /// 走完（证件信息保存成功）。成功页会直接刷新产品详情并打开下一项；完成标记
+  /// 仍随路由参数传递，供调用方和测试判断本次流程结果。
   static Future<IdentityFlowOutcome> toIdentityVerification({
     String productId = '',
   }) async {
     final outcome = IdentityFlowOutcome();
-    await Get.toNamed<void>(
+    await _toTopLevelCertification<void>(
       AppRoutes.certificationIdentity,
       arguments: <String, dynamic>{
         'productId': productId,
@@ -92,7 +95,7 @@ abstract final class AppNavigator {
     String cardType = '',
   }) async {
     final outcome = FaceVerificationOutcome();
-    await Get.toNamed<void>(
+    await _toTopLevelCertification<void>(
       AppRoutes.certificationFace,
       arguments: <String, dynamic>{
         'productId': productId,
@@ -102,6 +105,65 @@ abstract final class AppNavigator {
       },
     );
     return outcome.completed;
+  }
+
+  /// 打开个人信息（设计稿 03-03），成功保存时由页面标记完成。
+  static Future<PersonalInformationFlowOutcome> toPersonalInformation({
+    String productId = '',
+  }) async {
+    return _toInformation(
+      route: AppRoutes.personalInformation,
+      productId: productId,
+    );
+  }
+
+  /// 打开工作信息（设计稿 03-02），保存成功时由页面标记完成。
+  static Future<PersonalInformationFlowOutcome> toWorkInformation({
+    String productId = '',
+  }) async {
+    return _toInformation(
+      route: AppRoutes.workInformation,
+      productId: productId,
+    );
+  }
+
+  static Future<PersonalInformationFlowOutcome> _toInformation({
+    required String route,
+    required String productId,
+  }) async {
+    final outcome = PersonalInformationFlowOutcome();
+    await _toTopLevelCertification<void>(
+      route,
+      arguments: <String, dynamic>{
+        'productId': productId,
+        PersonalInformationFlowOutcome.argumentKey: outcome,
+      },
+    );
+    return outcome;
+  }
+
+  /// 认证流程页面集合。打开下一项时移除这些页面，只保留首页/业务入口页。
+  static const Set<String> _certificationRoutes = <String>{
+    AppRoutes.certification,
+    AppRoutes.certificationIdentity,
+    AppRoutes.certificationIdentityUpload,
+    AppRoutes.certificationIdentityResult,
+    AppRoutes.certificationFace,
+    AppRoutes.personalInformation,
+    AppRoutes.workInformation,
+  };
+
+  /// 打开顶层认证页并移除已有认证页，对齐 Peso Shield 的认证导航。
+  static Future<T?>? _toTopLevelCertification<T>(
+    String route, {
+    Object? arguments,
+  }) {
+    final navigator = Get.key.currentState;
+    if (navigator == null) return null;
+    return navigator.pushNamedAndRemoveUntil<T>(route, (candidate) {
+      final name = candidate.settings.name;
+      return name == null || !_certificationRoutes.contains(name);
+    }, arguments: arguments);
   }
 
   /// 打开订单列表。[status] 是接口文档里的筛选状态码
@@ -193,8 +255,8 @@ abstract final class AppNavigator {
   /// （`ph://handa-peso/ios/Sputterers?cotype=1`）。
   ///
   /// 深链只给产品 ID，究竟该走哪一步认证由产品详情接口里的认证项列表决定，
-  /// 客户端不自行判断。当前版本已落地证件（第一项）与人脸（第二项）；其余步骤
-  /// 还没有设计稿对应页面时明确提示，而不是静默失败。
+  /// 客户端不自行判断。当前版本已按服务端顺序落地证件、人脸、个人信息与工作
+  /// 信息；其余步骤还没有设计稿对应页面时明确提示，而不是静默失败。
   static Future<void> _openProductDetail(Uri uri) async {
     final productId = _productIdOf(uri);
     final client = Get.isRegistered<GatewayClient>()
@@ -211,11 +273,31 @@ abstract final class AppNavigator {
     );
   }
 
+  /// 当前认证页保存成功后刷新产品详情并打开下一项认证。
+  ///
+  /// 新认证页使用顶层导航替换旧认证页，因此从当前成功页直接切到下一项，
+  /// 不会先回首页或认证列表。
+  static Future<void> continueProductCertification({
+    required String productId,
+  }) async {
+    final client = Get.isRegistered<GatewayClient>()
+        ? Get.find<GatewayClient>()
+        : null;
+    if (productId.isEmpty || client == null) {
+      showError(_unopenableLink);
+      return;
+    }
+    await _openNextProductStep(
+      productId: productId,
+      client: client,
+      allowIdentity: false,
+    );
+  }
+
   /// 按产品详情返回的下一步打开认证页。
   ///
-  /// 证件保存成功后先让身份流程退出，再刷新一次产品详情；如果服务端返回
-  /// `face`，立即进入人脸页。`allowIdentity` 防止服务端状态尚未刷新时再次进入
-  /// 同一个证件流程。
+  /// 每一步保存成功后由当前页面再次调用本方法，刷新产品详情并顶层替换到下一项。
+  /// `allowIdentity` 防止服务端状态尚未刷新时再次进入同一个证件流程。
   static Future<void> _openNextProductStep({
     required String productId,
     required GatewayClient client,
@@ -224,23 +306,26 @@ abstract final class AppNavigator {
     await showLoading();
     try {
       final step = ProductNextStep.fromReply(
-        await client.fetchProductDetail(productId: productId),
+        await ProductDetailLoader.load(client, productId: productId),
       );
       await dismissLoading();
       if (step.isIdentity) {
         if (!allowIdentity) return;
-        final outcome = await toIdentityVerification(productId: productId);
-        if (outcome.completed) {
-          await _openNextProductStep(
-            productId: productId,
-            client: client,
-            allowIdentity: false,
-          );
-        }
+        unawaited(toIdentityVerification(productId: productId));
         return;
       }
       if (step.isFace) {
-        await toFaceVerification(productId: productId, orderNo: step.orderNo);
+        unawaited(
+          toFaceVerification(productId: productId, orderNo: step.orderNo),
+        );
+        return;
+      }
+      if (step.isPersonal) {
+        unawaited(toPersonalInformation(productId: productId));
+        return;
+      }
+      if (step.isWork) {
+        unawaited(toWorkInformation(productId: productId));
         return;
       }
       // 文档「产品详情认证项目列表」里登记过、但本版本还没有落地页的步骤，按步骤名
@@ -326,38 +411,19 @@ abstract final class AppNavigator {
     final context = Get.context;
     if (context == null || !context.mounted) return false;
 
-    final toSettings = await showCupertinoDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: Text(
-          serviceDisabled
-              ? 'Location Services Are Off'
-              : 'Location Access Is Off',
-        ),
-        content: Text(
-          serviceDisabled
-              ? 'Location Services is switched off on this device. Turn it on '
-                    'in Settings to finish the location check, or continue '
-                    'without it.'
-              : 'Your location is collected once during review to confirm '
-                    'your address and protect your account. Allow it in '
-                    'Settings, or continue without it.',
-        ),
-        actions: <Widget>[
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Not Now'),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Open Settings'),
-          ),
-        ],
-      ),
+    return showIosPermissionPrompt(
+      context,
+      title: serviceDisabled
+          ? 'Location Services Are Off'
+          : 'Location Access Is Off',
+      message: serviceDisabled
+          ? 'Location Services is switched off on this device. Turn it on '
+                'in Settings to finish the location check, or continue '
+                'without it.'
+          : 'Your location is collected once during review to confirm '
+                'your address and protect your account. Allow it in '
+                'Settings, or continue without it.',
     );
-    return toSettings ?? false;
   }
 
   /// H5 域名（服务端可在启动后换址），拼相对跳转路径时使用。

@@ -8,6 +8,8 @@ abstract final class AppRoutes {
   static const certificationIdentityUpload = '/certification/identity/upload';
   static const certificationIdentityResult = '/certification/identity/result';
   static const certificationFace = '/certification/face';
+  static const personalInformation = '/certification/personal-information';
+  static const workInformation = '/certification/work-information';
   static const orders = '/orders';
   static const support = '/support';
   static const announcements = '/announcements';

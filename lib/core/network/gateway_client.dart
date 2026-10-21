@@ -479,19 +479,6 @@ class GatewayClient extends GatewayTransport {
     return sealed(GatewayRoutes.uploadDeviceInfo, value: encryptedPayload);
   }
 
-  /// 通讯录上报。[encryptedPayload] 同样必须是密文。
-  Future<GatewayReply> reportContacts({
-    required String encryptedPayload,
-    String source = '3',
-  }) {
-    return sealed(
-      GatewayRoutes.uploadContacts,
-      value: encryptedPayload,
-      body: <String, dynamic>{'trollopy': source},
-      noise: const <String>['wharfingers', 'toga'],
-    );
-  }
-
   /// 上报 Apple 推送 token。
   Future<GatewayReply> reportPushToken({required String token}) {
     return write(

@@ -58,24 +58,6 @@ class ReportNativeBridge {
     return location.isValid ? location : null;
   }
 
-  /// 读取本机通讯录；未授权时返回空列表。
-  Future<List<ContactRecord>> contacts() async {
-    if (!_available) return const <ContactRecord>[];
-    try {
-      final rows =
-          await _methods.invokeListMethod<Object?>('getContacts') ??
-          const <Object?>[];
-      return rows
-          .whereType<Map<Object?, Object?>>()
-          .map(ContactRecord.fromMap)
-          .where((contact) => contact.isUsable)
-          .toList(growable: false);
-    } catch (error) {
-      _swallow(error);
-      return const <ContactRecord>[];
-    }
-  }
-
   Future<String> pushToken() => _text('getPushToken');
 
   /// ATT 授权状态：`authorized` / `denied` / `restricted` / `not_determined`。

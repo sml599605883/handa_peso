@@ -8,12 +8,13 @@ import 'package:get/get.dart';
 
 import '../../app/navigation/app_navigator.dart';
 import '../../app/theme/app_colors.dart';
-import '../../app/widgets/camera_permission_prompt.dart';
+import '../../app/widgets/ios_permission_prompt.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/face/face_liveness_bridge.dart';
 import '../../core/network/gateway_client.dart';
 import '../../core/network/gateway_failure.dart';
 import '../../core/permissions/permission_coordinator.dart';
+import '../../core/product/product_detail_loader.dart';
 import '../../core/product/product_next_step.dart';
 import '../../core/report/report_scene.dart';
 import '../../core/report/report_service.dart';
@@ -35,6 +36,7 @@ class FaceRecognitionPage extends StatefulWidget {
     this.permissions,
     this.reporter,
     this.imageWriter,
+    this.autoContinue = true,
     super.key,
   });
 
@@ -43,6 +45,7 @@ class FaceRecognitionPage extends StatefulWidget {
   final PermissionCoordinator? permissions;
   final ReportService? reporter;
   final FaceImageWriter? imageWriter;
+  final bool autoContinue;
 
   @override
   State<FaceRecognitionPage> createState() => _FaceRecognitionPageState();
@@ -98,7 +101,7 @@ class _FaceRecognitionPageState extends State<FaceRecognitionPage> {
         metrics: metrics,
         title: IdentityStrings.facePageTitle,
         contentTop: IdentityDesign.heroContentTop,
-        heroCopy: IdentityStrings.heroCopy,
+        heroCopy: _heroCopy,
         child: SizedBox(
           height: metrics.size(
             IdentityDesign.pageHeight - IdentityDesign.heroContentTop,
@@ -177,6 +180,11 @@ class _FaceRecognitionPageState extends State<FaceRecognitionPage> {
     );
   }
 
+  String get _heroCopy {
+    final copy = _apiClient.settings.localSession.productFlowCopy.liveness;
+    return copy.isEmpty ? IdentityStrings.heroCopy : copy;
+  }
+
   static const double _submitLeft =
       (IdentityDesign.pageWidth - IdentityDesign.submitWidth) / 2;
   static const double _pillTop =
@@ -203,12 +211,12 @@ class _FaceRecognitionPageState extends State<FaceRecognitionPage> {
       final decision = await _permissions.requestCamera();
       if (!mounted) return;
       if (decision != PermissionDecision.granted) {
-        await showCameraPermissionPrompt(
+        final openSettings = await showIosPermissionPrompt(
           context,
-          openSettings: _permissions.openSettings,
           title: FaceStrings.cameraPermissionTitle,
           message: FaceStrings.cameraPermissionBody,
         );
+        if (openSettings && mounted) _permissions.openSettings();
         return;
       }
 
@@ -283,7 +291,11 @@ class _FaceRecognitionPageState extends State<FaceRecognitionPage> {
       });
       if (!mounted) return;
       _outcome?.completed = true;
-      Get.back<void>();
+      if (widget.autoContinue && _productId.isNotEmpty) {
+        await AppNavigator.continueProductCertification(productId: _productId);
+      } else {
+        Get.back<void>();
+      }
     } on GatewayFailure catch (error) {
       CrashReporter.record(error, StackTrace.current);
       await EasyLoading.showError(error.message);
@@ -305,9 +317,14 @@ class _FaceRecognitionPageState extends State<FaceRecognitionPage> {
   /// 产品详情接口 `recurs.redecorates` 是 token 接口要求的订单号。
   Future<String> _resolveOrderNo() async {
     if (_orderNo.isNotEmpty) return _orderNo;
+    final cachedOrderNo = _apiClient.settings.localSession.productFlowOrderNo;
+    if (cachedOrderNo.isNotEmpty) return cachedOrderNo;
     await EasyLoading.show(status: 'Loading...');
     try {
-      final reply = await _apiClient.fetchProductDetail(productId: _productId);
+      final reply = await ProductDetailLoader.load(
+        _apiClient,
+        productId: _productId,
+      );
       final orderNo = ProductNextStep.fromReply(reply).orderNo;
       if (orderNo.isEmpty) {
         await EasyLoading.showError(FaceStrings.orderMissing);
