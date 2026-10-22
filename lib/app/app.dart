@@ -9,7 +9,9 @@ import 'theme/app_colors.dart';
 import 'routes/app_routes.dart';
 import 'theme/app_theme.dart';
 import '../features/announcements/announcements_page.dart';
+import '../features/certification/bind_card_page.dart';
 import '../features/certification/certification_page.dart';
+import '../features/certification/emergency_contact_page.dart';
 import '../features/certification/face_recognition_page.dart';
 import '../features/certification/identity_result_page.dart';
 import '../features/certification/identity_type_page.dart';
@@ -18,6 +20,7 @@ import '../features/certification/personal_information_page.dart';
 import '../features/certification/work_information_page.dart';
 import '../features/calculator/loan_calculator_binding.dart';
 import '../features/calculator/loan_calculator_page.dart';
+import '../features/credit_review/credit_review_page.dart';
 import '../features/login/login_binding.dart';
 import '../features/login/login_page.dart';
 import '../features/main_shell/main_binding.dart';
@@ -92,6 +95,15 @@ class HandaPesoApp extends StatelessWidget {
         GetPage(
           name: AppRoutes.workInformation,
           page: () => const WorkInformationPage(),
+        ),
+        GetPage(
+          name: AppRoutes.emergencyContact,
+          page: () => const EmergencyContactPage(),
+        ),
+        GetPage(name: AppRoutes.bindCard, page: () => const BindCardPage()),
+        GetPage(
+          name: AppRoutes.creditReview,
+          page: () => const CreditReviewPage(),
         ),
         GetPage(name: AppRoutes.orders, page: () => const OrdersPage()),
         GetPage(name: AppRoutes.support, page: () => const SupportPage()),

@@ -1,6 +1,7 @@
 import CFNetwork
 import Flutter
 import Security
+import StoreKit
 import UIKit
 
 /// 原生桥接，向网关的签名公有参数暴露设备身份信息。
@@ -43,9 +44,25 @@ final class DeviceBridgeRegistrar: NSObject {
         ])
       case "getProxySettings":
         result(self.currentProxySettings())
+      case "requestAppReview":
+        self.requestReview()
+        result(nil)
       default:
         result(FlutterMethodNotImplemented)
       }
+    }
+  }
+
+  private func requestReview() {
+    DispatchQueue.main.async {
+      guard
+        let scene = UIApplication.shared.connectedScenes
+          .compactMap({ $0 as? UIWindowScene })
+          .first(where: { $0.activationState == .foregroundActive })
+      else {
+        return
+      }
+      SKStoreReviewController.requestReview(in: scene)
     }
   }
 

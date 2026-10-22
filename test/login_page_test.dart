@@ -1025,13 +1025,13 @@ void main() {
 
     // 接口文档「值映射 -> Scheme -> h5页面混淆」：域名取服务端下发，路径用混淆段。
     final controller = Get.find<LoginController>();
-    expect(controller.privacyUrl, 'http://web.test/#/Pederast');
-    expect(controller.termsUrl, 'http://web.test/#/Carbonate');
+    expect(controller.privacyUrl, 'http://web.test/#/AppraisesSolatia');
+    expect(controller.termsUrl, 'http://web.test/#/SclerizedLugingSonnetary');
 
     await tester.tapOnText(find.textRange.ofSubstring('Privacy Policy'));
     await tester.pumpAndSettle();
 
-    expect(webViewUrls, <String>['http://web.test/#/Pederast']);
+    expect(webViewUrls, <String>['http://web.test/#/AppraisesSolatia']);
     expect(webViewTitles, <String>['Privacy Policy']);
 
     Get.back<void>();
@@ -1040,7 +1040,7 @@ void main() {
     _tapAgreementSpan(tester, 'Terms of Service');
     await tester.pumpAndSettle();
 
-    expect(webViewUrls.last, 'http://web.test/#/Carbonate');
+    expect(webViewUrls.last, 'http://web.test/#/SclerizedLugingSonnetary');
     expect(webViewTitles.last, 'Terms of Service');
   });
 

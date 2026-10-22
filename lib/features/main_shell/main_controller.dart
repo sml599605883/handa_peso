@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/navigation/app_navigator.dart';
+import '../../app/navigation/h5_paths.dart';
 import '../../app/routes/app_routes.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/network/gateway_client.dart';
@@ -13,6 +15,8 @@ import '../../core/product/product_apply_outcome.dart';
 import '../../core/report/report_service.dart';
 import '../../core/session/local_session.dart';
 import '../home/home_data.dart';
+import '../home/home_popup_dialog.dart';
+import '../home/home_popup_models.dart';
 import '../loan_progress/loan_progress_item.dart';
 
 /// 用于主卡片行动号召（CTA）的埋点/会话标签。
@@ -43,7 +47,10 @@ class MainController extends GetxController with WidgetsBindingObserver {
     required this.gatewayClient,
     required this.localSession,
     PermissionCoordinator? permissionCoordinator,
-  }) : permissionCoordinator = permissionCoordinator ?? PermissionCoordinator();
+  }) : permissionCoordinator =
+           permissionCoordinator ?? PermissionCoordinator() {
+    AppNavigator.admissionHandler = applyNow;
+  }
 
   final GatewayClient gatewayClient;
   final LocalSession localSession;
@@ -60,6 +67,8 @@ class MainController extends GetxController with WidgetsBindingObserver {
 
   bool _loadedOnce = false;
   bool _openingBanner = false;
+  bool _openingCustomerService = false;
+  bool _showingPopup = false;
   bool _applying = false;
   bool _progressRequesting = false;
   bool _openingLogin = false;
@@ -85,6 +94,7 @@ class MainController extends GetxController with WidgetsBindingObserver {
 
   @override
   void onClose() {
+    AppNavigator.admissionHandler = null;
     WidgetsBinding.instance.removeObserver(this);
     super.onClose();
   }
@@ -117,6 +127,7 @@ class MainController extends GetxController with WidgetsBindingObserver {
     activeTab.value = index;
     homeOnScreen.value = index == _guestTabIndex;
     unawaited(_refreshVisibleTab());
+    if (index == 2) unawaited(_showScenePopup(2));
   }
 
   Future<bool> _hasSession() async =>
@@ -264,6 +275,7 @@ class MainController extends GetxController with WidgetsBindingObserver {
       final response = await gatewayClient.fetchHomeOverview();
       overviewData.value = HomeData.fromJson(response.payload);
       _loadedOnce = true;
+      unawaited(_showScenePopup(1));
     } on GatewayFailure catch (error) {
       overviewError.value = error.message;
       CrashReporter.record(error, StackTrace.current);
@@ -308,6 +320,73 @@ class MainController extends GetxController with WidgetsBindingObserver {
     }
   }
 
+  /// 首页与 Loan Tab 右上角的客服入口，统一打开 H5 客服中心。
+  Future<void> openCustomerService() async {
+    if (_openingCustomerService) return;
+    _openingCustomerService = true;
+    try {
+      await AppNavigator.openTarget(
+        H5Paths.customerService,
+        title: 'Customer service',
+      );
+    } catch (error) {
+      CrashReporter.record(error, StackTrace.current);
+      AppNavigator.showError('Unable to open customer service');
+    } finally {
+      _openingCustomerService = false;
+    }
+  }
+
+  /// 场景 1=首页，2=个人中心；接口失败或没有弹窗时直接跳过。
+  Future<void> _showScenePopup(int scene) async {
+    if (_showingPopup || !await _hasSession()) return;
+    if (Get.currentRoute != AppRoutes.main ||
+        activeTab.value != (scene == 1 ? 0 : 2)) {
+      return;
+    }
+
+    _showingPopup = true;
+    try {
+      final reply = await gatewayClient.fetchDialogConfig(scene: scene);
+      reply.orThrow();
+      final config = HomePopupConfig.fromReply(reply);
+      if (!config.shouldShow ||
+          isClosed ||
+          Get.currentRoute != AppRoutes.main ||
+          activeTab.value != (scene == 1 ? 0 : 2)) {
+        return;
+      }
+      await WidgetsBinding.instance.endOfFrame;
+      final context = Get.context;
+      if (context == null || !context.mounted) return;
+      final shouldOpen = await showHomePopup(context, config);
+      if (!shouldOpen || config.targetUrl.isEmpty) return;
+      await _openPopupTarget(config);
+    } catch (error) {
+      CrashReporter.record(error, StackTrace.current);
+    } finally {
+      _showingPopup = false;
+    }
+  }
+
+  Future<void> _openPopupTarget(HomePopupConfig config) async {
+    final target = config.targetUrl.trim();
+    if (target.isEmpty) return;
+    if (config.kind == HomePopupKind.appUpgrade) {
+      final uri = Uri.tryParse(target);
+      if (uri != null) {
+        try {
+          if (await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+            return;
+          }
+        } catch (_) {
+          // HTTP 更新链接退回内置 WebView。
+        }
+      }
+    }
+    await AppNavigator.openTarget(target, title: 'Offer');
+  }
+
   /// 点击首页大卡 / 推荐卡：先过登录门禁，再走准入接口（文档「点击申请」）。
   ///
   /// 与其它支线一致——跳转目标由服务端决定：准入失败会下发 H5 错误页，需要
@@ -317,7 +396,7 @@ class MainController extends GetxController with WidgetsBindingObserver {
   ///
   /// 走准入之前先要一次定位权限：风控要看这一次申请发生时的位置，用户拒绝也
   /// 不硬拦（取消二次说明后照常申请，与其它支线同款）。
-  Future<void> applyNow(String productId) async {
+  Future<void> applyNow(String productId, {bool requestLocation = true}) async {
     final appliedProductId = productId.trim().isEmpty
         ? _homeApplyProductId
         : productId.trim();
@@ -331,7 +410,7 @@ class MainController extends GetxController with WidgetsBindingObserver {
       if (!await AppNavigator.requireSession(redirect: appliedProductId)) {
         return;
       }
-      if (!await _ensureLocationAccess()) return;
+      if (requestLocation && !await _ensureLocationAccess()) return;
       // 转圈只罩住这次请求：提示与转圈共用同一个浮层，请求一结束就收起，
       // 后面的提示与跳转才不会被它关掉。
       final ProductApplyOutcome outcome;
@@ -350,7 +429,7 @@ class MainController extends GetxController with WidgetsBindingObserver {
       }
 
       if (outcome.hasTarget) {
-        await AppNavigator.openTarget(outcome.target);
+        unawaited(_dispatchApplyTarget(outcome.target, appliedProductId));
         return;
       }
       if (!outcome.isAdmitted) {
@@ -371,13 +450,25 @@ class MainController extends GetxController with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _dispatchApplyTarget(String target, String productId) async {
+    try {
+      await AppNavigator.openTarget(
+        target,
+        cleanWorkflowForWeb: true,
+        fallbackProductId: productId,
+      );
+    } catch (error) {
+      CrashReporter.record(error, StackTrace.current);
+      AppNavigator.showError(FailureMessage.describe(error));
+    }
+  }
+
   /// 服务端没下发跳转地址时的兜底入口。
   Future<void> _continueApply(String productId) async {
-    if (await localSession.readCertified()) {
-      await AppNavigator.toCalculator();
-      return;
-    }
-    await AppNavigator.toCertification(productId: productId);
+    await AppNavigator.continueProductCertification(
+      productId: productId,
+      allowIdentity: true,
+    );
   }
 
   /// 申请前的定位准入：拿到授权就继续，拿不到权限也不硬拦。

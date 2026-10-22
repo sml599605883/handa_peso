@@ -29,6 +29,9 @@ Map<String, dynamic> _detailPayload() => <String, dynamic>{
   'recurs': <String, dynamic>{
     'dependable': '1000460',
     'redecorates': 'ORDER-1000460',
+    'luciferins': '60000',
+    'splashiest': '91',
+    'curb': 1,
   },
   'azurites': <String, dynamic>{
     ProductStepCopy.identityField: 'Upload the new identity copy',
@@ -99,6 +102,9 @@ void main() {
     );
 
     expect(snapshot.orderNo, 'ORDER-1000460');
+    expect(snapshot.amount, '60000');
+    expect(snapshot.term, '91');
+    expect(snapshot.termUnit, '1');
     expect(snapshot.copy.identity, 'Upload the new identity copy');
     expect(snapshot.copy.identityConfirmation, 'Confirm the new identity copy');
     expect(snapshot.copy.liveness, 'Complete the new face copy');

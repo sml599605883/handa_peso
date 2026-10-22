@@ -6,18 +6,31 @@ import '../network/gateway_reply.dart';
 /// `azurites` 是接口文档登记的各认证页顶部文案容器；每个页面只认自己的字段，
 /// 不能用相邻页面的文案兜底。订单号来自产品信息 `recurs.redecorates`。
 class ProductDetailSnapshot {
-  const ProductDetailSnapshot({required this.copy, required this.orderNo});
+  const ProductDetailSnapshot({
+    required this.copy,
+    required this.orderNo,
+    required this.amount,
+    required this.term,
+    required this.termUnit,
+  });
 
   factory ProductDetailSnapshot.fromReply(GatewayReply reply) {
     final payload = reply.payload;
+    final order = payload.mapOf('recurs');
     return ProductDetailSnapshot(
       copy: ProductStepCopy.fromJson(payload.mapOf(_copyContainer)),
-      orderNo: payload.mapOf('recurs').stringValue('redecorates').trim(),
+      orderNo: order.stringValue('redecorates').trim(),
+      amount: order.stringValue('luciferins').trim(),
+      term: order.stringValue('splashiest').trim(),
+      termUnit: order.stringValue('curb').trim(),
     );
   }
 
   final ProductStepCopy copy;
   final String orderNo;
+  final String amount;
+  final String term;
+  final String termUnit;
 
   static const _copyContainer = 'azurites';
 }

@@ -195,6 +195,46 @@ String _progressBody() {
   ]);
 }
 
+String _popupBody({required bool visible}) {
+  return jsonEncode(<String, dynamic>{
+    'unaccepted': 0,
+    'unstably': 'success',
+    'indulgences': <String, dynamic>{
+      'trollopy': visible ? 3 : 0,
+      'revetting': visible
+          ? <String, dynamic>{
+              'delinquency': 'http://example.test/popup.png',
+              'tidewaters': 'http://example.test/popup-target',
+            }
+          : null,
+    },
+  });
+}
+
+String _detailWithIdentityTask() {
+  return jsonEncode(<String, dynamic>{
+    'unaccepted': 0,
+    'unstably': 'success',
+    'indulgences': <String, dynamic>{
+      'murdering': 200,
+      'recurs': <String, dynamic>{
+        'dependable': 'main',
+        'redecorates': 'ORDER-1',
+        'luciferins': '50000',
+        'splashiest': '180',
+        'curb': 1,
+      },
+      'thurl': <Map<String, dynamic>>[
+        <String, dynamic>{
+          'demount': 'public',
+          'uppropped': 0,
+          'gesticulating': 1,
+        },
+      ],
+    },
+  });
+}
+
 /// 抓包自测试网关的模块令牌与字段：`TophBacks`(Banner)、`Jailbirds`(大卡位)、
 /// `Broodiest`(滚动广告)、`PeriplasmAddition`(借款进度卡片，游客为空)。
 /// 卡位 Logo 留空，避免 widget 测试去加载网络图片；其余字段与网关一致。
@@ -360,8 +400,19 @@ Future<void> _pumpShell(
               const Scaffold(body: Center(child: Text('certification'))),
         ),
         GetPage<void>(
+          name: AppRoutes.certificationIdentity,
+          page: () => const Scaffold(
+            body: Center(child: Text('identity verification')),
+          ),
+        ),
+        GetPage<void>(
           name: AppRoutes.calculator,
           page: () => const Scaffold(body: Center(child: Text('calculator'))),
+        ),
+        GetPage<void>(
+          name: AppRoutes.creditReview,
+          page: () =>
+              const Scaffold(body: Center(child: Text('credit review'))),
         ),
         GetPage<void>(
           name: AppRoutes.account,
@@ -669,12 +720,11 @@ void main() {
       expect(Get.currentRoute, AppRoutes.orders);
     });
 
-    testWidgets('Banner 下发还没有落地页的深链时不跳转', (tester) async {
+    testWidgets('Banner 下发重新授信深链时打开等待授信页', (tester) async {
       final adapter = _StubAdapter(
         (options) async => ResponseBody.fromString(
           _bannerBody(<Map<String, dynamic>>[
-            // 重新授信（`Herbivory`）当前版本还没有原生落地页。
-            _bannerItem(5, link: 'ph://handa-peso/ios/Herbivory'),
+            _bannerItem(5, link: 'ph://handa-peso/ios/Herbivory?cotype=main'),
           ]),
           200,
           headers: _jsonHeaders,
@@ -685,13 +735,9 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('home-banner-5')));
       await tester.pumpAndSettle();
 
-      expect(find.text('Unable to open link'), findsOneWidget);
-      expect(Get.currentRoute, AppRoutes.main);
+      expect(find.text('credit review'), findsOneWidget);
+      expect(Get.currentRoute, AppRoutes.creditReview);
       expect(find.text('webview'), findsNothing);
-
-      // 等错误提示的自动消失计时器跑完，避免测试结束时留下未完成的定时器。
-      await tester.pump(const Duration(seconds: 3));
-      await tester.pumpAndSettle();
     });
 
     testWidgets('Banner 下的设置深链打开账号页', (tester) async {
@@ -893,6 +939,23 @@ void main() {
       expect(adapter.applyCalls, 1);
     });
 
+    testWidgets('准入跳等待授信页后立即释放防重复锁', (tester) async {
+      final adapter = _adapterWithApply(
+        _applyBody(target: 'ph://handa-peso/ios/Herbivory?cotype=main'),
+      );
+      await _pumpLoggedIn(tester, adapter);
+      final controller = Get.find<MainController>();
+
+      unawaited(controller.applyNow('main'));
+      await tester.pumpAndSettle();
+      expect(Get.currentRoute, AppRoutes.creditReview);
+      expect(adapter.applyCalls, 1);
+
+      unawaited(controller.applyNow('main'));
+      await tester.pumpAndSettle();
+      expect(adapter.applyCalls, 2);
+    });
+
     testWidgets('准入失败且没有跳转地址时提示服务端文案', (tester) async {
       final adapter = _adapterWithApply(
         _applyBody(code: 505, message: 'Not eligible for this product'),
@@ -911,17 +974,83 @@ void main() {
       await tester.pumpAndSettle();
     });
 
-    testWidgets('准入通过但没有跳转地址时按本地认证状态继续', (tester) async {
-      final adapter = _adapterWithApply(_applyBody());
+    testWidgets('准入通过但没有跳转地址时按产品详情进入认证流程', (tester) async {
+      final adapter = _StubAdapter((options) async {
+        final url = options.uri.toString();
+        final body = url.contains('legongs')
+            ? _applyBody()
+            : url.contains('shinning')
+            ? _detailWithIdentityTask()
+            : url.contains('counterchecked')
+            ? _popupBody(visible: false)
+            : _plainBody();
+        return ResponseBody.fromString(body, 200, headers: _jsonHeaders);
+      });
       await _pumpLoggedIn(tester, adapter);
 
       await tester.tapAt(const Offset(180, 200));
       await tester.pumpAndSettle();
 
       expect(adapter.applyCalls, 1);
-      expect(Get.currentRoute, AppRoutes.certification);
-      expect(find.text('certification'), findsOneWidget);
+      expect(Get.currentRoute, AppRoutes.certificationIdentity);
+      expect(find.text('identity verification'), findsOneWidget);
     });
+  });
+
+  group('服务端弹窗', () {
+    testWidgets('首页营销弹窗点击后进入 WebView', (tester) async {
+      final adapter = _StubAdapter((options) async {
+        final body = options.uri.toString().contains('counterchecked')
+            ? _popupBody(visible: true)
+            : _plainBody();
+        return ResponseBody.fromString(body, 200, headers: _jsonHeaders);
+      });
+      await _pumpLoggedIn(tester, adapter);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('home-popup-marketing')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('home-popup-marketing')));
+      await tester.pumpAndSettle();
+
+      expect(Get.currentRoute, AppRoutes.webView);
+      expect(find.text('webview'), findsOneWidget);
+    });
+
+    testWidgets('个人中心使用 scene=2 拉取营销弹窗', (tester) async {
+      final adapter = _StubAdapter((options) async {
+        final body = options.uri.toString().contains('counterchecked')
+            ? _popupBody(
+                visible: options.uri.queryParameters['disobliges'] == '2',
+              )
+            : _plainBody();
+        return ResponseBody.fromString(body, 200, headers: _jsonHeaders);
+      });
+      await _pumpLoggedIn(tester, adapter);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('tab-mine')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('home-popup-marketing')), findsOneWidget);
+      expect(
+        adapter.urls.where((url) => url.contains('disobliges=2')),
+        hasLength(1),
+      );
+    });
+  });
+
+  testWidgets('首页右上角客服入口进入客服 WebView', (tester) async {
+    final adapter = _StubAdapter(
+      (options) async =>
+          ResponseBody.fromString(_plainBody(), 200, headers: _jsonHeaders),
+    );
+    await _pumpLoggedIn(tester, adapter);
+
+    await tester.tap(find.byKey(const Key('home-customer-service')));
+    await tester.pumpAndSettle();
+
+    expect(Get.currentRoute, AppRoutes.webView);
+    expect(find.text('webview'), findsOneWidget);
   });
 
   group('推荐卡点击', () {

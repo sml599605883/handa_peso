@@ -125,6 +125,18 @@ class PlatformBridge {
     return payload == null ? null : ProxyEndpoint.fromMap(payload);
   }
 
+  /// 由系统决定是否展示应用评分卡片；原生不可用时静默跳过。
+  Future<void> requestAppReview() async {
+    if (!_available) return;
+    try {
+      await _methods.invokeMethod<void>('requestAppReview');
+    } on MissingPluginException {
+      return;
+    } on PlatformException {
+      return;
+    }
+  }
+
   /// 方法名同样是 Swift 侧的固定契约；任何平台侧异常都收敛成 `null`。
   Future<_Payload?> _call(String method) async {
     if (!_available) return null;

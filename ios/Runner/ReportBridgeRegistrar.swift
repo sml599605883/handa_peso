@@ -26,6 +26,7 @@ final class ReportBridgeRegistrar: NSObject, FlutterStreamHandler, CLLocationMan
 
   private var eventSink: FlutterEventSink?
   private var pushToken = ""
+  private var queuedNotificationTargets: [String] = []
   private var locationManager: CLLocationManager?
   private var locationResult: FlutterResult?
   private var locationPermissionResult: FlutterResult?
@@ -82,6 +83,10 @@ final class ReportBridgeRegistrar: NSObject, FlutterStreamHandler, CLLocationMan
     if !pushToken.isEmpty {
       events(["type": "push_token", "token": pushToken])
     }
+    while !queuedNotificationTargets.isEmpty {
+      let target = queuedNotificationTargets.removeFirst()
+      events(["type": "push_route", "url": target])
+    }
     return nil
   }
 
@@ -96,6 +101,44 @@ final class ReportBridgeRegistrar: NSObject, FlutterStreamHandler, CLLocationMan
     pushToken = normalized
     guard !normalized.isEmpty else { return }
     eventSink?(["type": "push_token", "token": normalized])
+  }
+
+  /// 读取通知里的跳转地址；Dart 尚未监听时先缓存，订阅后按顺序补发。
+  @discardableResult
+  func acceptNotificationPayload(_ payload: [AnyHashable: Any]) -> Bool {
+    guard let target = notificationTarget(from: payload) else {
+      return false
+    }
+    if let eventSink {
+      eventSink(["type": "push_route", "url": target])
+    } else {
+      queuedNotificationTargets.append(target)
+    }
+    return true
+  }
+
+  private func notificationTarget(from payload: [AnyHashable: Any]) -> String? {
+    if let target = normalizedTarget(payload["url"]) {
+      return target
+    }
+    if let params = payload["params"] as? [AnyHashable: Any] {
+      return normalizedTarget(params["url"])
+    }
+    if
+      let params = payload["params"] as? String,
+      let data = params.data(using: .utf8),
+      let object = try? JSONSerialization.jsonObject(with: data),
+      let map = object as? [String: Any]
+    {
+      return normalizedTarget(map["url"])
+    }
+    return nil
+  }
+
+  private func normalizedTarget(_ value: Any?) -> String? {
+    guard let value = value as? String else { return nil }
+    let target = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    return target.isEmpty ? nil : target
   }
 
   // MARK: - 授权

@@ -3,11 +3,19 @@ import 'dart:async';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:get/get.dart';
 
+import '../../core/analytics/analytics_service.dart';
+import '../../core/json/json_utils.dart';
 import '../../core/network/gateway_client.dart';
 import '../../core/network/gateway_failure.dart';
+import '../../core/network/gateway_reply.dart';
 import '../../core/product/product_next_step.dart';
 import '../../core/product/product_detail_loader.dart';
+import '../../core/product/product_detail_snapshot.dart';
+import '../../core/report/report_scene.dart';
+import '../../core/report/report_service.dart';
 import '../../core/session/local_session.dart';
+import '../../features/certification/bind_card_models.dart';
+import '../../features/certification/emergency_contact_models.dart';
 import '../../features/certification/face_models.dart';
 import '../../features/certification/identity_models.dart';
 import '../../features/certification/personal_information_models.dart';
@@ -22,6 +30,7 @@ import '../widgets/app_hint.dart';
 /// 拦截（例如申请前要求资料已完善）。
 abstract final class AppNavigator {
   static void Function(int index)? mainTabSelector;
+  static Future<void> Function(String productId)? admissionHandler;
 
   /// 在当前页面之上推入登录路由，返回用户离开登录页时是否已有会话。
   ///
@@ -60,6 +69,14 @@ abstract final class AppNavigator {
 
   static Future<void>? toCalculator() =>
       Get.toNamed<void>(AppRoutes.calculator);
+
+  /// 等待授信页；轮询器为常驻对象，离开页面后仍会继续检查结果。
+  static Future<void> toCreditReview({required String productId}) async {
+    await _toTopLevelCertification<void>(
+      AppRoutes.creditReview,
+      arguments: <String, dynamic>{'productId': productId},
+    );
+  }
 
   /// 打开认证流程。[productId] 是用户申请的产品：认证过程中的风控埋点要带上它，
   /// 缺了产品维度的埋点数据无法归因到具体产品。
@@ -127,6 +144,43 @@ abstract final class AppNavigator {
     );
   }
 
+  /// 打开紧急联系人（设计稿 03-04），保存成功时由页面标记完成。
+  static Future<EmergencyContactFlowOutcome> toEmergencyContact({
+    String productId = '',
+  }) async {
+    final outcome = EmergencyContactFlowOutcome();
+    await _toTopLevelCertification<void>(
+      AppRoutes.emergencyContact,
+      arguments: <String, dynamic>{
+        'productId': productId,
+        EmergencyContactFlowOutcome.argumentKey: outcome,
+      },
+    );
+    return outcome;
+  }
+
+  /// 打开放款账户绑定页（设计稿 03-05）。
+  ///
+  /// `changeOrderNo` 非空时复用同一页面完成换绑，调用方从结果中读取新的
+  /// `bindId` 与订单跳转地址。
+  static Future<BindCardFlowOutcome> toBindCard({
+    String productId = '',
+    String orderNo = '',
+    String changeOrderNo = '',
+  }) async {
+    final outcome = BindCardFlowOutcome();
+    await _toTopLevelCertification<void>(
+      AppRoutes.bindCard,
+      arguments: <String, dynamic>{
+        'productId': productId,
+        'orderNo': orderNo,
+        'changeOrderNo': changeOrderNo,
+        BindCardFlowOutcome.argumentKey: outcome,
+      },
+    );
+    return outcome;
+  }
+
   static Future<PersonalInformationFlowOutcome> _toInformation({
     required String route,
     required String productId,
@@ -151,6 +205,9 @@ abstract final class AppNavigator {
     AppRoutes.certificationFace,
     AppRoutes.personalInformation,
     AppRoutes.workInformation,
+    AppRoutes.emergencyContact,
+    AppRoutes.bindCard,
+    AppRoutes.creditReview,
   };
 
   /// 打开顶层认证页并移除已有认证页，对齐 Peso Shield 的认证导航。
@@ -183,11 +240,27 @@ abstract final class AppNavigator {
   static Future<void>? toAnnouncements() =>
       Get.toNamed<void>(AppRoutes.announcements);
 
-  static Future<void>? toWebView({required String url, required String title}) {
-    return Get.toNamed<void>(
-      AppRoutes.webView,
-      arguments: {'url': url, 'title': title},
-    );
+  static Future<void>? toWebView({
+    required String url,
+    required String title,
+    bool replaceCurrent = false,
+    bool removeCertificationPages = false,
+  }) {
+    final arguments = <String, dynamic>{'url': url, 'title': title};
+    if (!replaceCurrent && !removeCertificationPages) {
+      return Get.toNamed<void>(AppRoutes.webView, arguments: arguments);
+    }
+    final navigator = Get.key.currentState;
+    if (navigator == null) return null;
+    // 同一命名路由再次 offNamed 可能被 GetX 当作原地复用，参数不会换。
+    // 显式移除来源 WebView 后再推入目标地址，确保只保留一个新的 H5。
+    return navigator.pushNamedAndRemoveUntil<void>(AppRoutes.webView, (route) {
+      final name = route.settings.name;
+      return name != AppRoutes.webView &&
+          !(removeCertificationPages &&
+              name != null &&
+              _certificationRoutes.contains(name));
+    }, arguments: arguments);
   }
 
   /// 打开服务端下发的跳转地址：Banner 落地页、进度卡片按钮与订单详情都用它。
@@ -203,12 +276,27 @@ abstract final class AppNavigator {
   static Future<void> openTarget(
     String target, {
     String title = 'Activity',
+    bool fromPush = false,
+    bool cleanWorkflowForWeb = false,
+    String fallbackProductId = '',
   }) async {
     final link = target.trim();
     if (link.isEmpty) return;
 
     if (link.startsWith('/')) {
-      await toWebView(url: H5Paths.resolve(_webOrigin(), link), title: title);
+      final currentRoute = Get.currentRoute;
+      await toWebView(
+        url: H5Paths.resolve(_webOrigin(), link),
+        title: title,
+        replaceCurrent:
+            cleanWorkflowForWeb &&
+            (currentRoute == AppRoutes.webView ||
+                currentRoute == AppRoutes.creditReview),
+        removeCertificationPages:
+            cleanWorkflowForWeb &&
+            (currentRoute == AppRoutes.bindCard ||
+                currentRoute == AppRoutes.creditReview),
+      );
       return;
     }
 
@@ -219,14 +307,39 @@ abstract final class AppNavigator {
         showError(_unopenableLink);
         return;
       }
-      await toWebView(url: link, title: title);
+      final currentRoute = Get.currentRoute;
+      await toWebView(
+        url: link,
+        title: title,
+        replaceCurrent:
+            cleanWorkflowForWeb &&
+            (currentRoute == AppRoutes.webView ||
+                currentRoute == AppRoutes.creditReview),
+        removeCertificationPages:
+            cleanWorkflowForWeb &&
+            (currentRoute == AppRoutes.bindCard ||
+                currentRoute == AppRoutes.creditReview),
+      );
       return;
     }
 
     final segments = uri?.pathSegments ?? const <String>[];
-    if (scheme == 'ph' &&
+    if (scheme == 'gold' &&
         uri != null &&
-        uri.host == _schemeHost &&
+        uri.host == 'pocket' &&
+        segments.isNotEmpty &&
+        segments.last == 'recredit') {
+      final productId = _productIdOf(uri, fallbackProductId);
+      if (productId.isEmpty) {
+        showError(_unopenableLink);
+        return;
+      }
+      await toCreditReview(productId: productId);
+      return;
+    }
+    final isCurrentScheme = scheme == 'ph' && uri?.host == _schemeHost;
+    if (isCurrentScheme &&
+        uri != null &&
         segments.length == 2 &&
         segments.first == 'ios') {
       switch (segments.last) {
@@ -234,7 +347,11 @@ abstract final class AppNavigator {
           switchMainTab(0);
           return;
         case _BannerTarget.login:
-          await toLogin();
+          if (fromPush) {
+            await redirectToLoginAfterSessionExpiry();
+          } else {
+            await toLogin();
+          }
           return;
         case _BannerTarget.order:
           await toOrders(status: _orderStatusOf(uri));
@@ -243,7 +360,13 @@ abstract final class AppNavigator {
           await toAccount();
           return;
         case _BannerTarget.productDetail:
-          await _openProductDetail(uri);
+          await _openProductDetail(uri, fallbackProductId);
+          return;
+        case _BannerTarget.admission:
+          await _openAdmission(uri, fallbackProductId);
+          return;
+        case _BannerTarget.recredit:
+          await _openRecredit(uri, fallbackProductId);
           return;
       }
     }
@@ -255,10 +378,13 @@ abstract final class AppNavigator {
   /// （`ph://handa-peso/ios/Sputterers?cotype=1`）。
   ///
   /// 深链只给产品 ID，究竟该走哪一步认证由产品详情接口里的认证项列表决定，
-  /// 客户端不自行判断。当前版本已按服务端顺序落地证件、人脸、个人信息与工作
-  /// 信息；其余步骤还没有设计稿对应页面时明确提示，而不是静默失败。
-  static Future<void> _openProductDetail(Uri uri) async {
-    final productId = _productIdOf(uri);
+  /// 客户端不自行判断。当前版本已按服务端顺序落地证件、人脸、个人信息、工作
+  /// 信息、紧急联系人与放款账户；其余步骤没有设计稿对应页面时明确提示。
+  static Future<void> _openProductDetail(
+    Uri uri,
+    String fallbackProductId,
+  ) async {
+    final productId = _productIdOf(uri, fallbackProductId);
     final client = Get.isRegistered<GatewayClient>()
         ? Get.find<GatewayClient>()
         : null;
@@ -273,12 +399,32 @@ abstract final class AppNavigator {
     );
   }
 
+  static Future<void> _openAdmission(Uri uri, String fallbackProductId) async {
+    final productId = _productIdOf(uri, fallbackProductId);
+    final starter = admissionHandler;
+    if (productId.isEmpty || starter == null) {
+      showError(_unopenableLink);
+      return;
+    }
+    await starter(productId);
+  }
+
+  static Future<void> _openRecredit(Uri uri, String fallbackProductId) async {
+    final productId = _productIdOf(uri, fallbackProductId);
+    if (productId.isEmpty) {
+      showError(_unopenableLink);
+      return;
+    }
+    await toCreditReview(productId: productId);
+  }
+
   /// 当前认证页保存成功后刷新产品详情并打开下一项认证。
   ///
   /// 新认证页使用顶层导航替换旧认证页，因此从当前成功页直接切到下一项，
   /// 不会先回首页或认证列表。
   static Future<void> continueProductCertification({
     required String productId,
+    bool allowIdentity = false,
   }) async {
     final client = Get.isRegistered<GatewayClient>()
         ? Get.find<GatewayClient>()
@@ -290,7 +436,7 @@ abstract final class AppNavigator {
     await _openNextProductStep(
       productId: productId,
       client: client,
-      allowIdentity: false,
+      allowIdentity: allowIdentity,
     );
   }
 
@@ -305,10 +451,24 @@ abstract final class AppNavigator {
   }) async {
     await showLoading();
     try {
-      final step = ProductNextStep.fromReply(
-        await ProductDetailLoader.load(client, productId: productId),
+      final detail = await ProductDetailLoader.load(
+        client,
+        productId: productId,
       );
+      final step = ProductNextStep.fromReply(detail);
       await dismissLoading();
+      if (step.taskType.isEmpty) {
+        if (step.hasIncompleteTask) {
+          showError('Complete the previous verification step first');
+          return;
+        }
+        await _openLoanConfirmation(
+          productId: productId,
+          client: client,
+          detail: detail,
+        );
+        return;
+      }
       if (step.isIdentity) {
         if (!allowIdentity) return;
         unawaited(toIdentityVerification(productId: productId));
@@ -328,6 +488,14 @@ abstract final class AppNavigator {
         unawaited(toWorkInformation(productId: productId));
         return;
       }
+      if (step.isEmergency) {
+        unawaited(toEmergencyContact(productId: productId));
+        return;
+      }
+      if (step.isBank) {
+        unawaited(toBindCard(productId: productId, orderNo: step.orderNo));
+        return;
+      }
       // 文档「产品详情认证项目列表」里登记过、但本版本还没有落地页的步骤，按步骤名
       // 明确提示；完全没登记过的取值说明协议对不上，退回统一的「打不开」。
       final label = step.label;
@@ -343,17 +511,95 @@ abstract final class AppNavigator {
     }
   }
 
+  static bool _openingLoanConfirmation = false;
+
+  /// 认证全部完成后提交订单，服务端返回确认用款页地址后再进入 H5。
+  ///
+  /// 订单提交成功后同时移除认证页与来源 WebView，确保退出确认页回到首页。
+  static Future<void> _openLoanConfirmation({
+    required String productId,
+    required GatewayClient client,
+    required GatewayReply detail,
+  }) async {
+    if (_openingLoanConfirmation) return;
+    _openingLoanConfirmation = true;
+    try {
+      final snapshot = ProductDetailSnapshot.fromReply(detail);
+      if (snapshot.orderNo.isEmpty ||
+          snapshot.amount.isEmpty ||
+          snapshot.term.isEmpty ||
+          snapshot.termUnit.isEmpty) {
+        showError('Loan information is incomplete');
+        return;
+      }
+
+      final startedAt = ReportService.nowSeconds();
+      await showLoading();
+      final reply = await client.pushOrder(
+        orderNo: snapshot.orderNo,
+        amount: snapshot.amount,
+        term: snapshot.term,
+        termUnit: snapshot.termUnit,
+      );
+      reply.orThrow();
+      await dismissLoading();
+
+      final target = reply.payload.stringValue('tidewaters').trim();
+      if (target.isEmpty) {
+        showError('Loan confirmation link is unavailable');
+        return;
+      }
+
+      final reporter = Get.isRegistered<ReportService>()
+          ? Get.find<ReportService>()
+          : null;
+      unawaited(
+        reporter?.reportScene(
+              scene: ReportScene.applyStarted,
+              productId: productId,
+              orderNo: snapshot.orderNo,
+              startedAtSeconds: startedAt,
+            ) ??
+            Future<void>.value(),
+      );
+      await toWebView(
+        url: target,
+        title: 'Loan confirmation',
+        replaceCurrent: true,
+        removeCertificationPages: true,
+      );
+    } on GatewayFailure catch (error) {
+      await dismissLoading();
+      showError(error.message);
+    } catch (error) {
+      await dismissLoading();
+      CrashReporter.record(error, StackTrace.current);
+      showError(FailureMessage.describe(error));
+    } finally {
+      _openingLoanConfirmation = false;
+    }
+  }
+
   /// 深链里的产品 ID。文档「产品详情」登记的参数名是 `cotype`；另外两个是通用
   /// 写法，服务端换名时不至于整条链路打不开。
-  static String _productIdOf(Uri uri) {
-    for (final key in const <String>['cotype', 'productId', 'product_id']) {
+  static String _productIdOf(Uri uri, [String fallbackProductId = '']) {
+    for (final key in const <String>[
+      'cotype',
+      'productId',
+      'product_id',
+      'drippier',
+      'transported',
+      'knife',
+      'bombarder',
+    ]) {
       final value = uri.queryParameters[key];
       if (value != null && value.trim().isNotEmpty) return value.trim();
     }
-    return '';
+    return fallbackProductId.trim();
   }
 
   static const String _schemeHost = 'handa-peso';
+
   static const String _unopenableLink = 'Unable to open link';
 
   /// 订单列表深链携带筛选状态的参数名。
@@ -444,14 +690,14 @@ abstract final class AppNavigator {
 
 /// Banner 深链里的应用页面混淆段（接口文档「值映射 -> Scheme」）。
 ///
-/// 产品详情（`Sputterers`）没有独立页面：它的深链只带产品 ID，进来之后由产品详情
-/// 接口决定下一步，因此仍归在导航层。文档中同样登记过的重新授信（`Herbivory`）与
-/// 准入（`PeacefulnessesQuesters`）还没有对应的原生页面，命中时会走「打不开」提示，
-/// 不会被误当成 H5 打开。
+/// 产品详情、重新授信和准入这三类深链都只带产品 ID；进入后分别交由产品详情
+/// 流程、重新授信检查或统一准入入口继续，不把它们误当成 H5 打开。
 abstract final class _BannerTarget {
   static const home = 'SoulsClodpole';
   static const setting = 'HelistopSaintliest';
   static const login = 'Disaccording';
   static const order = 'Brusker';
   static const productDetail = 'Sputterers';
+  static const recredit = 'Herbivory';
+  static const admission = 'PeacefulnessesQuesters';
 }

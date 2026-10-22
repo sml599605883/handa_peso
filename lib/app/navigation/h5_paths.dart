@@ -5,13 +5,17 @@
 /// 所以这里只维护混淆段，不写死域名。
 abstract final class H5Paths {
   /// 客服中心。
-  static const customerService = '/#/PonderersCollotypies';
+  static const customerService = '/#/Toolcutting';
 
   /// 隐私协议。
-  static const privacyPolicy = '/#/Pederast';
+  static const privacyPolicy = '/#/AppraisesSolatia';
 
   /// 借款协议。
-  static const agreement = '/#/Carbonate';
+  static const agreement = '/#/SclerizedLugingSonnetary';
+
+  /// 待确认用款页；返回前需要按该页面识别挽留弹窗。
+  static const loanConfirmationSegment = 'OIUCatrionaMonodrame';
+  static const loanConfirmation = '/#/$loanConfirmationSegment';
 
   /// 把登记的混淆段拼到 H5 域名上；域名末尾多余的 `/` 会被去掉。
   static String resolve(String baseUrl, String path) {

@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../../app/navigation/app_navigator.dart';
 import '../../app/navigation/app_route_observer.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
+import '../../core/push/push_route_coordinator.dart';
 import '../home/home_page.dart';
 import '../loan_progress/loan_progress_page.dart';
 import '../mine/mine_page.dart';
@@ -37,23 +39,67 @@ class MainShellPage extends GetView<MainController> {
 
   @override
   Widget build(BuildContext context) {
-    return _RouteReturnListener(
-      child: Obx(() {
-        final tabIndex = controller.activeTab.value;
-        return Scaffold(
-          body: IndexedStack(
-            index: tabIndex,
-            children: const [HomePage(), LoanProgressPage(), MinePage()],
-          ),
-          bottomNavigationBar: _ShellNavigationBar(
-            entries: _tabs,
-            activeIndex: tabIndex,
-            onSelect: controller.switchTab,
-          ),
-        );
-      }),
+    return _PushRouteHost(
+      child: _RouteReturnListener(
+        child: Obx(() {
+          final tabIndex = controller.activeTab.value;
+          return Scaffold(
+            body: IndexedStack(
+              index: tabIndex,
+              children: const [HomePage(), LoanProgressPage(), MinePage()],
+            ),
+            bottomNavigationBar: _ShellNavigationBar(
+              entries: _tabs,
+              activeIndex: tabIndex,
+              onSelect: controller.switchTab,
+            ),
+          );
+        }),
+      ),
     );
   }
+}
+
+class _PushRouteHost extends StatefulWidget {
+  const _PushRouteHost({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_PushRouteHost> createState() => _PushRouteHostState();
+}
+
+class _PushRouteHostState extends State<_PushRouteHost> {
+  PushRouteCoordinator? _coordinator;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!Get.isRegistered<PushRouteCoordinator>()) return;
+    _coordinator = Get.find<PushRouteCoordinator>();
+    _coordinator!.start();
+    _coordinator!.attach(_openRoute);
+  }
+
+  @override
+  void dispose() {
+    _coordinator?.attach(null);
+    super.dispose();
+  }
+
+  Future<void> _openRoute(String target) async {
+    final context = Get.context;
+    if (!mounted || context == null || !context.mounted) return;
+    await AppNavigator.openTarget(
+      target,
+      title: 'Notification',
+      fromPush: true,
+      cleanWorkflowForWeb: true,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 /// 订阅全局路由观察者：从二级页面返回外壳时，让当前 Tab 重新拉一次数据。

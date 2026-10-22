@@ -66,8 +66,13 @@ String _productDetailBody(List<Map<String, dynamic>> verify) =>
     '{"unaccepted":"0","unstably":"success","indulgences":{'
     '"murdering":200,'
     '"recurs":{"dependable":"1000460","dullard":"Handa Peso",'
-    '"redecorates":"ORDER-1000460"},'
+    '"redecorates":"ORDER-1000460","luciferins":"60000",'
+    '"splashiest":"91","curb":1},'
     '"thurl":${_json(verify)}}}';
+
+String _orderPushBody() =>
+    '{"unaccepted":"0","unstably":"success","indulgences":{'
+    '"tidewaters":"http://h5.test/#/OIUCatrionaMonodrame?drippier=1000460"}}';
 
 String _identityTypesBody() =>
     '{"unaccepted":"0","unstably":"success","indulgences":{'
@@ -117,6 +122,8 @@ class _StubAdapter implements HttpClientAdapter {
     final url = options.uri.toString();
     final body = url.contains('blockader')
         ? _identityTypesBody()
+        : url.contains('outeating')
+        ? _orderPushBody()
         : url.contains('shinning') && productDetailSequence.isNotEmpty
         ? productDetailSequence.removeAt(0)
         : productDetailBody;
@@ -177,6 +184,21 @@ void main() {
           GetPage<void>(
             name: AppRoutes.workInformation,
             page: () => const _WorkFlowProbe(),
+          ),
+          GetPage<void>(
+            name: AppRoutes.emergencyContact,
+            page: () => const _EmergencyContactProbe(),
+          ),
+          GetPage<void>(
+            name: AppRoutes.bindCard,
+            page: () => const _BindCardProbe(),
+          ),
+          GetPage<void>(
+            name: AppRoutes.webView,
+            page: () => _WebViewProbe(
+              url:
+                  '${Get.arguments is Map ? (Get.arguments as Map)['url'] : ''}',
+            ),
           ),
         ],
       ),
@@ -247,6 +269,53 @@ void main() {
     );
 
     expect(find.byType(IdentityTypePage), findsOneWidget);
+  });
+
+  testWidgets('旧 cash-alalay scheme 不再进入产品详情', (tester) async {
+    adapter = _StubAdapter(
+      _productDetailBody(<Map<String, dynamic>>[
+        _verifyItem('public', completed: 0),
+      ]),
+    );
+    Get.put<GatewayClient>(clientFor(adapter), permanent: true);
+    await pumpApp(tester);
+
+    unawaited(
+      AppNavigator.openTarget(
+        'ph://cash-alalay/ios/UnmimeographedOrnieCRRES?drippier=1000460',
+      ),
+    );
+    await pumpUntil(
+      tester,
+      () => find.text('Unable to open link').evaluate().isNotEmpty,
+    );
+
+    expect(adapter.where('shinning'), isEmpty);
+    expect(find.byType(IdentityTypePage), findsNothing);
+    expect(find.text('Unable to open link'), findsOneWidget);
+    await drainToast(tester);
+  });
+
+  testWidgets('认证全部完成后提交订单并进入确认用款 H5', (tester) async {
+    adapter = _StubAdapter(_productDetailBody(const <Map<String, dynamic>>[]));
+    Get.put<GatewayClient>(clientFor(adapter), permanent: true);
+    await pumpApp(tester);
+
+    unawaited(AppNavigator.continueProductCertification(productId: '1000460'));
+    await pumpUntil(
+      tester,
+      () => find.byType(_WebViewProbe).evaluate().isNotEmpty,
+    );
+
+    final order = adapter.where('outeating').single;
+    expect(order.fields['eelworm'], 'ORDER-1000460');
+    expect(order.fields['luciferins'], '60000');
+    expect(order.fields['splashiest'], '91');
+    expect(order.fields['curb'], '1');
+    expect(
+      find.text('http://h5.test/#/OIUCatrionaMonodrame?drippier=1000460'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('产品详情深链：下一步为人脸时进入人脸识别页', (tester) async {
@@ -327,6 +396,48 @@ void main() {
     expect(find.byType(IdentityTypePage), findsNothing);
   });
 
+  testWidgets('产品详情深链：下一步为紧急联系人时进入联系人页', (tester) async {
+    adapter = _StubAdapter(
+      _productDetailBody(<Map<String, dynamic>>[
+        _verifyItem('ext', completed: 0),
+      ]),
+    );
+    Get.put<GatewayClient>(clientFor(adapter), permanent: true);
+    await pumpApp(tester);
+
+    unawaited(
+      AppNavigator.openTarget('ph://handa-peso/ios/Sputterers?cotype=1000460'),
+    );
+    await pumpUntil(
+      tester,
+      () => find.byType(_EmergencyContactProbe).evaluate().isNotEmpty,
+    );
+
+    expect(find.byType(_EmergencyContactProbe), findsOneWidget);
+    expect(find.byType(IdentityTypePage), findsNothing);
+  });
+
+  testWidgets('产品详情深链：下一步为放款账户时进入绑卡页', (tester) async {
+    adapter = _StubAdapter(
+      _productDetailBody(<Map<String, dynamic>>[
+        _verifyItem('bank', completed: 0),
+      ]),
+    );
+    Get.put<GatewayClient>(clientFor(adapter), permanent: true);
+    await pumpApp(tester);
+
+    unawaited(
+      AppNavigator.openTarget('ph://handa-peso/ios/Sputterers?cotype=1000460'),
+    );
+    await pumpUntil(
+      tester,
+      () => find.byType(_BindCardProbe).evaluate().isNotEmpty,
+    );
+
+    expect(find.byType(_BindCardProbe), findsOneWidget);
+    expect(find.byType(IdentityTypePage), findsNothing);
+  });
+
   testWidgets('产品详情深链：证件保存成功后刷新下一步并自动进入人脸页', (tester) async {
     completeIdentityOnOpen = true;
     adapter = _StubAdapter(
@@ -388,6 +499,32 @@ class _WorkFlowProbe extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       const Scaffold(body: Center(child: Text('work flow')));
+}
+
+class _EmergencyContactProbe extends StatelessWidget {
+  const _EmergencyContactProbe();
+
+  @override
+  Widget build(BuildContext context) =>
+      const Scaffold(body: Center(child: Text('emergency contact flow')));
+}
+
+class _BindCardProbe extends StatelessWidget {
+  const _BindCardProbe();
+
+  @override
+  Widget build(BuildContext context) =>
+      const Scaffold(body: Center(child: Text('bind card flow')));
+}
+
+class _WebViewProbe extends StatelessWidget {
+  const _WebViewProbe({required this.url});
+
+  final String url;
+
+  @override
+  Widget build(BuildContext context) =>
+      Scaffold(body: Center(child: Text(url)));
 }
 
 class _CompletingIdentityPageState extends State<_CompletingIdentityPage> {

@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 
 import '../../app/theme/app_colors.dart';
 import '../../app/widgets/app_empty_state.dart';
+import '../home/customer_service_shortcut.dart';
 import '../main_shell/main_controller.dart';
 import 'loan_progress_card.dart';
 import 'loan_progress_item.dart';
@@ -83,6 +84,14 @@ class LoanProgressPage extends GetView<MainController> {
                     image: AssetImage('assets/loan_progress_header_dots.png'),
                     fit: BoxFit.fill,
                   ),
+                ),
+              ),
+              Positioned(
+                top: px(titleTop - 1),
+                right: px(20),
+                child: CustomerServiceShortcut(
+                  buttonKey: const Key('loan-customer-service'),
+                  onTap: controller.openCustomerService,
                 ),
               ),
               Column(

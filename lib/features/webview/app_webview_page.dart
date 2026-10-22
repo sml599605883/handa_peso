@@ -1,15 +1,91 @@
+import 'dart:async';
+import 'dart:collection';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:get/get.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../app/navigation/app_navigator.dart';
+import '../../app/navigation/h5_paths.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
 import '../../core/analytics/analytics_service.dart';
+import '../../core/client/platform_bridge.dart';
+import '../../core/json/json_utils.dart';
+import '../../core/network/gateway_client.dart';
+import '../../core/report/report_scene.dart';
+import '../../core/report/report_service.dart';
+import '../certification/identity_models.dart';
+import '../certification/widgets/identity_retention_dialog.dart';
+import 'h5_bridge.dart';
+import 'payout_account_models.dart';
+import 'payout_account_sheet.dart';
 
-/// 承载法律文书与内容页面。
+const String _legacyConfirmationPathSegment = 'AmalgamatorsMarqueterie';
+
+bool _isInlineScheme(String scheme) => switch (scheme.toLowerCase()) {
+  'http' || 'https' || 'about' || 'data' || 'javascript' || 'file' => true,
+  _ => false,
+};
+
+String confirmationProductIdFromH5Url(String source) {
+  final uri = Uri.tryParse(source.trim());
+  if (uri == null) return '';
+  final fragment = Uri.tryParse(uri.fragment);
+  final confirmation =
+      uri.pathSegments.contains(H5Paths.loanConfirmationSegment) ||
+      uri.pathSegments.contains(_legacyConfirmationPathSegment) ||
+      (fragment?.pathSegments.contains(H5Paths.loanConfirmationSegment) ??
+          false) ||
+      (fragment?.pathSegments.contains(_legacyConfirmationPathSegment) ??
+          false);
+  if (!confirmation) return '';
+
+  for (final key in const <String>[
+    'drippier',
+    'polarimetric',
+    'productId',
+    'cotype',
+    'transported',
+  ]) {
+    final direct = uri.queryParameters[key]?.trim() ?? '';
+    if (direct.isNotEmpty) return direct;
+    final nested = fragment?.queryParameters[key]?.trim() ?? '';
+    if (nested.isNotEmpty) return nested;
+  }
+  return '';
+}
+
+bool _isLoginTarget(String target) {
+  final uri = Uri.tryParse(target);
+  if (uri == null || uri.scheme != 'ph') return false;
+  return uri.pathSegments.length == 2 &&
+      uri.pathSegments.first == 'ios' &&
+      uri.pathSegments.last == 'Disaccording';
+}
+
+String _responseUrl(Map<String, dynamic> payload) {
+  for (final key in const <String>[
+    'url',
+    'flowerpot',
+    'proclises',
+    'antineoplastic',
+    'redirectUrl',
+  ]) {
+    final value = payload.stringValue(key).trim();
+    if (value.isNotEmpty) return value;
+  }
+  final list = payload.listValue('list');
+  return list.isEmpty ? '' : list.first?.toString().trim() ?? '';
+}
+
+/// 承载 H5 业务流程，并提供网页与原生之间的命令通道。
 ///
-/// 它有意*不*作为应用外壳：这里只展示静态/法律类内容，
-/// 以保证产品仍是一个原生应用。
+/// H5 负责具体页面展示；原生负责签名参数、登录态跳转、评分、订单重试与
+/// 换绑等网页无法独立完成的动作。页面本身只接受 http(s) 地址，防止服务端
+/// 配置异常时把 WebView 带入不可控内容。
 class AppWebViewPage extends StatefulWidget {
   const AppWebViewPage({super.key});
 
@@ -18,75 +94,515 @@ class AppWebViewPage extends StatefulWidget {
 }
 
 class _AppWebViewPageState extends State<AppWebViewPage> {
-  final _progress = 0.0.obs;
+  late final String _initialUrl;
+  late final String _fallbackTitle;
+  late final GatewayClient _gateway;
+  late final PlatformBridge _platform;
+  late final H5ActionDispatcher _dispatcher;
+
+  InAppWebViewController? _controller;
   String _title = 'Details';
-  String _url = '';
+  bool _loading = true;
   bool _failed = false;
+  bool _checkingRetention = false;
+  bool _backInFlight = false;
+  bool _replacingAccount = false;
+
+  Uri? get _initialUri {
+    final uri = Uri.tryParse(_initialUrl);
+    if (uri == null ||
+        (uri.scheme != 'http' && uri.scheme != 'https') ||
+        uri.host.isEmpty) {
+      return null;
+    }
+    return uri;
+  }
 
   @override
   void initState() {
     super.initState();
-    final args = Get.arguments;
-    if (args is Map) {
-      _url = args['url']?.toString() ?? '';
-      _title = args['title']?.toString() ?? 'Details';
+    final arguments = Get.arguments;
+    final values = arguments is Map
+        ? Map<String, dynamic>.from(arguments)
+        : const <String, dynamic>{};
+    _initialUrl = values['url']?.toString().trim() ?? '';
+    final title = values['title']?.toString().trim() ?? '';
+    _fallbackTitle = title.isEmpty ? 'Details' : title;
+    _title = _fallbackTitle;
+    _gateway = Get.find<GatewayClient>();
+    _platform = PlatformBridge();
+    _dispatcher = _createDispatcher();
+    AnalyticsService.logEvent('webview_open', <String, Object?>{
+      'host': _initialUri?.host ?? '',
+    });
+  }
+
+  H5ActionDispatcher _createDispatcher() {
+    return H5ActionDispatcher(
+      reportLoan:
+          ({required productId, required orderNo, required startedAtSeconds}) {
+            final reporter = Get.isRegistered<ReportService>()
+                ? Get.find<ReportService>()
+                : null;
+            return reporter?.reportScene(
+                  scene: ReportScene.applyFinished,
+                  productId: productId,
+                  orderNo: orderNo,
+                  startedAtSeconds: startedAtSeconds,
+                ) ??
+                Future<void>.value();
+          },
+      openWebPage: (url) async {
+        final uri = Uri.tryParse(url);
+        if (uri == null || !_isInlineScheme(uri.scheme) || uri.host.isEmpty) {
+          throw StateError('Invalid page URL');
+        }
+        await AppNavigator.toWebView(
+          url: url,
+          title: 'Details',
+          replaceCurrent: true,
+        );
+      },
+      openInternal: _openInternal,
+      openExternalApp: _launchExternal,
+      closePage: () async {
+        if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+      },
+      goHome: () async {
+        await AppNavigator.toMain();
+      },
+      requestReview: _platform.requestAppReview,
+      buildSignedQuery: _gateway.publicParametersFor,
+      retryLoan: _retryLoan,
+      replaceAccount: _replacePayoutAccount,
+      showLoading: AppNavigator.showLoading,
+      dismissLoading: AppNavigator.dismissLoading,
+      showError: (message) async => AppNavigator.showError(message),
+      nowSeconds: ReportService.nowSeconds,
+    );
+  }
+
+  Future<void> _openInternal(String target) async {
+    final previousSession = await _sessionMarker();
+    await AppNavigator.openTarget(target, title: _fallbackTitle);
+    if (!mounted || !_isLoginTarget(target)) return;
+    final currentSession = await _sessionMarker();
+    if (currentSession.isEmpty || currentSession == previousSession) return;
+    await _reload();
+  }
+
+  Future<String> _sessionMarker() async {
+    return _gateway.settings.localSession.readSessionId();
+  }
+
+  Future<bool> _launchExternal(Uri uri) async {
+    try {
+      if (!await canLaunchUrl(uri)) return false;
+      return await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      return false;
     }
-    AnalyticsService.logEvent('webview_open', {'title': _title});
+  }
+
+  Future<String> _retryLoan(String orderNo) async {
+    final reply = await _gateway.reorderExistingLoan(orderNo: orderNo);
+    reply.orThrow();
+    final target = _responseUrl(reply.payload);
+    if (target.isEmpty) throw StateError('Retry link is unavailable');
+    return target;
+  }
+
+  Future<void> _replacePayoutAccount({
+    required String productId,
+    required String orderNo,
+  }) async {
+    if (_replacingAccount) return;
+    _replacingAccount = true;
+    try {
+      await AppNavigator.showLoading();
+      final reply = await _gateway.fetchBoundCards(productId: productId);
+      reply.orThrow();
+      final catalog = PayoutAccountCatalog.fromReply(reply);
+      await AppNavigator.dismissLoading();
+      if (!mounted) return;
+
+      final choice = catalog.isEmpty
+          ? const NewPayoutAccount()
+          : await showPayoutAccountSheet(context, catalog);
+      if (!mounted || choice == null) return;
+
+      switch (choice) {
+        case ExistingPayoutAccount():
+          await AppNavigator.showLoading();
+          try {
+            final changed = await _gateway.switchPayoutCard(
+              orderNo: orderNo,
+              cardId: choice.accountId,
+            );
+            changed.orThrow();
+            final target = _responseUrl(changed.payload);
+            if (target.isEmpty) {
+              throw StateError('Updated order link is unavailable');
+            }
+            await AppNavigator.dismissLoading();
+            await _replaceWithPage(target);
+          } finally {
+            await AppNavigator.dismissLoading();
+          }
+        case NewPayoutAccount():
+          final result = await AppNavigator.toBindCard(
+            productId: productId,
+            changeOrderNo: orderNo,
+          );
+          if (result.changed && result.redirectUrl.isNotEmpty) {
+            await _replaceWithPage(result.redirectUrl);
+          }
+      }
+    } finally {
+      await AppNavigator.dismissLoading();
+      _replacingAccount = false;
+    }
+  }
+
+  Future<void> _replaceWithPage(String target) async {
+    final uri = Uri.tryParse(target.trim());
+    if (uri == null ||
+        (uri.scheme != 'http' && uri.scheme != 'https') ||
+        uri.host.isEmpty) {
+      throw StateError('Invalid result URL');
+    }
+    await AppNavigator.toWebView(
+      url: uri.toString(),
+      title: 'Details',
+      replaceCurrent: true,
+    );
+  }
+
+  Future<dynamic> _onBridgeCall(
+    InAppWebViewController controller,
+    String handler,
+    List<dynamic> arguments,
+  ) async {
+    if (!mounted || !identical(controller, _controller)) {
+      return const H5BridgeResult.error('WebView is inactive').toJson();
+    }
+    final message = H5BridgeMessage.decode(
+      arguments.isEmpty ? null : arguments.first,
+    );
+    final result = await _dispatcher.dispatch(message);
+    final script = result.callbackScript(handler, message.callbackId);
+    if (script != null && mounted && identical(controller, _controller)) {
+      await controller.evaluateJavascript(source: script);
+    }
+    return result.toJson();
+  }
+
+  Future<void> _goBack() async {
+    if (_backInFlight) return;
+    _backInFlight = true;
+    try {
+      final controller = _controller;
+      var hasHistory = false;
+      if (controller != null && identical(controller, _controller)) {
+        hasHistory = await controller.canGoBack();
+      }
+
+      if (await _shouldStayForRetention(controller)) return;
+
+      if (hasHistory && controller != null && mounted) {
+        await _goBackInPage(controller);
+        return;
+      }
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+    } finally {
+      _backInFlight = false;
+    }
+  }
+
+  Future<bool> _shouldStayForRetention(
+    InAppWebViewController? controller,
+  ) async {
+    if (_checkingRetention ||
+        controller == null ||
+        !identical(controller, _controller)) {
+      return false;
+    }
+    _checkingRetention = true;
+    try {
+      final current = await controller.getUrl();
+      final productId = confirmationProductIdFromH5Url(
+        current?.toString() ?? '',
+      );
+      if (productId.isEmpty) return false;
+
+      await AppNavigator.showLoading();
+      IdentityRetentionPrompt? prompt;
+      try {
+        final reply = await _gateway.fetchRetentionPrompt(
+          scene: '5',
+          productId: productId,
+        );
+        reply.orThrow();
+        prompt = IdentityRetentionPrompt.fromReply(reply);
+      } catch (_) {
+        return false;
+      } finally {
+        await AppNavigator.dismissLoading();
+      }
+      if (!mounted || !prompt.shouldShow) return false;
+      return await showIdentityRetentionDialog(context, prompt: prompt);
+    } finally {
+      _checkingRetention = false;
+    }
+  }
+
+  Future<void> _goBackInPage(InAppWebViewController controller) async {
+    final history = await controller.getCopyBackForwardList();
+    final index = history?.currentIndex ?? -1;
+    final items = history?.list ?? const <WebHistoryItem>[];
+    if (index > 0 && index < items.length) {
+      final current = Uri.tryParse(items[index].url?.toString() ?? '');
+      final previous = Uri.tryParse(items[index - 1].url?.toString() ?? '');
+      if (current != null &&
+          previous != null &&
+          current.fragment.isNotEmpty &&
+          previous.fragment.isNotEmpty &&
+          current.removeFragment() == previous.removeFragment()) {
+        await controller.evaluateJavascript(source: 'window.history.go(-1);');
+        return;
+      }
+    }
+    await controller.goBack();
+  }
+
+  Future<NavigationActionPolicy> _handleNavigation(
+    InAppWebViewController controller,
+    NavigationAction action,
+  ) async {
+    final uri = action.request.url;
+    if (uri == null) return NavigationActionPolicy.CANCEL;
+    if (_isInlineScheme(uri.scheme)) return NavigationActionPolicy.ALLOW;
+
+    if (uri.scheme == 'ph') {
+      await _openInternal(uri.toString());
+    } else {
+      await _launchExternal(uri);
+    }
+    return NavigationActionPolicy.CANCEL;
+  }
+
+  Future<void> _reload() async {
+    final controller = _controller;
+    if (controller == null || !identical(controller, _controller)) return;
+    setState(() {
+      _loading = true;
+      _failed = false;
+    });
+    await controller.reload();
+  }
+
+  void _appendHandlers(InAppWebViewController controller) {
+    for (final handler in H5Bridge.handlers) {
+      controller.addJavaScriptHandler(
+        handlerName: handler,
+        callback: (arguments) => _onBridgeCall(controller, handler, arguments),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller = null;
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(_title)),
-      body: _url.isEmpty
-          ? const Center(child: Text('Nothing to display.'))
-          : Stack(
-              children: [
-                InAppWebView(
-                  initialUrlRequest: URLRequest(url: WebUri(_url)),
-                  onProgressChanged: (controller, progress) => _progress.value = progress / 100,
-                  onReceivedError: (controller, request, error) {
-                    if (request.isForMainFrame ?? false) {
-                      setState(() => _failed = true);
-                    }
-                  },
-                  onLoadStop: (controller, url) {
-                    if (_failed) setState(() => _failed = false);
-                  },
-                ),
-                Obx(
-                  () => _progress.value >= 1
-                      ? const SizedBox.shrink()
-                      : LinearProgressIndicator(
-                          value: _progress.value,
-                          minHeight: 3,
-                          backgroundColor: AppColors.surfaceMuted,
-                        ),
-                ),
-                if (_failed)
-                  ColoredBox(
-                    color: AppColors.surface,
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(AppSpacing.lg),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.wifi_off_rounded, size: 48, color: AppColors.textMuted),
-                            const SizedBox(height: AppSpacing.sm),
-                            const Text('This page could not be loaded.'),
-                            const SizedBox(height: AppSpacing.md),
-                            FilledButton(
-                              onPressed: () => setState(() => _failed = false),
-                              child: const Text('Retry'),
-                            ),
-                          ],
-                        ),
+    final uri = _initialUri;
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) unawaited(_goBack());
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.surface,
+        resizeToAvoidBottomInset: false,
+        appBar: AppBar(
+          backgroundColor: AppColors.surface,
+          foregroundColor: AppColors.textStrong,
+          elevation: 0,
+          title: Text(_title),
+          leading: IconButton(
+            key: const Key('webview-back'),
+            onPressed: _goBack,
+            icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          ),
+        ),
+        body: uri == null
+            ? const _LoadFailure(message: 'This page could not be loaded.')
+            : Stack(
+                children: [
+                  InAppWebView(
+                    initialUrlRequest: URLRequest(url: WebUri.uri(uri)),
+                    initialUserScripts: _webViewScripts,
+                    initialSettings: InAppWebViewSettings(
+                      javaScriptEnabled: true,
+                      useShouldOverrideUrlLoading: true,
+                      useHybridComposition: true,
+                      isInspectable: kDebugMode,
+                      supportZoom: false,
+                      allowsLinkPreview: false,
+                      mediaPlaybackRequiresUserGesture: true,
+                      mixedContentMode:
+                          MixedContentMode.MIXED_CONTENT_COMPATIBILITY_MODE,
+                    ),
+                    onWebViewCreated: (controller) {
+                      _controller = controller;
+                      _appendHandlers(controller);
+                    },
+                    shouldOverrideUrlLoading: _handleNavigation,
+                    onPermissionRequest: (controller, request) async {
+                      return PermissionResponse(
+                        resources: request.resources,
+                        action: PermissionResponseAction.DENY,
+                      );
+                    },
+                    onLoadStart: (controller, url) {
+                      if (!mounted || !identical(controller, _controller)) {
+                        return;
+                      }
+                      setState(() {
+                        _loading = true;
+                        _failed = false;
+                      });
+                    },
+                    onLoadStop: (controller, url) async {
+                      if (!mounted || !identical(controller, _controller)) {
+                        return;
+                      }
+                      final pageTitle = await controller.getTitle();
+                      if (!mounted) return;
+                      setState(() {
+                        _loading = false;
+                        final title = pageTitle?.trim() ?? '';
+                        if (title.isNotEmpty) _title = title;
+                      });
+                    },
+                    onProgressChanged: (controller, progress) {
+                      if (!mounted || !identical(controller, _controller)) {
+                        return;
+                      }
+                      setState(() => _loading = progress < 100);
+                    },
+                    onReceivedError: (controller, request, error) {
+                      if (!mounted ||
+                          !identical(controller, _controller) ||
+                          request.isForMainFrame != true) {
+                        return;
+                      }
+                      setState(() {
+                        _loading = false;
+                        _failed = true;
+                      });
+                    },
+                    onTitleChanged: (controller, title) {
+                      final value = title?.trim() ?? '';
+                      if (mounted && value.isNotEmpty) {
+                        setState(() => _title = value);
+                      }
+                    },
+                  ),
+                  if (_loading)
+                    const Align(
+                      alignment: Alignment.topCenter,
+                      child: LinearProgressIndicator(
+                        minHeight: 3,
+                        color: AppColors.accent,
+                        backgroundColor: AppColors.surfaceMuted,
                       ),
                     ),
-                  ),
+                  if (_failed)
+                    _LoadFailure(
+                      message: 'The page could not be loaded.',
+                      onRetry: _reload,
+                    ),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+final UnmodifiableListView<UserScript> _webViewScripts =
+    UnmodifiableListView<UserScript>([
+      UserScript(
+        source: _imageInteractionGuard,
+        injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+        forMainFrameOnly: false,
+      ),
+    ]);
+
+const String _imageInteractionGuard = r'''
+(() => {
+  const install = () => {
+    const root = document.head || document.documentElement;
+    if (!root || document.getElementById('handa-image-guard')) return;
+    const style = document.createElement('style');
+    style.id = 'handa-image-guard';
+    style.textContent = 'img{-webkit-touch-callout:none!important;'
+      + '-webkit-user-select:none!important;user-select:none!important}';
+    root.appendChild(style);
+  };
+  install();
+  document.addEventListener('contextmenu', (event) => {
+    if (event.target instanceof Element && event.target.closest('img')) {
+      event.preventDefault();
+    }
+  }, true);
+})();
+''';
+
+class _LoadFailure extends StatelessWidget {
+  const _LoadFailure({required this.message, this.onRetry});
+
+  final String message;
+  final Future<void> Function()? onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: AppColors.surface,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.wifi_off_rounded,
+                size: 48,
+                color: AppColors.textMuted,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: AppColors.textPrimary),
+              ),
+              if (onRetry != null) ...[
+                const SizedBox(height: AppSpacing.sm),
+                TextButton(
+                  key: const Key('webview-retry'),
+                  onPressed: () => unawaited(onRetry!()),
+                  child: const Text('Retry'),
+                ),
               ],
-            ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

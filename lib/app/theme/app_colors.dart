@@ -292,6 +292,23 @@ abstract final class AppColors {
     colors: [Color(0xFF7F4209), Color(0xFFB65E15)],
   );
 
+  // 绑卡（设计稿 03-05）
+  static const bindCardTypeIdleSurface = Color(0xFFEADABF);
+  static const bindCardTypeIdleText = Color(0xFF716F5F);
+  static const bindCardSelectedText = Color(0xFF7F4209);
+  static const bindCardHintSurface = Color(0xFFFFF0E5);
+  static const bindCardSuggestionSurface = Color(0xCC333333);
+
+  // 等待授信（设计稿 04-02）
+  static const creditReviewTrack = Color.fromRGBO(227, 221, 219, 1);
+  static const creditReviewProgressStart = Color.fromRGBO(227, 145, 73, 1);
+  static const creditReviewProgressEnd = Color.fromRGBO(158, 62, 16, 1);
+  static const creditReviewProgressGradient = LinearGradient(
+    begin: Alignment.centerRight,
+    end: Alignment.centerLeft,
+    colors: [creditReviewProgressStart, creditReviewProgressEnd],
+  );
+
   // 渐变
   static const heroGradient = LinearGradient(
     begin: Alignment.topLeft,

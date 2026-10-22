@@ -492,6 +492,25 @@ void main() {
       );
     });
 
+    testWidgets('右上角客服入口进入客服 WebView', (tester) async {
+      final config = _config();
+      await config.localSession.writeSessionId('session-1');
+      final adapter = _StubAdapter(
+        (options) async => ResponseBody.fromString(
+          _body(const <Map<String, dynamic>>[]),
+          200,
+          headers: _jsonHeaders,
+        ),
+      );
+      await _pumpLoanTab(tester, _client(config, adapter));
+
+      await tester.tap(find.byKey(const Key('loan-customer-service')));
+      await tester.pumpAndSettle();
+
+      expect(Get.currentRoute, AppRoutes.webView);
+      expect(find.text('webview:$_webOrigin/#/Toolcutting'), findsOneWidget);
+    });
+
     testWidgets('带跳转地址的按钮直接打开还款页', (tester) async {
       final config = _config();
       await config.localSession.writeSessionId('session-1');
@@ -664,11 +683,20 @@ void main() {
       final config = _config();
       await config.localSession.writeSessionId('session-1');
       final completer = Completer<ResponseBody>();
-      var calls = 0;
+      var homeCalls = 0;
       final adapter = _StubAdapter((options) {
-        calls += 1;
+        if (options.uri.toString().contains('counterchecked')) {
+          return Future<ResponseBody>.value(
+            ResponseBody.fromString(
+              _body(const <Map<String, dynamic>>[]),
+              200,
+              headers: _jsonHeaders,
+            ),
+          );
+        }
         // 首次进入首页的请求立即返回，切到 Loan Tab 的那次一直挂起。
-        if (calls == 1) {
+        homeCalls += 1;
+        if (homeCalls == 1) {
           return Future<ResponseBody>.value(
             ResponseBody.fromString(
               _body(const <Map<String, dynamic>>[]),

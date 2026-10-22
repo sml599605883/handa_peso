@@ -1,6 +1,7 @@
 import Flutter
 import TDMobRisk
 import UIKit
+import UserNotifications
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
@@ -8,7 +9,15 @@ import UIKit
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    UNUserNotificationCenter.current().delegate = self
+    let launched = super.application(
+      application,
+      didFinishLaunchingWithOptions: launchOptions
+    )
+    if let payload = launchOptions?[.remoteNotification] as? [AnyHashable: Any] {
+      ReportBridgeRegistrar.shared.acceptNotificationPayload(payload)
+    }
+    return launched
   }
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
@@ -31,6 +40,30 @@ import UIKit
   ) {
     let token = deviceToken.map { String(format: "%02x", $0) }.joined()
     ReportBridgeRegistrar.shared.updatePushToken(token)
+  }
+
+  /// 前台收到带目标地址的通知时直接走 App 内路由，不再重复展示系统横幅。
+  override func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    willPresent notification: UNNotification,
+    withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+  ) {
+    let routed = ReportBridgeRegistrar.shared.acceptNotificationPayload(
+      notification.request.content.userInfo
+    )
+    completionHandler(routed ? [] : [.banner, .badge, .sound])
+  }
+
+  /// App 已运行或在后台时点击通知。
+  override func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    didReceive response: UNNotificationResponse,
+    withCompletionHandler completionHandler: @escaping () -> Void
+  ) {
+    ReportBridgeRegistrar.shared.acceptNotificationPayload(
+      response.notification.request.content.userInfo
+    )
+    completionHandler()
   }
 }
 

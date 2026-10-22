@@ -9,13 +9,10 @@ import '../../app/theme/app_spacing.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/network/gateway_client.dart';
 import '../../core/product/product_detail_loader.dart';
-import '../../core/report/report_scene.dart';
-import '../../core/report/report_service.dart';
 
 /// 认证核对清单。
 ///
-/// 证件、人脸、个人信息与工作信息已经是真实流程；只有对应接口确认成功才把
-/// 步骤标记完成。其余步骤仍是流程骨架，等各自的设计稿落地后按同样的方式替换。
+/// 六个步骤都已接入真实流程；只有对应接口确认成功才把步骤标记完成。
 ///
 /// 每一步完成时按接口文档上报风控埋点，产品 ID 由申请入口透传进来。
 class CertificationPage extends StatefulWidget {
@@ -26,16 +23,6 @@ class CertificationPage extends StatefulWidget {
 }
 
 class _CertificationPageState extends State<CertificationPage> {
-  /// 步骤与风控埋点场景的对应关系（接口文档「上报风控埋点(新)」的 `proves`）。
-  ///
-  /// 个人信息（5）、工作信息（6）与银行卡（8）由各自页面在真实提交成功时上报；
-  /// 这里保留映射供后续仍为骨架的银行卡步骤使用。
-  static const _sceneByStep = <int, String>{
-    2: ReportScene.personalInfo,
-    3: ReportScene.jobInfo,
-    4: ReportScene.bankCard,
-  };
-
   final _steps = <_CertificationStep>[
     _CertificationStep(
       title: 'Identity',
@@ -54,6 +41,10 @@ class _CertificationPageState extends State<CertificationPage> {
       description: 'Source of income',
     ),
     _CertificationStep(
+      title: 'Emergency contacts',
+      description: 'People we can contact when needed',
+    ),
+    _CertificationStep(
       title: 'Payout account',
       description: 'Where we send your funds',
     ),
@@ -68,26 +59,15 @@ class _CertificationPageState extends State<CertificationPage> {
   /// 能读到服务端下发的文案。失败时仍允许按本地兜底继续。
   late final Future<void> _detailReady = _prepareProductDetail();
 
-  /// 当前进行中步骤的开始时间。
-  ///
-  /// 文档要求「进入页面 -> 提交成功」，所以每完成一步就把下一步的开始时间重置为
-  /// 此刻；第一步取页面打开时间。
-  int _stepStartedAtSeconds = 0;
-
   @override
   void initState() {
     super.initState();
-    _stepStartedAtSeconds = ReportService.nowSeconds();
     final arguments = Get.arguments;
     if (arguments is Map) {
       _productId = arguments['productId']?.toString() ?? '';
     }
     unawaited(_detailReady);
   }
-
-  /// 上报服务由启动流程注册；未接入或独立测试时为空。
-  ReportService? get _reporter =>
-      Get.isRegistered<ReportService>() ? Get.find<ReportService>() : null;
 
   /// 证件流程是否正在打开：连点只保留一次。
   bool _openingIdentity = false;
@@ -100,6 +80,12 @@ class _CertificationPageState extends State<CertificationPage> {
 
   /// 工作信息流程是否正在打开：连点只保留一次。
   bool _openingWork = false;
+
+  /// 紧急联系人流程是否正在打开：连点只保留一次。
+  bool _openingEmergencyContact = false;
+
+  /// 绑卡流程是否正在打开：连点只保留一次。
+  bool _openingBindCard = false;
 
   /// 证件流程选中的卡种；人脸上传接口继续使用这个必填字段。
   String _identityCardType = '';
@@ -122,7 +108,11 @@ class _CertificationPageState extends State<CertificationPage> {
       unawaited(_openWorkFlow());
       return;
     }
-    _completeStep(index);
+    if (index == 4) {
+      unawaited(_openEmergencyContactFlow());
+      return;
+    }
+    if (index == 5) unawaited(_openBindCardFlow());
   }
 
   /// 第一步「证件」进入真实的原生流程（设计稿 03-01 身份认证）。
@@ -195,6 +185,36 @@ class _CertificationPageState extends State<CertificationPage> {
     }
   }
 
+  /// 第五步「紧急联系人」保存成功后才标记完成。
+  Future<void> _openEmergencyContactFlow() async {
+    if (_openingEmergencyContact) return;
+    await _detailReady;
+    _openingEmergencyContact = true;
+    try {
+      final outcome = await AppNavigator.toEmergencyContact(
+        productId: _productId,
+      );
+      if (!mounted || !outcome.completed) return;
+      _finishStep(4);
+    } finally {
+      _openingEmergencyContact = false;
+    }
+  }
+
+  /// 第六步「放款账户」提交成功后才标记完成。
+  Future<void> _openBindCardFlow() async {
+    if (_openingBindCard) return;
+    await _detailReady;
+    _openingBindCard = true;
+    try {
+      final outcome = await AppNavigator.toBindCard(productId: _productId);
+      if (!mounted || !outcome.completed) return;
+      _finishStep(5);
+    } finally {
+      _openingBindCard = false;
+    }
+  }
+
   Future<void> _prepareProductDetail() async {
     if (_productId.isEmpty || !Get.isRegistered<GatewayClient>()) return;
     try {
@@ -207,26 +227,9 @@ class _CertificationPageState extends State<CertificationPage> {
     }
   }
 
-  void _completeStep(int index) {
-    if (index != _completed) return;
-
-    final scene = _sceneByStep[index];
-    if (scene != null) {
-      unawaited(
-        _reporter?.reportScene(
-          scene: scene,
-          productId: _productId,
-          startedAtSeconds: _stepStartedAtSeconds,
-        ),
-      );
-    }
-    _finishStep(index);
-  }
-
-  /// 标记某一步完成，并把下一步的开始时间重置为此刻。
+  /// 标记某一步完成。
   void _finishStep(int index) {
     setState(() => _completed += 1);
-    _stepStartedAtSeconds = ReportService.nowSeconds();
     AnalyticsService.logEvent(AppEvents.certificationStepCompleted, {
       'step': _steps[index].title,
     });

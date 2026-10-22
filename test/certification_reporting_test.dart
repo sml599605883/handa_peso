@@ -8,7 +8,9 @@ import 'package:handa_peso/core/report/report_bridge.dart';
 import 'package:handa_peso/core/report/report_service.dart';
 import 'package:handa_peso/core/report/report_store.dart';
 import 'package:handa_peso/core/session/local_session.dart';
+import 'package:handa_peso/features/certification/bind_card_models.dart';
 import 'package:handa_peso/features/certification/certification_page.dart';
+import 'package:handa_peso/features/certification/emergency_contact_models.dart';
 import 'package:handa_peso/features/certification/face_models.dart';
 import 'package:handa_peso/features/certification/identity_models.dart';
 import 'package:handa_peso/features/certification/personal_information_models.dart';
@@ -67,6 +69,8 @@ const String _certificationTestRoute = '/stub-certification';
 bool identityFlowOpened = false;
 bool faceFlowOpened = false;
 bool workFlowOpened = false;
+bool emergencyContactFlowOpened = false;
+bool bindCardFlowOpened = false;
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -116,6 +120,14 @@ void main() {
             name: AppRoutes.workInformation,
             page: () => const _StubWorkFlow(),
           ),
+          GetPage<void>(
+            name: AppRoutes.emergencyContact,
+            page: () => const _StubEmergencyContactFlow(),
+          ),
+          GetPage<void>(
+            name: AppRoutes.bindCard,
+            page: () => const _StubBindCardFlow(),
+          ),
         ],
       ),
     );
@@ -129,6 +141,8 @@ void main() {
 
   /// 完成一步；等 SnackBar 播完再继续，避免它遮住列表底部的步骤。
   Future<void> complete(WidgetTester tester, String title) async {
+    await tester.ensureVisible(find.text(title));
+    await tester.pumpAndSettle();
     await tester.tap(find.text(title));
     await tester.pump();
     await tester.pump(const Duration(seconds: 5));
@@ -172,8 +186,18 @@ void main() {
       greaterThanOrEqualTo(spy.reports.first.startedAtSeconds),
     );
 
+    await complete(tester, 'Emergency contacts');
+    expect(emergencyContactFlowOpened, isTrue);
+    expect(spy.reports.map((report) => report.scene), <String>['5', '6', '7']);
+
     await complete(tester, 'Payout account');
-    expect(spy.reports.map((report) => report.scene), <String>['5', '6', '8']);
+    expect(bindCardFlowOpened, isTrue);
+    expect(spy.reports.map((report) => report.scene), <String>[
+      '5',
+      '6',
+      '7',
+      '8',
+    ]);
     expect(
       spy.reports.every((report) => report.productId == '1000460'),
       isTrue,
@@ -198,10 +222,11 @@ void main() {
     await completeIdentity(tester);
     await complete(tester, 'Personal details');
     await complete(tester, 'Work information');
+    await complete(tester, 'Emergency contacts');
     await complete(tester, 'Payout account');
 
-    // 五步全部完成：没有上报服务时流程照常走完。
-    expect(find.byIcon(Icons.verified_rounded), findsNWidgets(5));
+    // 六步全部完成：没有上报服务时流程照常走完。
+    expect(find.byIcon(Icons.verified_rounded), findsNWidgets(6));
     expect(spy.reports, isEmpty);
   });
 }
@@ -294,6 +319,79 @@ class _StubWorkFlowState extends State<_StubWorkFlow> {
       startedAtSeconds: startedAt,
     );
     PersonalInformationFlowOutcome.of(Get.arguments)?.completed = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Get.back<void>();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox();
+}
+
+/// 紧急联系人真实页面自行上报场景 7；这里只验证清单等待它成功回传后推进。
+class _StubEmergencyContactFlow extends StatefulWidget {
+  const _StubEmergencyContactFlow();
+
+  @override
+  State<_StubEmergencyContactFlow> createState() =>
+      _StubEmergencyContactFlowState();
+}
+
+class _StubEmergencyContactFlowState extends State<_StubEmergencyContactFlow> {
+  @override
+  void initState() {
+    super.initState();
+    emergencyContactFlowOpened = true;
+    final startedAt = ReportService.nowSeconds();
+    final arguments = Get.arguments is Map
+        ? Map<String, dynamic>.from(Get.arguments as Map)
+        : const <String, dynamic>{};
+    final productId = arguments['productId']?.toString() ?? '';
+    final reporter = Get.isRegistered<ReportService>()
+        ? Get.find<ReportService>()
+        : null;
+    reporter?.reportScene(
+      scene: '7',
+      productId: productId,
+      startedAtSeconds: startedAt,
+    );
+    EmergencyContactFlowOutcome.of(Get.arguments)?.completed = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Get.back<void>();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox();
+}
+
+/// 绑卡真实页面自行上报场景 8；这里验证清单等待成功回传后完成最后一步。
+class _StubBindCardFlow extends StatefulWidget {
+  const _StubBindCardFlow();
+
+  @override
+  State<_StubBindCardFlow> createState() => _StubBindCardFlowState();
+}
+
+class _StubBindCardFlowState extends State<_StubBindCardFlow> {
+  @override
+  void initState() {
+    super.initState();
+    bindCardFlowOpened = true;
+    final startedAt = ReportService.nowSeconds();
+    final arguments = Get.arguments is Map
+        ? Map<String, dynamic>.from(Get.arguments as Map)
+        : const <String, dynamic>{};
+    final productId = arguments['productId']?.toString() ?? '';
+    final reporter = Get.isRegistered<ReportService>()
+        ? Get.find<ReportService>()
+        : null;
+    reporter?.reportScene(
+      scene: '8',
+      productId: productId,
+      startedAtSeconds: startedAt,
+    );
+    BindCardFlowOutcome.of(Get.arguments)?.completed = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) Get.back<void>();
     });

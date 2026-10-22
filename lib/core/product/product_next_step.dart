@@ -10,14 +10,20 @@ import '../network/gateway_reply.dart';
 /// 字段名一律取接口文档里登记的不透明键名，改动前必须回查 MyTools 的
 /// `ph_handa_peso_ios` 文档。
 class ProductNextStep {
-  const ProductNextStep({required this.taskType, this.orderNo = ''});
+  const ProductNextStep({
+    required this.taskType,
+    this.orderNo = '',
+    this.hasIncompleteTask = false,
+  });
 
   factory ProductNextStep.fromReply(GatewayReply reply) {
+    var hasIncompleteTask = false;
     for (final item in reply.payload.listValue(_verifyField)) {
       final map = item is Map<String, dynamic>
           ? item
           : const <String, dynamic>{};
       if (map.boolValue(_completedField)) continue;
+      hasIncompleteTask = true;
       // `gesticulating` 缺失时按「可点击」处理：不能因为服务端少下发一个字段
       // 就把整条申请链路堵死。
       if (!map.boolValue(_clickableField, fallback: true)) continue;
@@ -29,11 +35,13 @@ class ProductNextStep {
             .mapOf('recurs')
             .stringValue('redecorates')
             .trim(),
+        hasIncompleteTask: true,
       );
     }
     return ProductNextStep(
       taskType: '',
       orderNo: reply.payload.mapOf('recurs').stringValue('redecorates').trim(),
+      hasIncompleteTask: hasIncompleteTask,
     );
   }
 
@@ -71,6 +79,9 @@ class ProductNextStep {
   /// 产品详情 `recurs.redecorates` 下发的订单号；人脸 token 接口必填。
   final String orderNo;
 
+  /// 列表里仍有未完成项，只是当前项还不允许点击。
+  final bool hasIncompleteTask;
+
   /// 下一步是不是证件（第一项）。
   bool get isIdentity => _labels[taskType] == _identity;
 
@@ -82,6 +93,12 @@ class ProductNextStep {
 
   /// 下一步是不是工作信息（第三项）。
   bool get isWork => _labels[taskType] == _work;
+
+  /// 下一步是不是紧急联系人（第四项）。
+  bool get isEmergency => _labels[taskType] == _ext;
+
+  /// 下一步是不是放款账户（第五项）。
+  bool get isBank => _labels[taskType] == _bank;
 
   /// 这一步在提示里显示的名字；文档里没登记过的取值返回空串（服务端可能加了新步骤）。
   String get label => _labels[taskType] ?? '';

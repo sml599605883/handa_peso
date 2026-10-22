@@ -14,6 +14,12 @@ import 'gateway_transport.dart';
 class GatewayClient extends GatewayTransport {
   GatewayClient(super.settings, {super.dio});
 
+  /// 为 H5 请求生成同一套已签名公有参数。
+  ///
+  /// 这里不发送请求，只复用网关签名器，避免网页端自行持有签名密钥。
+  Future<Map<String, dynamic>> publicParametersFor(String path) =>
+      signer.signedQuery(path: path);
+
   // ---------------------------------------------------------------------------
   // 鉴权与账号
   // ---------------------------------------------------------------------------
@@ -352,7 +358,11 @@ class GatewayClient extends GatewayTransport {
 
   /// 提交绑卡。
   Future<GatewayReply> submitCardBinding({required Map<String, dynamic> body}) {
-    return write(GatewayRoutes.bindCard, body: body);
+    return write(
+      GatewayRoutes.bindCard,
+      body: body,
+      noise: const <String>['fatheadedly'],
+    );
   }
 
   /// 地址初始化。
