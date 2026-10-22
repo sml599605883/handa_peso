@@ -166,9 +166,7 @@ class _BindCardPageState extends State<BindCardPage> {
       setState(() {
         _data = data;
         _selectedType = first?.type ?? '';
-        _activeSuggestionKey = first == null
-            ? null
-            : _firstSuggestionKey(first);
+        _activeSuggestionKey = null;
         _loadState = data.groups.isEmpty
             ? _BindCardLoadState.empty
             : _BindCardLoadState.content;
@@ -197,6 +195,10 @@ class _BindCardPageState extends State<BindCardPage> {
         final initial = _initialDisplay(field);
         final controller = TextEditingController(text: initial.display);
         final focusNode = FocusNode();
+        if (field.control == BindCardFieldControl.text) {
+          controller.addListener(_updateActiveSuggestion);
+          focusNode.addListener(_updateActiveSuggestion);
+        }
         _controllers[key] = controller;
         _focusNodes[key] = focusNode;
         _values[key] = initial.value;
@@ -229,34 +231,44 @@ class _BindCardPageState extends State<BindCardPage> {
     return (value: initial, display: initial);
   }
 
-  String? _firstSuggestionKey(BindCardGroup group) {
-    for (final field in group.fields) {
-      final key = _fieldKey(group, field);
-      if (field.control == BindCardFieldControl.text &&
-          field.suggestedValue.isNotEmpty &&
-          (_controllers[key]?.text.trim().isEmpty ?? false)) {
-        return key;
-      }
-    }
-    return null;
-  }
-
   void _selectGroup(BindCardGroup group) {
     if (_selectedType == group.type || _submitting) return;
     FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
       _selectedType = group.type;
-      _activeSuggestionKey = _firstSuggestionKey(group);
+      _activeSuggestionKey = null;
     });
   }
 
   void _onTextChanged(BindCardGroup group, BindCardField field, String value) {
     final key = _fieldKey(group, field);
     _values[key] = value;
-    final suggestionKey = _fieldKey(group, field);
-    final shouldHide =
-        value.trim().isNotEmpty && _activeSuggestionKey == suggestionKey;
-    if (shouldHide) setState(() => _activeSuggestionKey = null);
+    _updateActiveSuggestion();
+  }
+
+  void _updateActiveSuggestion() {
+    if (!mounted) return;
+    final data = _data;
+    final group = _selectedGroup;
+    if (data == null || group == null) return;
+
+    String? nextKey;
+    for (final field in group.fields) {
+      if (field.control != BindCardFieldControl.text) continue;
+      final key = _fieldKey(group, field);
+      final controller = _controllers[key];
+      if (_focusNodes[key]?.hasFocus != true ||
+          controller == null ||
+          controller.text.trim().isNotEmpty ||
+          field.suggestedValue.isEmpty) {
+        continue;
+      }
+      nextKey = key;
+      break;
+    }
+    if (_activeSuggestionKey != nextKey) {
+      setState(() => _activeSuggestionKey = nextKey);
+    }
   }
 
   void _applySuggestions(BindCardGroup group) {

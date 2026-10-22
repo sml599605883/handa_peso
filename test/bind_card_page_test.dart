@@ -401,6 +401,31 @@ void main() {
     );
   });
 
+  testWidgets('气泡只在文本框聚焦且为空时显示', (tester) async {
+    final adapter = _StubAdapter(cardBody: _cardBody());
+    final outcome = BindCardFlowOutcome();
+    await _pumpPage(tester, client: _clientFor(adapter), outcome: outcome);
+
+    final field = find.byKey(const Key('bind-card-input-1:cardNo'));
+    final bubble = find.byKey(const Key('bind-card-suggestion-1:cardNo'));
+    expect(bubble, findsNothing);
+
+    await tester.tap(field);
+    await tester.pumpAndSettle();
+    expect(bubble, findsOneWidget);
+
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pumpAndSettle();
+    expect(bubble, findsNothing);
+
+    await tester.tap(field);
+    await tester.pumpAndSettle();
+    expect(bubble, findsOneWidget);
+    await tester.enterText(field, '09170001');
+    await tester.pumpAndSettle();
+    expect(bubble, findsNothing);
+  });
+
   testWidgets('两次账号输入不一致时不提交', (tester) async {
     final adapter = _StubAdapter(cardBody: _cardBody());
     final outcome = BindCardFlowOutcome();

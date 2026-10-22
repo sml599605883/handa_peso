@@ -123,16 +123,19 @@ class OrderItem {
   String get detailTarget =>
       cardTarget.trim().isNotEmpty ? cardTarget.trim() : legacyTarget.trim();
 
-  /// 是否展示主按钮。
-  ///
-  /// 接口没有下发「是否展示按钮」，也没有登记状态码表；设计稿里只有
-  /// Outstanding / Overdue 两张进行中的卡带按钮，终态卡不带，且按钮文案由
-  /// 服务端下发，因此按文案是否为空来判断——避免客户端自己编一句按钮文案。
-  bool get hasAction => actionText.trim().isNotEmpty;
+  /// 174 是 Outstanding，180 是 Overdue；只有这两个进行中状态带还款按钮。
+  bool get usesOutstandingStyle => statusCode == 174;
+
+  bool get usesOverdueStyle => statusCode == 180;
+
+  bool get usesRepaymentStyle => usesOutstandingStyle || usesOverdueStyle;
+
+  /// 按钮文案仍取服务端下发值，状态码只决定该状态是否允许展示按钮。
+  bool get hasAction => usesRepaymentStyle && actionText.trim().isNotEmpty;
 
   /// 状态标签配色：与主按钮同档，见 [OrderStatusTone]。
   OrderStatusTone get statusTone =>
-      hasAction ? OrderStatusTone.danger : OrderStatusTone.neutral;
+      usesRepaymentStyle ? OrderStatusTone.danger : OrderStatusTone.neutral;
 }
 
 /// 解析订单列表载荷：条目在 `latchstrings` 下，缺字段时回落空列表。

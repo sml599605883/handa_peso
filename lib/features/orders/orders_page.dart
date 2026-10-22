@@ -1,15 +1,18 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../app/navigation/app_navigator.dart';
+import '../../app/navigation/app_route_observer.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/widgets/app_empty_state.dart';
 import '../../app/widgets/design_back_button.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/network/gateway_client.dart';
 import '../../core/network/gateway_failure.dart';
+import '../main_shell/main_controller.dart';
 import 'order_card.dart';
 import 'order_item.dart';
 import 'orders_filter_bar.dart';
@@ -29,7 +32,7 @@ class OrdersPage extends StatefulWidget {
   State<OrdersPage> createState() => _OrdersPageState();
 }
 
-class _OrdersPageState extends State<OrdersPage> {
+class _OrdersPageState extends State<OrdersPage> with RouteAware {
   static const double _designWidth = 375;
 
   /// 返回键与标题（设计稿 24x24 @ y=56、20 号字 @ y=58）。
@@ -66,8 +69,11 @@ class _OrdersPageState extends State<OrdersPage> {
   bool _loading = true;
   bool _needsLogin = false;
 
-  /// 正在跳转的落地页：连点只保留一次，避免叠出多个页面。
-  bool _opening = false;
+  /// 正在跳转的订单：同一订单连点只保留一次，避免叠出多个落地页。
+  final Set<String> _activeActions = <String>{};
+
+  PageRoute<dynamic>? _route;
+  bool _returnRefreshScheduled = false;
 
   /// 请求代号：切换筛选后旧请求的返回结果直接丢弃。
   int _generation = 0;
@@ -77,6 +83,34 @@ class _OrdersPageState extends State<OrdersPage> {
     super.initState();
     _selected = _initialStatus();
     _load();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute && route != _route) {
+      appRouteObserver.unsubscribe(this);
+      _route = route;
+      appRouteObserver.subscribe(this, route);
+    }
+  }
+
+  @override
+  void didPopNext() {
+    if (_returnRefreshScheduled) return;
+    _returnRefreshScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _returnRefreshScheduled = false;
+      if (!mounted || !(_route?.isCurrent ?? true)) return;
+      unawaited(_load());
+    });
+  }
+
+  @override
+  void dispose() {
+    appRouteObserver.unsubscribe(this);
+    super.dispose();
   }
 
   /// 初始筛选状态：来自由个人中心快捷入口或深链传入的 `status` 码。
@@ -135,19 +169,26 @@ class _OrdersPageState extends State<OrdersPage> {
   /// 卡片进订单详情、按钮进还款页，地址都由服务端下发。
   Future<void> _openTarget(OrderItem item, {required bool action}) async {
     final target = (action ? item.actionTarget : item.detailTarget).trim();
-    if (target.isEmpty || _opening) return;
-    _opening = true;
+    final productId = item.productId.trim();
+    final actionId = item.orderNo.trim().isNotEmpty
+        ? item.orderNo.trim()
+        : '$productId|$target';
+    if (!_activeActions.add(actionId)) return;
     try {
-      if (action) AnalyticsService.logEvent(AppEvents.repaymentViewed);
-      await AppNavigator.openTarget(
-        target,
-        title: action ? _repaymentTitle : _loanDetailTitle,
-      );
+      if (target.isNotEmpty) {
+        if (action) AnalyticsService.logEvent(AppEvents.repaymentViewed);
+        await AppNavigator.openTarget(
+          target,
+          title: action ? _repaymentTitle : _loanDetailTitle,
+        );
+      } else if (productId.isNotEmpty) {
+        await Get.find<MainController>().applyNow(productId);
+      }
     } catch (error) {
       CrashReporter.record(error, StackTrace.current);
       AppNavigator.showError('Unable to open link');
     } finally {
-      _opening = false;
+      _activeActions.remove(actionId);
     }
   }
 

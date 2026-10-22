@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../app/theme/app_colors.dart';
@@ -166,6 +168,7 @@ class OrderCard extends StatelessWidget {
   Widget _buildStatusTag(double Function(num) px) {
     final danger = item.statusTone == OrderStatusTone.danger;
     return Container(
+      key: Key('order-status-tag-${item.orderNo}'),
       width: px(statusWidth),
       height: px(statusHeight),
       alignment: Alignment.center,
@@ -176,18 +179,18 @@ class OrderCard extends StatelessWidget {
       ),
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: px(4)),
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Text(
-            item.statusText,
-            maxLines: 1,
-            style: TextStyle(
-              color: danger
-                  ? AppColors.textOnPrimary
-                  : AppColors.ordersStatusNeutralLabel,
-              fontSize: px(statusLabelSize),
-              height: 18 / statusLabelSize,
-            ),
+        child: Text(
+          item.statusText,
+          key: Key('order-status-${item.orderNo}'),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: danger
+                ? AppColors.textOnPrimary
+                : AppColors.ordersStatusNeutralLabel,
+            fontSize: math.max(px(statusLabelSize), statusLabelSize),
+            height: 18 / statusLabelSize,
           ),
         ),
       ),
