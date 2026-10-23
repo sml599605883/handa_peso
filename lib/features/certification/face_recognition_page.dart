@@ -21,6 +21,7 @@ import '../../core/report/report_service.dart';
 import '../main_shell/main_controller.dart';
 import 'face_models.dart';
 import 'identity_design.dart';
+import 'widgets/identity_retention_guard.dart';
 
 typedef FaceImageWriter = Future<String> Function(String imageBase64);
 
@@ -51,7 +52,8 @@ class FaceRecognitionPage extends StatefulWidget {
   State<FaceRecognitionPage> createState() => _FaceRecognitionPageState();
 }
 
-class _FaceRecognitionPageState extends State<FaceRecognitionPage> {
+class _FaceRecognitionPageState extends State<FaceRecognitionPage>
+    with IdentityRetentionGuard<FaceRecognitionPage> {
   late final GatewayClient _apiClient =
       widget.apiClient ?? Get.find<GatewayClient>();
   late final FaceLivenessLauncher _liveness =
@@ -67,6 +69,15 @@ class _FaceRecognitionPageState extends State<FaceRecognitionPage> {
   );
 
   bool _busy = false;
+
+  @override
+  String get retentionScene => '1';
+
+  @override
+  String get retentionProductId => _productId;
+
+  @override
+  GatewayClient get retentionApiClient => _apiClient;
 
   @override
   void initState() {
@@ -94,87 +105,94 @@ class _FaceRecognitionPageState extends State<FaceRecognitionPage> {
 
   @override
   Widget build(BuildContext context) {
-    return IdentityPageScaffold(
-      gradient: AppColors.facePageGradient,
-      designHeight: IdentityDesign.pageHeight,
-      builder: (context, metrics) => IdentityPageChrome(
-        metrics: metrics,
-        title: IdentityStrings.facePageTitle,
-        contentTop: IdentityDesign.heroContentTop,
-        heroCopy: _heroCopy,
-        child: SizedBox(
-          height: metrics.size(
-            IdentityDesign.pageHeight - IdentityDesign.heroContentTop,
-          ),
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: <Widget>[
-              Positioned(
-                left: metrics.x(IdentityDesign.cardLeft),
-                top: metrics.y(_cardTop),
-                child: Container(
-                  key: const Key('face-recognition-card'),
-                  width: metrics.size(IdentityDesign.cardWidth),
-                  height: metrics.size(IdentityDesign.uploadCardHeight),
-                  decoration: BoxDecoration(
-                    color: AppColors.identityCardSurface,
-                    borderRadius: BorderRadius.vertical(
-                      bottom: Radius.circular(
-                        metrics.size(IdentityDesign.cardRadius),
-                      ),
-                    ),
-                    border: Border(
-                      left: BorderSide(
-                        color: AppColors.identityCardBorder,
-                        width: metrics.size(1),
-                      ),
-                      right: BorderSide(
-                        color: AppColors.identityCardBorder,
-                        width: metrics.size(1),
-                      ),
-                      bottom: BorderSide(
-                        color: AppColors.identityCardBorder,
-                        width: metrics.size(1),
-                      ),
-                    ),
+    return PopScope<void>(
+      canPop: retentionCanPop,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) handleRetentionExit();
+      },
+      child: IdentityPageScaffold(
+        gradient: AppColors.facePageGradient,
+        builder: (context, metrics) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            IdentityPageHeader(
+              metrics: metrics,
+              title: IdentityStrings.facePageTitle,
+              onBack: handleRetentionExit,
+            ),
+            IdentityHeroBanner(
+              text: _heroCopy,
+              metrics: metrics,
+              maxLines: 2,
+              minFontSize: 14,
+              maxFontSize: 20,
+            ),
+            SizedBox(height: metrics.size(15)),
+            DecoratedBox(
+              key: const Key('face-recognition-card'),
+              decoration: BoxDecoration(
+                color: AppColors.identityCardSurface,
+                borderRadius: BorderRadius.vertical(
+                  bottom: Radius.circular(
+                    metrics.size(IdentityDesign.cardRadius),
+                  ),
+                ),
+                border: Border(
+                  left: BorderSide(
+                    color: AppColors.identityCardBorder,
+                    width: metrics.size(1),
+                  ),
+                  right: BorderSide(
+                    color: AppColors.identityCardBorder,
+                    width: metrics.size(1),
+                  ),
+                  bottom: BorderSide(
+                    color: AppColors.identityCardBorder,
+                    width: metrics.size(1),
                   ),
                 ),
               ),
-              Positioned(
-                left: metrics.x(IdentityDesign.cardLeft),
-                top: metrics.y(_pillTop),
-                child: IdentityCardHeader(
-                  key: const Key('face-recognition-pill'),
-                  title: IdentityStrings.uploadCardTitle,
-                  metrics: metrics,
-                  height: IdentityDesign.uploadPillHeight,
-                  attachedToCard: true,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  IdentityCardHeader(
+                    key: const Key('face-recognition-pill'),
+                    title: IdentityStrings.uploadCardTitle,
+                    metrics: metrics,
+                    height: IdentityDesign.uploadPillHeight,
+                    attachedToCard: true,
+                  ),
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      metrics.size(5),
+                      metrics.size(18),
+                      metrics.size(14),
+                      metrics.size(21),
+                    ),
+                    child: AspectRatio(
+                      aspectRatio:
+                          IdentityDesign.demoWidth / IdentityDesign.demoHeight,
+                      child: const Image(
+                        key: Key('face-recognition-demo'),
+                        image: AssetImage(IdentityAssets.faceDemoCard),
+                        fit: BoxFit.contain,
+                        semanticLabel: 'Face recognition demonstration',
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              Positioned(
-                left: metrics.x(IdentityDesign.demoLeft),
-                top: metrics.y(_demoTop),
-                width: metrics.size(IdentityDesign.demoWidth),
-                height: metrics.size(IdentityDesign.demoHeight),
-                child: const Image(
-                  key: Key('face-recognition-demo'),
-                  image: AssetImage(IdentityAssets.faceDemoCard),
-                  fit: BoxFit.fill,
-                  semanticLabel: 'Face recognition demonstration',
-                ),
+            ),
+            SizedBox(height: metrics.size(20)),
+            Center(
+              child: IdentitySubmitButton(
+                key: const Key('face-recognition-submit'),
+                metrics: metrics,
+                label: IdentityStrings.next,
+                onPressed: _busy ? null : _startFaceVerification,
               ),
-              Positioned(
-                left: metrics.x(_submitLeft),
-                top: metrics.y(_submitTop),
-                child: IdentitySubmitButton(
-                  key: const Key('face-recognition-submit'),
-                  metrics: metrics,
-                  label: IdentityStrings.next,
-                  onPressed: _busy ? null : _startFaceVerification,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -184,17 +202,6 @@ class _FaceRecognitionPageState extends State<FaceRecognitionPage> {
     final copy = _apiClient.settings.localSession.productFlowCopy.liveness;
     return copy.isEmpty ? IdentityStrings.heroCopy : copy;
   }
-
-  static const double _submitLeft =
-      (IdentityDesign.pageWidth - IdentityDesign.submitWidth) / 2;
-  static const double _pillTop =
-      IdentityDesign.uploadPillTop - IdentityDesign.heroContentTop;
-  static const double _cardTop =
-      IdentityDesign.uploadCardTop - IdentityDesign.heroContentTop;
-  static const double _demoTop =
-      IdentityDesign.demoTop - IdentityDesign.heroContentTop;
-  static const double _submitTop =
-      IdentityDesign.uploadSubmitTop - IdentityDesign.heroContentTop;
 
   Future<void> _startFaceVerification() async {
     if (_busy) return;
@@ -230,14 +237,14 @@ class _FaceRecognitionPageState extends State<FaceRecognitionPage> {
         return;
       }
 
-      await EasyLoading.show(status: 'Loading...');
+      await AppNavigator.showLoading();
       final tokenReply = await _apiClient.fetchLivenessToken(
         orderNo: orderNo,
         livenessType: '0',
       );
       final token = FaceTokenResult.fromReply(tokenReply);
       if (token.needsIdentityUpload) {
-        await EasyLoading.dismiss();
+        await AppNavigator.dismissLoading();
         if (mounted) await _showIdentityUploadDialog();
         return;
       }
@@ -248,7 +255,7 @@ class _FaceRecognitionPageState extends State<FaceRecognitionPage> {
         );
       }
 
-      await EasyLoading.dismiss();
+      await AppNavigator.dismissLoading();
       final livenessResult = await _liveness.start(token.license);
       unawaited(_reportLivenessResult(livenessResult));
       if (!hasUploadableLivenessData(livenessResult)) {
@@ -260,7 +267,7 @@ class _FaceRecognitionPageState extends State<FaceRecognitionPage> {
       }
 
       imagePath = await _imageWriter(livenessResult.image);
-      await EasyLoading.show(status: 'Loading...');
+      await AppNavigator.showLoading();
       final uploadReply = await _apiClient.uploadEvidence(
         filePath: imagePath,
         body: <String, dynamic>{
@@ -274,7 +281,7 @@ class _FaceRecognitionPageState extends State<FaceRecognitionPage> {
         },
       );
       uploadReply.orThrow();
-      await EasyLoading.dismiss();
+      await AppNavigator.dismissLoading();
 
       if (sceneStartSeconds > 0) {
         unawaited(
@@ -319,7 +326,7 @@ class _FaceRecognitionPageState extends State<FaceRecognitionPage> {
     if (_orderNo.isNotEmpty) return _orderNo;
     final cachedOrderNo = _apiClient.settings.localSession.productFlowOrderNo;
     if (cachedOrderNo.isNotEmpty) return cachedOrderNo;
-    await EasyLoading.show(status: 'Loading...');
+    await AppNavigator.showLoading();
     try {
       final reply = await ProductDetailLoader.load(
         _apiClient,
@@ -330,7 +337,7 @@ class _FaceRecognitionPageState extends State<FaceRecognitionPage> {
         await EasyLoading.showError(FaceStrings.orderMissing);
         return '';
       }
-      await EasyLoading.dismiss();
+      await AppNavigator.dismissLoading();
       return orderNo;
     } on GatewayFailure catch (error) {
       await EasyLoading.showError(error.message);

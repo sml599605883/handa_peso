@@ -1,8 +1,7 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../../app/layout/responsive_layout.dart';
 import '../../app/navigation/app_navigator.dart';
 import '../../app/navigation/h5_paths.dart';
 import '../../app/routes/app_routes.dart';
@@ -17,15 +16,13 @@ import 'mine_service_section.dart';
 /// 个人中心（Mine Tab，设计稿 07-01 - 个人中心-默认）。
 ///
 /// 自上而下三块：头部卡片（脱敏手机号 + 头像）、三个订单入口、Our service 菜单。
-/// 整页按 375 设计宽度等比缩放，数值都写设计稿坐标；底色渐变只铺到设计稿的
-/// 547 高度，以下留白由页面补白（设计稿里那块 `矩形` 就是这么切的）。
+/// 页面按 iPhone 实际宽度组织纵向内容，卡片保持设计比例；底部通过安全区留白，
+/// 避免内容贴到 Home Indicator。
 ///
 /// 手机号取自本地会话——个人中心接口（`/dropcloth/affluents`）按接口文档只下发
 /// 签到、待绑卡 / 待还款数量与菜单列表，没有手机号字段。
 class MinePage extends GetView<MainController> {
   const MinePage({super.key});
-
-  static const double _designWidth = 375;
 
   /// 标题（设计稿 20 号字，行盒 30，上沿 58）。
   static const double _titleTop = 58;
@@ -40,83 +37,83 @@ class MinePage extends GetView<MainController> {
   /// 订单入口整块高度（图标 66 + 间距 10 + 文案 20）。
   static const double _entriesHeight = 96;
 
-  /// 状态栏比设计稿更高时的兜底间距。
-  static const double _safeGap = 8;
-
   @override
   Widget build(BuildContext context) {
     return Obx(() {
       final phone = controller.sessionPhone.value;
       return LayoutBuilder(
         builder: (context, constraints) {
-          final scale = constraints.maxWidth / _designWidth;
+          final metrics = AppResponsiveMetrics(
+            screenWidth: constraints.maxWidth,
+            safeTop: MediaQuery.paddingOf(context).top,
+            safeBottom: MediaQuery.paddingOf(context).bottom,
+          );
+          final scale = metrics.scale;
           double px(num value) => value * scale;
+          final shift = metrics.headerShift;
 
-          final safeTop = MediaQuery.paddingOf(context).top / scale;
-          final shift = math.max(0, safeTop + _safeGap - _titleTop);
-
-          // 外壳的 Tab 页拿到的是「不紧」的高度约束：Stack 跟着内容收缩时，
-          // 页面底部的白色只铺到内容下沿，再往下会露出外层页面的底色。
-          // 这里显式撑满视口，让白色一直铺到底部导航栏。
           return SizedBox(
             width: constraints.maxWidth,
             height: constraints.maxHeight,
-            child: Stack(
-              children: [
-                const Positioned.fill(
-                  child: DecoratedBox(
-                    key: Key('mine-background'),
-                    decoration: BoxDecoration(
-                      gradient: AppColors.accountPageGradient,
-                    ),
-                  ),
-                ),
-                SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      SizedBox(height: px(_titleTop + shift)),
-                      SizedBox(
-                        height: px(_titleHeight),
-                        child: Center(
-                          child: Text(
-                            'Mine',
-                            style: TextStyle(
-                              color: AppColors.textStrong,
-                              fontSize: px(_titleSize),
-                              fontWeight: FontWeight.w700,
-                              height: _titleHeight / _titleSize,
+            child: DecoratedBox(
+              key: const Key('mine-background'),
+              decoration: const BoxDecoration(
+                gradient: AppColors.accountPageGradient,
+              ),
+              child: SingleChildScrollView(
+                padding: EdgeInsets.only(bottom: metrics.safeBottom + px(24)),
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: SizedBox(
+                    width: constraints.maxWidth,
+                    child: Column(
+                      children: [
+                        SizedBox(height: px(_titleTop + shift)),
+                        SizedBox(
+                          height: px(_titleHeight),
+                          child: Center(
+                            child: Text(
+                              'Mine',
+                              style: TextStyle(
+                                color: AppColors.textStrong,
+                                fontSize: px(_titleSize),
+                                fontWeight: FontWeight.w700,
+                                height: _titleHeight / _titleSize,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      SizedBox(
-                        height: px(_headerTop - _titleTop - _titleHeight),
-                      ),
-                      MineHeaderCard(phone: phone, scale: scale),
-                      SizedBox(
-                        height: px(
-                          _entriesTop - _headerTop - MineHeaderCard.height,
+                        SizedBox(
+                          height: px(_headerTop - _titleTop - _titleHeight),
                         ),
-                      ),
-                      MineOrderEntries(scale: scale, onSelect: _openOrders),
-                      SizedBox(
-                        height: px(_serviceTop - _entriesTop - _entriesHeight),
-                      ),
-                      MineServiceSection(
-                        scale: scale,
-                        onCustomerService: () => _openH5(
-                          H5Paths.customerService,
-                          'Customer service',
+                        MineHeaderCard(phone: phone, scale: scale),
+                        SizedBox(
+                          height: px(
+                            _entriesTop - _headerTop - MineHeaderCard.height,
+                          ),
                         ),
-                        onPrivacy: () =>
-                            _openH5(H5Paths.privacyPolicy, 'Privacy'),
-                        onAccount: () => Get.toNamed<void>(AppRoutes.account),
-                      ),
-                      SizedBox(height: px(24)),
-                    ],
+                        MineOrderEntries(scale: scale, onSelect: _openOrders),
+                        SizedBox(
+                          height: px(
+                            _serviceTop - _entriesTop - _entriesHeight,
+                          ),
+                        ),
+                        MineServiceSection(
+                          scale: scale,
+                          onCustomerService: () => _openH5(
+                            H5Paths.customerService,
+                            'Customer service',
+                          ),
+                          onPrivacy: () =>
+                              _openH5(H5Paths.privacyPolicy, 'Privacy'),
+                          onAccount: () => Get.toNamed<void>(AppRoutes.account),
+                        ),
+                        SizedBox(height: px(24)),
+                      ],
+                    ),
                   ),
                 ),
-              ],
+              ),
             ),
           );
         },

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -17,6 +16,7 @@ import 'identity_design.dart';
 import 'personal_information_models.dart';
 import 'widgets/personal_address_selector.dart';
 import 'widgets/certification_progress_bar.dart';
+import 'widgets/identity_retention_guard.dart';
 import 'widgets/personal_information_selectors.dart';
 
 /// 个人信息与工作信息共用的动态表单页。
@@ -42,7 +42,8 @@ class PersonalInformationPage extends StatefulWidget {
       _PersonalInformationPageState();
 }
 
-class _PersonalInformationPageState extends State<PersonalInformationPage> {
+class _PersonalInformationPageState extends State<PersonalInformationPage>
+    with IdentityRetentionGuard<PersonalInformationPage> {
   late final GatewayClient _apiClient =
       widget.apiClient ?? Get.find<GatewayClient>();
   late final int _sceneStartedAt = ReportService.nowSeconds();
@@ -60,6 +61,16 @@ class _PersonalInformationPageState extends State<PersonalInformationPage> {
   bool _submitting = false;
 
   bool get _isWork => widget.formType == CertificationInformationKind.work;
+
+  /// 个人信息是场景 2，工作信息是场景 3。
+  @override
+  String get retentionScene => _isWork ? '3' : '2';
+
+  @override
+  String get retentionProductId => _productId;
+
+  @override
+  GatewayClient get retentionApiClient => _apiClient;
 
   ReportService? get _reporter {
     if (widget.reporter != null) return widget.reporter;
@@ -243,54 +254,40 @@ class _PersonalInformationPageState extends State<PersonalInformationPage> {
 
   @override
   Widget build(BuildContext context) {
-    final fieldCount = _data?.fields.length ?? 4;
-    final cardHeight = _cardHeight(fieldCount);
-    final submitTop = _cardTop + cardHeight + 20;
-    final designHeight = submitTop + IdentityDesign.submitHeight + 54;
-    return IdentityPageScaffold(
-      gradient: AppColors.facePageGradient,
-      designHeight: designHeight,
-      builder: (context, metrics) {
-        final safeTop = metrics.safeTopInDesign;
-        final shift = safeTop > IdentityDesign.backTop - 8
-            ? safeTop - (IdentityDesign.backTop - 8)
-            : 0.0;
-        return Stack(
+    return PopScope<void>(
+      canPop: retentionCanPop,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) handleRetentionExit();
+      },
+      child: IdentityPageScaffold(
+        gradient: AppColors.facePageGradient,
+        builder: (context, metrics) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            _pageHeader(metrics, shift),
-            Positioned(
-              left: metrics.x(14),
-              top: metrics.y(102 + shift),
-              width: metrics.size(224),
-              child: CertificationProgressBar(
-                metrics: metrics,
-                activeSegments: _isWork ? 2 : 1,
+            IdentityPageHeader(
+              metrics: metrics,
+              title: _isWork ? 'Work Information' : 'Identity Information',
+              onBack: handleRetentionExit,
+            ),
+            SizedBox(height: metrics.size(12)),
+            IdentityHeroBanner(
+              text: _heroCopy,
+              metrics: metrics,
+              top: SizedBox(
+                width: metrics.size(224),
+                child: CertificationProgressBar(
+                  metrics: metrics,
+                  activeSegments: _isWork ? 2 : 1,
+                ),
               ),
+              maxLines: 3,
+              minFontSize: 14,
+              maxFontSize: 20,
             ),
-            Positioned(
-              left: 0,
-              top: metrics.y(123 + shift),
-              width: metrics.screenWidth,
-              height: metrics.size(81),
-              child: IdentityHeroBanner(
-                text: _heroCopy,
-                metrics: metrics,
-                moneyBagTopOffset: -21,
-                maxLines: 3,
-                minFontSize: 14,
-                maxFontSize: 20,
-              ),
-            ),
-            Positioned(
-              left: metrics.x(14),
-              top: metrics.y(_cardTop + shift),
-              width: metrics.size(347),
-              height: metrics.size(cardHeight),
-              child: _buildCard(metrics),
-            ),
-            Positioned(
-              left: metrics.x(78),
-              top: metrics.y(submitTop + shift),
+            SizedBox(height: metrics.size(36)),
+            _buildCard(metrics),
+            SizedBox(height: metrics.size(20)),
+            Center(
               child: IdentitySubmitButton(
                 key: Key(
                   _isWork
@@ -305,12 +302,10 @@ class _PersonalInformationPageState extends State<PersonalInformationPage> {
               ),
             ),
           ],
-        );
-      },
+        ),
+      ),
     );
   }
-
-  static const double _cardTop = 219;
 
   String get _heroCopy {
     final flowCopy = _apiClient.settings.localSession.productFlowCopy;
@@ -320,50 +315,6 @@ class _PersonalInformationPageState extends State<PersonalInformationPage> {
     return endpointCopy.isNotEmpty
         ? endpointCopy
         : 'Tell us more about yourself to speed up your approval.';
-  }
-
-  static double _cardHeight(int fieldCount) {
-    if (fieldCount == 0) return 180;
-    return 40 + fieldCount * (20 + 10 + 48) + math.max(0, fieldCount - 1) * 14;
-  }
-
-  Widget _pageHeader(IdentityMetrics metrics, double shift) {
-    return SizedBox(
-      width: metrics.screenWidth,
-      height: metrics.size(120),
-      child: Stack(
-        children: <Widget>[
-          Positioned(
-            left: 0,
-            top: metrics.y(58 + shift),
-            width: metrics.screenWidth,
-            height: metrics.size(30),
-            child: Stack(
-              children: <Widget>[
-                Center(
-                  child: Text(
-                    _isWork ? 'Work Information' : 'Identity Information',
-                    style: TextStyle(
-                      color: AppColors.identityTitle,
-                      fontSize: metrics.size(20),
-                      fontWeight: FontWeight.w700,
-                      height: 30 / 20,
-                    ),
-                  ),
-                ),
-                Positioned(
-                  left: metrics.x(14),
-                  top: metrics.size(-2),
-                  width: metrics.size(IdentityDesign.backSize),
-                  height: metrics.size(IdentityDesign.backSize),
-                  child: const IdentityBackButton(),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildCard(IdentityMetrics metrics) {
@@ -376,13 +327,15 @@ class _PersonalInformationPageState extends State<PersonalInformationPage> {
       ),
     );
     if (_loading) {
-      return DecoratedBox(
+      return Container(
+        constraints: BoxConstraints(minHeight: metrics.size(180)),
         decoration: decoration,
         child: const Center(child: CircularProgressIndicator()),
       );
     }
     if (_error != null) {
-      return DecoratedBox(
+      return Container(
+        constraints: BoxConstraints(minHeight: metrics.size(180)),
         decoration: decoration,
         child: Center(
           child: TextButton(
@@ -397,7 +350,8 @@ class _PersonalInformationPageState extends State<PersonalInformationPage> {
     }
     final fields = _data?.fields ?? const <PersonalInformationField>[];
     if (fields.isEmpty) {
-      return DecoratedBox(
+      return Container(
+        constraints: BoxConstraints(minHeight: metrics.size(180)),
         decoration: decoration,
         child: Center(
           child: Text(
@@ -408,7 +362,7 @@ class _PersonalInformationPageState extends State<PersonalInformationPage> {
         ),
       );
     }
-    return DecoratedBox(
+    return Container(
       decoration: decoration,
       child: Padding(
         padding: EdgeInsets.fromLTRB(
@@ -441,8 +395,8 @@ class _PersonalInformationPageState extends State<PersonalInformationPage> {
       key: ValueKey<String>('personal-information-field-${field.key}'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        SizedBox(
-          height: metrics.size(20),
+        ConstrainedBox(
+          constraints: BoxConstraints(minHeight: metrics.size(20)),
           child: Text(
             field.title,
             maxLines: 1,
@@ -455,8 +409,8 @@ class _PersonalInformationPageState extends State<PersonalInformationPage> {
           ),
         ),
         SizedBox(height: metrics.size(10)),
-        SizedBox(
-          height: metrics.size(48),
+        ConstrainedBox(
+          constraints: BoxConstraints(minHeight: metrics.size(48)),
           child: DecoratedBox(
             decoration: BoxDecoration(
               color: AppColors.personalInformationFieldSurface,

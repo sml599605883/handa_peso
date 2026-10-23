@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:get/get.dart';
 
+import '../../app/navigation/app_navigator.dart';
 import '../../app/routes/app_routes.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/widgets/ios_permission_prompt.dart';
@@ -14,6 +15,7 @@ import '../main_shell/main_controller.dart';
 import 'identity_design.dart';
 import 'identity_models.dart';
 import 'identity_photo_service.dart';
+import 'widgets/identity_retention_guard.dart';
 import 'widgets/identity_upload_method_sheet.dart';
 
 /// 上传证件正面（设计稿 03-01 - 身份认证-上传身份证 / -认证方式选择）。
@@ -56,7 +58,8 @@ class IdentityUploadPage extends StatefulWidget {
   State<IdentityUploadPage> createState() => _IdentityUploadPageState();
 }
 
-class _IdentityUploadPageState extends State<IdentityUploadPage> {
+class _IdentityUploadPageState extends State<IdentityUploadPage>
+    with IdentityRetentionGuard<IdentityUploadPage> {
   late final GatewayClient _apiClient =
       widget.apiClient ?? Get.find<GatewayClient>();
   late final IdentityPhotoPicker _picker =
@@ -70,6 +73,15 @@ class _IdentityUploadPageState extends State<IdentityUploadPage> {
 
   /// 调用方带进来的完成标记，随流程一路传下去。
   IdentityFlowOutcome? _outcome;
+
+  @override
+  String get retentionScene => '0';
+
+  @override
+  String get retentionProductId => _productId;
+
+  @override
+  GatewayClient get retentionApiClient => _apiClient;
 
   @override
   void initState() {
@@ -92,85 +104,93 @@ class _IdentityUploadPageState extends State<IdentityUploadPage> {
 
   @override
   Widget build(BuildContext context) {
-    return IdentityPageScaffold(
-      gradient: AppColors.identityPageGradient,
-      designHeight: IdentityDesign.pageHeight,
-      builder: (context, metrics) => IdentityPageChrome(
-        metrics: metrics,
-        contentTop: IdentityDesign.heroContentTop,
-        heroCopy: _heroCopy,
-        child: SizedBox(
-          height: metrics.size(
-            IdentityDesign.pageHeight - IdentityDesign.heroContentTop,
-          ),
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: <Widget>[
-              Positioned(
-                left: metrics.x(IdentityDesign.cardLeft),
-                top: metrics.y(_cardTop),
-                child: Container(
-                  key: const Key('identity-upload-card'),
-                  width: metrics.size(IdentityDesign.cardWidth),
-                  height: metrics.size(IdentityDesign.uploadCardHeight),
-                  decoration: BoxDecoration(
-                    color: AppColors.identityCardSurface,
-                    borderRadius: BorderRadius.vertical(
-                      bottom: Radius.circular(
-                        metrics.size(IdentityDesign.cardRadius),
-                      ),
-                    ),
-                    border: Border(
-                      left: BorderSide(
-                        color: AppColors.identityCardBorder,
-                        width: metrics.size(1),
-                      ),
-                      right: BorderSide(
-                        color: AppColors.identityCardBorder,
-                        width: metrics.size(1),
-                      ),
-                      bottom: BorderSide(
-                        color: AppColors.identityCardBorder,
-                        width: metrics.size(1),
-                      ),
-                    ),
+    return PopScope<void>(
+      canPop: retentionCanPop,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) handleRetentionExit();
+      },
+      child: IdentityPageScaffold(
+        gradient: AppColors.identityPageGradient,
+        builder: (context, metrics) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            IdentityPageHeader(
+              metrics: metrics,
+              title: IdentityStrings.pageTitle,
+              onBack: handleRetentionExit,
+            ),
+            IdentityHeroBanner(
+              text: _heroCopy,
+              metrics: metrics,
+              maxLines: 2,
+              minFontSize: 14,
+              maxFontSize: 20,
+            ),
+            SizedBox(height: metrics.size(15)),
+            DecoratedBox(
+              key: const Key('identity-upload-card'),
+              decoration: BoxDecoration(
+                color: AppColors.identityCardSurface,
+                borderRadius: BorderRadius.vertical(
+                  bottom: Radius.circular(
+                    metrics.size(IdentityDesign.cardRadius),
+                  ),
+                ),
+                border: Border(
+                  left: BorderSide(
+                    color: AppColors.identityCardBorder,
+                    width: metrics.size(1),
+                  ),
+                  right: BorderSide(
+                    color: AppColors.identityCardBorder,
+                    width: metrics.size(1),
+                  ),
+                  bottom: BorderSide(
+                    color: AppColors.identityCardBorder,
+                    width: metrics.size(1),
                   ),
                 ),
               ),
-              Positioned(
-                left: metrics.x(IdentityDesign.cardLeft),
-                top: metrics.y(_pillTop),
-                child: IdentityCardHeader(
-                  key: const Key('identity-upload-pill'),
-                  title: IdentityStrings.uploadCardTitle,
-                  metrics: metrics,
-                  height: IdentityDesign.uploadPillHeight,
-                  attachedToCard: true,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  IdentityCardHeader(
+                    key: const Key('identity-upload-pill'),
+                    title: IdentityStrings.uploadCardTitle,
+                    metrics: metrics,
+                    height: IdentityDesign.uploadPillHeight,
+                    attachedToCard: true,
+                  ),
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      metrics.size(5),
+                      metrics.size(18),
+                      metrics.size(14),
+                      metrics.size(21),
+                    ),
+                    child: AspectRatio(
+                      aspectRatio:
+                          IdentityDesign.demoWidth / IdentityDesign.demoHeight,
+                      child: const Image(
+                        key: Key('identity-upload-demo'),
+                        image: AssetImage(IdentityAssets.demoCard),
+                        fit: BoxFit.contain,
+                        semanticLabel: 'ID upload demonstration',
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              Positioned(
-                left: metrics.x(IdentityDesign.demoLeft),
-                top: metrics.y(_demoTop),
-                width: metrics.size(IdentityDesign.demoWidth),
-                height: metrics.size(IdentityDesign.demoHeight),
-                child: const Image(
-                  key: Key('identity-upload-demo'),
-                  image: AssetImage(IdentityAssets.demoCard),
-                  fit: BoxFit.fill,
-                  semanticLabel: 'ID upload demonstration',
-                ),
+            ),
+            SizedBox(height: metrics.size(20)),
+            Center(
+              child: IdentitySubmitButton(
+                key: const Key('identity-upload-submit'),
+                metrics: metrics,
+                onPressed: _busy ? null : _startUpload,
               ),
-              Positioned(
-                left: metrics.x(_submitLeft),
-                top: metrics.y(_submitTop),
-                child: IdentitySubmitButton(
-                  key: const Key('identity-upload-submit'),
-                  metrics: metrics,
-                  onPressed: _busy ? null : _startUpload,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -180,20 +200,6 @@ class _IdentityUploadPageState extends State<IdentityUploadPage> {
     final copy = _apiClient.settings.localSession.productFlowCopy.identity;
     return copy.isEmpty ? IdentityStrings.heroCopy : copy;
   }
-
-  /// 主按钮居中：设计稿 220x52 摆在 375 画布正中。
-  static const double _submitLeft =
-      (IdentityDesign.pageWidth - IdentityDesign.submitWidth) / 2;
-
-  /// 正文区从设计坐标 171（引导区下沿）起，所以正文里的纵向位置都要减掉它。
-  static const double _pillTop =
-      IdentityDesign.uploadPillTop - IdentityDesign.heroContentTop;
-  static const double _cardTop =
-      IdentityDesign.uploadCardTop - IdentityDesign.heroContentTop;
-  static const double _demoTop =
-      IdentityDesign.demoTop - IdentityDesign.heroContentTop;
-  static const double _submitTop =
-      IdentityDesign.uploadSubmitTop - IdentityDesign.heroContentTop;
 
   Future<void> _startUpload() async {
     if (_busy) return;
@@ -223,14 +229,14 @@ class _IdentityUploadPageState extends State<IdentityUploadPage> {
     }
 
     setState(() => _busy = true);
-    await EasyLoading.show(status: 'Loading...');
+    await AppNavigator.showLoading();
     String? path;
     try {
       path = method == IdentityPhotoSource.camera
           ? await _picker.pickFromCamera()
           : await _picker.pickFromAlbum();
       if (path == null || path.isEmpty) {
-        await EasyLoading.dismiss();
+        await AppNavigator.dismissLoading();
         if (mounted) setState(() => _busy = false);
         return;
       }
@@ -265,7 +271,7 @@ class _IdentityUploadPageState extends State<IdentityUploadPage> {
           'scarriest': _cardType,
         },
       );
-      await EasyLoading.dismiss();
+      await AppNavigator.dismissLoading();
       if (!mounted) return;
       final recognition = IdentityRecognition.fromReply(reply);
       await Get.toNamed<void>(

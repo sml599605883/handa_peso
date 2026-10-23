@@ -12,6 +12,7 @@ abstract final class AppRoutes {
   static const workInformation = '/certification/work-information';
   static const emergencyContact = '/certification/emergency-contact';
   static const bindCard = '/certification/bind-card';
+  static const payoutAccounts = '/certification/payout-accounts';
   static const creditReview = '/credit-review';
   static const orders = '/orders';
   static const support = '/support';

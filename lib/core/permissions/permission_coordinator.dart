@@ -13,8 +13,11 @@ enum LocationAccessDecision {
   /// 授权弹窗已经结束，且拿到了定位权限。
   granted,
 
-  /// 权限被拒绝，或被系统限制（家长控制等）：只能去系统设置里改。
+  /// 用户拒绝授权：中止本次申请，等待用户下次主动重试。
   denied,
+
+  /// 系统限制定位（家长控制等）：说明原因并提供系统设置入口。
+  restricted,
 
   /// 系统「定位服务」总开关没打开：同样要去系统设置，说明文案不同。
   serviceDisabled,
@@ -85,7 +88,8 @@ class PermissionCoordinator {
       'authorized_always' ||
       'authorized_when_in_use' => LocationAccessDecision.granted,
       'service_disabled' => LocationAccessDecision.serviceDisabled,
-      'denied' || 'restricted' => LocationAccessDecision.denied,
+      'denied' => LocationAccessDecision.denied,
+      'restricted' => LocationAccessDecision.restricted,
       // `not_determined`：弹窗还没结论（被切到后台等情况）；空串：原生不可用。
       // 两种都不拦申请。
       _ => LocationAccessDecision.unavailable,

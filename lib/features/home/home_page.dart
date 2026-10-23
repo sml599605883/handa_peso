@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
-import '../main_shell/main_controller.dart';
+import '../../app/layout/responsive_layout.dart';
 import '../../app/widgets/app_empty_state.dart';
+import '../main_shell/main_controller.dart';
 import 'home_banner.dart';
 import 'home_big_card.dart';
 import 'home_recommendations.dart';
@@ -14,8 +15,6 @@ import 'customer_service_shortcut.dart';
 /// `HandaPesoApp` 统一提供。
 class HomePage extends GetView<MainController> {
   const HomePage({super.key});
-
-  static const double _designWidth = 375;
 
   /// 主视觉与宣传条之间的间距（设计稿 18）。
   static const double _bannerGap = 18;
@@ -59,7 +58,12 @@ class HomePage extends GetView<MainController> {
       final card = data.loanCard;
       return LayoutBuilder(
         builder: (context, constraints) {
-          final scale = constraints.maxWidth / _designWidth;
+          final metrics = AppResponsiveMetrics(
+            screenWidth: constraints.maxWidth,
+            safeTop: MediaQuery.paddingOf(context).top,
+            safeBottom: MediaQuery.paddingOf(context).bottom,
+          );
+          final scale = metrics.scale;
           return _withCustomerService(
             context,
             RefreshIndicator(

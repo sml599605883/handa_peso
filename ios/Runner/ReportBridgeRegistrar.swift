@@ -196,8 +196,8 @@ final class ReportBridgeRegistrar: NSObject, FlutterStreamHandler, CLLocationMan
 
   /// 弹一次系统定位授权弹窗，并在用户做出选择（或权限本就已决定）后返回状态。
   ///
-  /// 埋点1 要求在授权操作完成后才上报，因此这个回调必须等真实结果，不能在弹窗
-  /// 一出现就返回 `not_determined`：用户点「不允许」也要算完成。
+  /// 调用方必须等用户做出真实选择，不能在弹窗一出现就返回 `not_determined`：
+  /// 用户点「不允许」时也要把明确结果交回 Dart。
   private func requestLocationPermission(_ result: @escaping FlutterResult) {
     guard CLLocationManager.locationServicesEnabled() else {
       result("service_disabled")

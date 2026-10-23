@@ -119,11 +119,6 @@ class _NativeScript {
   String pushToken = '';
   String trackingStatus = 'not_determined';
 
-  /// 模拟系统定位授权弹窗：非空时 `requestLocationPermission` 会挂起，
-  /// 直到测试把它 complete（等价于用户点了允许或不允许）。
-  Completer<void>? locationPermissionGate;
-  String locationPermissionStatus = 'authorized_when_in_use';
-
   static const _channel = MethodChannel('handa_peso/report_bridge.test');
   static const _events = EventChannel('handa_peso/report_events.test');
 
@@ -141,9 +136,6 @@ class _NativeScript {
               return pushToken;
             case 'getTrackingStatus':
               return trackingStatus;
-            case 'requestLocationPermission':
-              await locationPermissionGate?.future;
-              return locationPermissionStatus;
             default:
               return null;
           }
@@ -475,47 +467,20 @@ void main() {
     );
 
     test(
-      'waits for the location prompt before the login-time uploads',
+      'login reports existing data without requesting location permission',
       () async {
         native.snapshot = _snapshot;
         native.location = _location;
-        final gate = Completer<void>();
-        native.locationPermissionGate = gate;
 
         await service.loginSucceeded(registeredAtSeconds: 1699999990);
         await pumpEventQueue();
 
-        // 授权弹窗还开着：注册埋点、定位、设备详情都先不发。
-        expect(native.order, contains('requestLocationPermission'));
-        expect(harness.hasCall('/dropcloth/disgruntle'), isFalse);
-        expect(harness.hasCall('/dropcloth/farle'), isFalse);
-        expect(harness.hasCall('/dropcloth/unglove'), isFalse);
-
-        gate.complete();
-        await pumpEventQueue();
-
+        expect(native.order, isNot(contains('requestLocationPermission')));
         final scene = harness.callTo('/dropcloth/disgruntle').body;
         expect(scene['proves'], '1');
         expect(scene['sparkler'], '1699999990');
-        // 结束时间是「登录成功」那一刻，不含用户看弹窗的时间。
         expect(scene['spectacled'], '1700000000');
         expect(harness.callTo('/dropcloth/farle').body['carnets'], '14.554729');
-        expect(harness.hasCall('/dropcloth/unglove'), isTrue);
-      },
-    );
-
-    test(
-      'sends the login-time uploads right away when the prompt is settled',
-      () async {
-        native.snapshot = _snapshot;
-        // 弹窗已经弹过：原生不再弹，直接给出状态，上报不再等。
-        native.locationPermissionStatus = 'denied';
-        native.location = _location;
-
-        await service.loginSucceeded(registeredAtSeconds: 1699999990);
-        await pumpEventQueue();
-
-        expect(harness.callTo('/dropcloth/disgruntle').body['proves'], '1');
         expect(harness.hasCall('/dropcloth/unglove'), isTrue);
       },
     );

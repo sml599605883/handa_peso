@@ -1,9 +1,8 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import '../../app/layout/responsive_layout.dart';
 import '../../app/navigation/app_navigator.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/widgets/design_back_button.dart';
@@ -28,8 +27,6 @@ class AccountPage extends StatefulWidget {
 }
 
 class _AccountPageState extends State<AccountPage> {
-  static const double _designWidth = 375;
-
   /// 返回键与标题（设计稿 24x24 @ y=56、20 号字 @ y=58）。
   static const double _backLeft = 14;
   static const double _backTop = 56;
@@ -40,7 +37,6 @@ class _AccountPageState extends State<AccountPage> {
 
   /// 卡片（设计稿 `box_4` @ y=118，347 宽、圆角 14、`#FFF9F2` + `#EBDBCA`）。
   static const double _cardTop = 118;
-  static const double _cardWidth = 347;
   static const double _cardRadius = 14;
   static const double _cardBottom = 39;
 
@@ -63,9 +59,6 @@ class _AccountPageState extends State<AccountPage> {
   static const double _actionRadius = 26;
   static const double _actionGap = 12;
   static const double _actionLabelSize = 18;
-
-  /// 状态栏比设计稿更高时的兜底间距。
-  static const double _safeGap = 8;
 
   /// 注销成功后的提示：服务端只是受理，删除本身是异步的。
   static const String _deletedHint =
@@ -141,77 +134,85 @@ class _AccountPageState extends State<AccountPage> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final scale = constraints.maxWidth / _designWidth;
+        final metrics = AppResponsiveMetrics(
+          screenWidth: constraints.maxWidth,
+          safeTop: MediaQuery.paddingOf(context).top,
+          safeBottom: MediaQuery.paddingOf(context).bottom,
+          designHorizontalInset: _backLeft,
+        );
+        final scale = metrics.scale;
         double px(num value) => value * scale;
+        final shift = metrics.headerShift;
 
-        // 设计稿把状态栏画进画布；机型刘海更高时整块头部下移，别压住标题。
-        final safeTop = MediaQuery.paddingOf(context).top / scale;
-        final shift = math.max(0, safeTop + _safeGap - _titleTop);
-
-        // 约束不紧时 Stack 会跟着内容收缩，底色就铺不满一屏；显式撑满视口。
         return SizedBox(
           width: constraints.maxWidth,
           height: constraints.maxHeight,
-          child: Stack(
-            children: [
-              const Positioned.fill(
-                child: DecoratedBox(
-                  key: Key('account-background'),
-                  decoration: BoxDecoration(
-                    gradient: AppColors.accountPageGradient,
+          child: DecoratedBox(
+            key: const Key('account-background'),
+            decoration: const BoxDecoration(
+              gradient: AppColors.accountPageGradient,
+            ),
+            child: SingleChildScrollView(
+              padding: EdgeInsets.only(bottom: metrics.safeBottom + px(24)),
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: SizedBox(
+                  width: metrics.contentWidth,
+                  child: Column(
+                    children: [
+                      SizedBox(height: px(_titleTop + shift)),
+                      SizedBox(
+                        height: px(_titleHeight),
+                        child: _buildTitleBar(px),
+                      ),
+                      SizedBox(height: px(_cardTop - _titleTop - _titleHeight)),
+                      _buildCard(px, scale),
+                      SizedBox(height: px(24)),
+                    ],
                   ),
                 ),
               ),
-              SingleChildScrollView(
-                child: Column(
-                  children: [
-                    SizedBox(height: px(_titleTop + shift)),
-                    SizedBox(
-                      height: px(_titleHeight),
-                      child: _buildTitleBar(px),
-                    ),
-                    SizedBox(height: px(_cardTop - _titleTop - _titleHeight)),
-                    _buildCard(px, scale),
-                    SizedBox(height: px(24)),
-                  ],
-                ),
-              ),
-            ],
+            ),
           ),
         );
       },
     );
   }
 
-  /// 标题栏：返回键绝对定位在左上角，标题居中。
+  /// 标题栏：返回键在左，标题在剩余空间居中。
   Widget _buildTitleBar(double Function(num) px) {
-    return Stack(
-      children: [
-        Center(
-          child: Text(
-            AccountPage.title,
-            style: TextStyle(
-              color: AppColors.textStrong,
-              fontSize: px(_titleSize),
-              fontWeight: FontWeight.w700,
-              height: _titleHeight / _titleSize,
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Transform.translate(
+          offset: Offset(0, px(_backTop - _titleTop)),
+          child: SizedBox(
+            width: px(_backSize),
+            height: px(_backSize),
+            child: const DesignBackButton(),
+          ),
+        ),
+        Expanded(
+          child: Center(
+            child: Text(
+              AccountPage.title,
+              style: TextStyle(
+                color: AppColors.textStrong,
+                fontSize: px(_titleSize),
+                fontWeight: FontWeight.w700,
+                height: _titleHeight / _titleSize,
+              ),
             ),
           ),
         ),
-        Positioned(
-          left: px(_backLeft),
-          top: px(_backTop - _titleTop),
-          width: px(_backSize),
-          height: px(_backSize),
-          child: const DesignBackButton(),
-        ),
+        SizedBox(width: px(_backSize)),
       ],
     );
   }
 
   Widget _buildCard(double Function(num) px, double scale) {
     return Container(
-      width: px(_cardWidth),
+      width: double.infinity,
       decoration: BoxDecoration(
         color: AppColors.accountCardSurface,
         borderRadius: BorderRadius.circular(px(_cardRadius)),
@@ -222,7 +223,7 @@ class _AccountPageState extends State<AccountPage> {
         children: [
           // 弧形面板与面板上的应用名。
           SizedBox(
-            width: px(_cardWidth),
+            width: double.infinity,
             height: px(_curtainHeight),
             child: Stack(
               children: [

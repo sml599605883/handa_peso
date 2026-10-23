@@ -35,12 +35,14 @@ class _AccountDeletionPageState extends State<AccountDeletionPage> {
       _submitting = true;
       _error = null;
     });
+    await AppNavigator.showLoading();
     try {
       final gatewayClient = Get.find<GatewayClient>();
       await gatewayClient.closeAccount();
       AnalyticsService.logEvent(AppEvents.accountDeleted);
       await gatewayClient.settings.localSession.resetSession();
       AnalyticsService.setUserId(null);
+      await AppNavigator.dismissLoading();
       if (!mounted) return;
       AppNavigator.showToast(
         'Your account deletion request has been submitted.',
@@ -48,9 +50,11 @@ class _AccountDeletionPageState extends State<AccountDeletionPage> {
       await AppNavigator.toLogin();
     } on GatewayFailure catch (error) {
       CrashReporter.record(error, StackTrace.current);
+      await AppNavigator.dismissLoading();
       if (!mounted) return;
       setState(() => _error = error.message);
     } finally {
+      await AppNavigator.dismissLoading();
       if (mounted) setState(() => _submitting = false);
     }
   }

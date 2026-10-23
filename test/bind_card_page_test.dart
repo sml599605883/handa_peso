@@ -251,12 +251,13 @@ Future<void> _pumpPage(
   WidgetTester tester, {
   required GatewayClient client,
   required BindCardFlowOutcome outcome,
+  Size size = const Size(375, 1000),
   ReportService? reporter,
   BindCardCameraPermission? camera,
   BindCardLivenessStart? liveness,
   String changeOrderNo = '',
 }) async {
-  tester.view.physicalSize = const Size(375, 1000);
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
@@ -353,8 +354,36 @@ void main() {
     );
     expect(
       tester.getTopLeft(find.byKey(const Key('bind-card-submit'))),
-      const Offset(78, 681),
+      const Offset(77.5, 681),
     );
+  });
+
+  testWidgets('320 宽短屏下表单自然撑高并可滚动到提交按钮', (tester) async {
+    final adapter = _StubAdapter(cardBody: _cardBody());
+    final outcome = BindCardFlowOutcome();
+    await _pumpPage(
+      tester,
+      client: _clientFor(adapter),
+      outcome: outcome,
+      size: const Size(320, 568),
+    );
+
+    final scale = (320 / 375).clamp(0.85, 1.2);
+    final contentWidth = 320 - 28 * scale;
+    expect(
+      tester.getSize(find.byKey(const Key('bind-card-form'))).width,
+      moreOrLessEquals(contentWidth, epsilon: 0.51),
+    );
+    expect(tester.takeException(), isNull);
+
+    await tester.drag(
+      find.byType(SingleChildScrollView).first,
+      const Offset(0, -520),
+    );
+    await tester.pumpAndSettle();
+    final submit = tester.getRect(find.byKey(const Key('bind-card-submit')));
+    expect(submit.top, greaterThanOrEqualTo(0));
+    expect(submit.bottom, lessThanOrEqualTo(568));
   });
 
   testWidgets('类型卡使用三套图标并循环，选中态切换对应图标', (tester) async {

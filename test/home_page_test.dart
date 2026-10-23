@@ -569,7 +569,7 @@ void main() {
       final completer = Completer<ResponseBody>();
       final adapter = _StubAdapter((options) => completer.future);
       await _pumpShell(tester, _client(_config(), adapter), settle: false);
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsWidgets);
 
       completer.complete(
         ResponseBody.fromString(_plainBody(), 200, headers: _jsonHeaders),
@@ -578,6 +578,23 @@ void main() {
 
       expect(find.byType(CircularProgressIndicator), findsNothing);
       expect(find.byType(HomeBigCard), findsOneWidget);
+    });
+
+    testWidgets('首页请求期间全屏 loading 阻断 Tab 操作', (tester) async {
+      final completer = Completer<ResponseBody>();
+      final adapter = _StubAdapter((options) => completer.future);
+      await _pumpShell(tester, _client(_config(), adapter), settle: false);
+      await tester.pump(const Duration(milliseconds: 500));
+
+      await tester.tapAt(tester.getCenter(find.byKey(const Key('tab-loan'))));
+      await tester.pump();
+
+      expect(Get.find<MainController>().activeTab.value, 0);
+
+      completer.complete(
+        ResponseBody.fromString(_plainBody(), 200, headers: _jsonHeaders),
+      );
+      await tester.pumpAndSettle();
     });
 
     testWidgets('接口失败时展示可重试的错误态', (tester) async {
@@ -1095,7 +1112,7 @@ void main() {
       expect(Get.currentRoute, AppRoutes.webView);
     });
 
-    testWidgets('权限被拒时先弹二次说明，取消后照常申请', (tester) async {
+    testWidgets('权限被拒绝时中止本次申请', (tester) async {
       final adapter = _adapterWithApply(
         _applyBody(target: 'http://example.test/admission'),
       );
@@ -1105,8 +1122,23 @@ void main() {
       await tester.tapAt(const Offset(180, 200));
       await tester.pumpAndSettle();
 
+      expect(find.byType(CupertinoAlertDialog), findsNothing);
+      expect(adapter.applyCalls, 0);
+      expect(permissions.settingsOpened, isFalse);
+      expect(Get.currentRoute, AppRoutes.main);
+    });
+
+    testWidgets('权限受系统限制时取消设置说明后照常申请', (tester) async {
+      final adapter = _adapterWithApply(
+        _applyBody(target: 'http://example.test/admission'),
+      );
+      final permissions = _StubPermissions(LocationAccessDecision.restricted);
+      await _pumpLoggedIn(tester, adapter, permissions: permissions);
+
+      await tester.tapAt(const Offset(180, 200));
+      await tester.pumpAndSettle();
+
       expect(find.text('Location Access Is Off'), findsOneWidget);
-      expect(find.byType(CupertinoAlertDialog), findsOneWidget);
       final cancel = tester.widget<CupertinoDialogAction>(
         find.widgetWithText(CupertinoDialogAction, 'Not Now'),
       );
@@ -1115,7 +1147,6 @@ void main() {
       );
       expect(cancel.textStyle?.color, AppColors.textMuted);
       expect(openSettings.textStyle?.color, AppColors.identityTitle);
-      expect(adapter.applyCalls, 0);
 
       await tester.tap(find.text('Not Now'));
       await tester.pumpAndSettle();
@@ -1125,11 +1156,11 @@ void main() {
       expect(Get.currentRoute, AppRoutes.webView);
     });
 
-    testWidgets('权限被拒时选择去系统设置则中止本次申请', (tester) async {
+    testWidgets('权限受限时选择去系统设置则中止本次申请', (tester) async {
       final adapter = _adapterWithApply(
         _applyBody(target: 'http://example.test/admission'),
       );
-      final permissions = _StubPermissions(LocationAccessDecision.denied);
+      final permissions = _StubPermissions(LocationAccessDecision.restricted);
       await _pumpLoggedIn(tester, adapter, permissions: permissions);
 
       await tester.tapAt(const Offset(180, 200));

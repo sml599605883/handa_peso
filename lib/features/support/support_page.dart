@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../../app/navigation/app_navigator.dart';
 import '../../app/theme/app_spacing.dart';
 import '../../app/widgets/app_text_selection_menu.dart';
 import '../../core/analytics/analytics_service.dart';
@@ -47,10 +48,12 @@ class _SupportPageState extends State<SupportPage> {
     final message = _messageController.text.trim();
     if (message.isEmpty || _submitting) return;
     setState(() => _submitting = true);
+    await AppNavigator.showLoading();
     try {
       await Get.find<GatewayClient>().openSupportTicket(description: message);
       AnalyticsService.logEvent(AppEvents.supportTicketCreated);
       _messageController.clear();
+      await AppNavigator.dismissLoading();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -59,10 +62,12 @@ class _SupportPageState extends State<SupportPage> {
       );
     } on GatewayFailure catch (error) {
       CrashReporter.record(error, StackTrace.current);
+      await AppNavigator.dismissLoading();
       if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(error.message)));
     } finally {
+      await AppNavigator.dismissLoading();
       if (mounted) setState(() => _submitting = false);
     }
   }

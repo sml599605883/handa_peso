@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -301,7 +302,7 @@ void main() {
 
     // 设计稿里标题层直接叠在整张卡片的顶部：底卡也从 y=186 开始，标题和
     // 下面的示范内容同属一个 347x397 的容器。
-    final card = tester.widget<Container>(
+    final card = tester.widget<DecoratedBox>(
       find.byKey(const Key('identity-upload-card')),
     );
     final header = tester.widget<Container>(
@@ -312,7 +313,7 @@ void main() {
           )
           .first,
     );
-    final cardDecoration = card.decoration! as BoxDecoration;
+    final cardDecoration = card.decoration as BoxDecoration;
     final headerDecoration = header.decoration! as BoxDecoration;
     expect(cardDecoration.border, isNotNull);
     expect(headerDecoration.border, isNotNull);
@@ -475,7 +476,7 @@ void main() {
       ),
     );
 
-    final card = tester.widget<Container>(
+    final card = tester.widget<DecoratedBox>(
       find.byKey(const Key('identity-result-card')),
     );
     final header = tester.widget<Container>(
@@ -486,7 +487,7 @@ void main() {
           )
           .first,
     );
-    final cardDecoration = card.decoration! as BoxDecoration;
+    final cardDecoration = card.decoration as BoxDecoration;
     final headerDecoration = header.decoration! as BoxDecoration;
     expect(
       tester.getRect(find.byKey(const Key('identity-result-card'))).top,
@@ -529,6 +530,47 @@ void main() {
       find.byKey(const Key('identity-type-PRC ID')),
     );
     expect(button.right, lessThanOrEqualTo(screenWidth));
+  });
+
+  testWidgets('证件上传页适配 320 与 430 宽 iPhone', (tester) async {
+    for (final size in const <Size>[Size(320, 568), Size(430, 932)]) {
+      await openPage(
+        tester,
+        route: AppRoutes.certificationIdentityUpload,
+        page: const IdentityUploadPage(),
+        arguments: <String, dynamic>{
+          'productId': '1000460',
+          'cardType': 'SSS ID',
+        },
+        size: size,
+      );
+
+      final scale = (size.width / IdentityDesign.pageWidth).clamp(0.85, 1.2);
+      final contentWidth = math.min<double>(size.width - 28 * scale, 480);
+      final contentLeft = (size.width - contentWidth) / 2;
+      final card = tester.getRect(
+        find.byKey(const Key('identity-upload-card')),
+      );
+      final demo = tester.getRect(
+        find.byKey(const Key('identity-upload-demo')),
+      );
+      final submit = tester.getRect(
+        find.byKey(const Key('identity-upload-submit')),
+      );
+
+      expect(card.left, moreOrLessEquals(contentLeft, epsilon: 0.51));
+      expect(card.width, moreOrLessEquals(contentWidth, epsilon: 0.51));
+      expect(
+        demo.width / demo.height,
+        moreOrLessEquals(
+          IdentityDesign.demoWidth / IdentityDesign.demoHeight,
+          epsilon: 0.01,
+        ),
+      );
+      expect(submit.left, greaterThanOrEqualTo(card.left));
+      expect(submit.right, lessThanOrEqualTo(card.right));
+      expect(tester.takeException(), isNull);
+    }
   });
 
   testWidgets('认证方式弹层的 Camera / Album 两行与按钮落在设计坐标上', (tester) async {

@@ -199,12 +199,73 @@ void main() {
       expect(find.byType(CupertinoAlertDialog), findsNothing);
       expect(outcome.completed, isFalse);
     });
+
+    testWidgets('人脸页返回：请求 scene=1 的挽留弹窗，继续时留在当前页', (tester) async {
+      final outcome = FaceVerificationOutcome();
+      await _pumpFacePage(
+        tester,
+        adapter: adapter,
+        reporter: reporter,
+        outcome: outcome,
+      );
+
+      await tester.tap(find.byKey(const Key('identity-back')));
+      await _pumpUntil(
+        tester,
+        () => find
+            .byKey(const Key('identity-retention-continue'))
+            .evaluate()
+            .isNotEmpty,
+      );
+      final retention = adapter.where('unchivalrous').single;
+      expect(retention.fields['ulterior'], '1');
+      expect(retention.fields['knife'], '1000460');
+
+      await tester.tap(find.byKey(const Key('identity-retention-continue')));
+      await tester.pumpAndSettle();
+      expect(find.byType(FaceRecognitionPage), findsOneWidget);
+      expect(outcome.completed, isFalse);
+    });
+
+    testWidgets('人脸页返回：挽留弹窗选择退出时回到入口页', (tester) async {
+      final outcome = FaceVerificationOutcome();
+      await _pumpFacePage(
+        tester,
+        adapter: adapter,
+        reporter: reporter,
+        outcome: outcome,
+      );
+
+      await tester.tap(find.byKey(const Key('identity-back')));
+      await _pumpUntil(
+        tester,
+        () => find
+            .byKey(const Key('identity-retention-exit'))
+            .evaluate()
+            .isNotEmpty,
+      );
+      await tester.tap(find.byKey(const Key('identity-retention-exit')));
+      await _pumpUntil(tester, () => find.text('home').evaluate().isNotEmpty);
+
+      expect(find.text('home'), findsOneWidget);
+      expect(find.byType(FaceRecognitionPage), findsNothing);
+      expect(outcome.completed, isFalse);
+    });
   });
 }
 
 const Map<String, List<String>> _jsonHeaders = <String, List<String>>{
   Headers.contentTypeHeader: <String>[Headers.jsonContentType],
 };
+
+/// 接口文档「获取挽留弹窗」：弹窗类型 1（人脸识别）。
+const String _retentionBody =
+    '{"unaccepted":"0","unstably":"success","indulgences":{'
+    '"revetting":{"canonic":"Please wait, it only takes ",'
+    '"unstably":" for you to complete all certifications and get a loan!",'
+    '"luciferins":2000,"argala":"","sleeker":"xx/xxx/xxx.xxx",'
+    '"jollified":"Continuar","footrests":"Exit",'
+    '"tidewaters":"https://retention.png"}}}';
 
 class _RecordedRequest {
   const _RecordedRequest({required this.url, required this.fields});
@@ -242,6 +303,7 @@ class _FaceAdapter implements HttpClientAdapter {
     requests.add(_RecordedRequest(url: options.uri.toString(), fields: fields));
 
     final url = options.uri.toString();
+    if (url.contains('unchivalrous')) return _json(_retentionBody);
     if (url.contains('postforming')) {
       return _json(
         '{"unaccepted":"00","unstably":"成功","indulgences":{'

@@ -2,7 +2,7 @@ import 'package:flutter/cupertino.dart';
 
 import '../theme/app_colors.dart';
 
-/// 权限被拒绝后的 iOS 风格二次说明。
+/// 定位受系统限制或服务关闭时的 iOS 风格说明。
 ///
 /// 系统弹窗只会出现一次；用户拒绝后必须引导到系统设置。取消按钮使用浅灰色，
 /// 主操作使用黑色，避免跟随全局主题色。

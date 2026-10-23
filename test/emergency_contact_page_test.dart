@@ -40,6 +40,15 @@ const _contactBody =
     '{"definitively":"Friend","trollopy":"5"}]}'
     ']},"flatfish":"Protect your emergency contact information"}}';
 
+/// 接口文档「获取挽留弹窗」：弹窗类型 4（紧急联系人）。
+const _retentionBody =
+    '{"unaccepted":"0","unstably":"success","indulgences":{'
+    '"revetting":{"canonic":"Please wait, it only takes ",'
+    '"unstably":" for you to complete all certifications and get a loan!",'
+    '"luciferins":2000,"argala":"","sleeker":"xx/xxx/xxx.xxx",'
+    '"jollified":"Continuar","footrests":"Exit",'
+    '"tidewaters":"https://retention.png"}}}';
+
 class _RecordedRequest {
   const _RecordedRequest({required this.url, required this.fields});
 
@@ -71,9 +80,15 @@ class _StubAdapter implements HttpClientAdapter {
       }
     }
     requests.add(_RecordedRequest(url: options.uri.toString(), fields: fields));
-    final body = options.uri.toString().contains('ranulas')
-        ? saveBody
-        : _contactBody;
+    final uri = options.uri.toString();
+    if (uri.contains('unchivalrous')) {
+      return ResponseBody.fromString(
+        _retentionBody,
+        200,
+        headers: _jsonHeaders,
+      );
+    }
+    final body = uri.contains('ranulas') ? saveBody : _contactBody;
     return ResponseBody.fromString(body, 200, headers: _jsonHeaders);
   }
 
@@ -175,6 +190,15 @@ Future<void> _pumpPage(
   }
   Get.toNamed<void>(AppRoutes.emergencyContact, arguments: arguments);
   await tester.pumpAndSettle();
+}
+
+Future<void> _pumpUntil(WidgetTester tester, bool Function() done) async {
+  for (var frame = 0; frame < 40 && !done(); frame++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  for (var frame = 0; frame < 4; frame++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
 }
 
 void main() {
@@ -380,5 +404,56 @@ void main() {
     expect(reporter.reports, isEmpty);
     expect(find.byType(EmergencyContactPage), findsOneWidget);
     await EasyLoading.dismiss();
+  });
+
+  testWidgets('紧急联系人页返回：请求 scene=4 的挽留弹窗', (tester) async {
+    final adapter = _StubAdapter();
+    await _pumpPage(
+      tester,
+      client: _clientFor(adapter),
+      contactPicker: () async => null,
+    );
+
+    await tester.tap(find.byKey(const Key('identity-back')));
+    await _pumpUntil(
+      tester,
+      () => find
+          .byKey(const Key('identity-retention-continue'))
+          .evaluate()
+          .isNotEmpty,
+    );
+    final retention = adapter.where('unchivalrous').single;
+    expect(retention.fields['ulterior'], '4');
+    expect(retention.fields['knife'], '1000460');
+
+    await tester.tap(find.byKey(const Key('identity-retention-continue')));
+    await tester.pumpAndSettle();
+    expect(find.byType(EmergencyContactPage), findsOneWidget);
+  });
+
+  testWidgets('紧急联系人页返回：挽留弹窗选择退出时回到入口页', (tester) async {
+    final adapter = _StubAdapter();
+    await _pumpPage(
+      tester,
+      client: _clientFor(adapter),
+      contactPicker: () async => null,
+    );
+
+    await tester.tap(find.byKey(const Key('identity-back')));
+    await _pumpUntil(
+      tester,
+      () => find
+          .byKey(const Key('identity-retention-exit'))
+          .evaluate()
+          .isNotEmpty,
+    );
+    await tester.tap(find.byKey(const Key('identity-retention-exit')));
+    await _pumpUntil(
+      tester,
+      () => find.byType(EmergencyContactPage).evaluate().isEmpty,
+    );
+
+    expect(find.text('home'), findsOneWidget);
+    expect(find.byType(EmergencyContactPage), findsNothing);
   });
 }

@@ -242,6 +242,17 @@ abstract final class AppColors {
     stops: [0, 0.6, 1],
   );
 
+  /// 更换放款账户页（设计稿 04-01 - 确认借款-选择其它方式）。
+  ///
+  /// 设计稿只在页面上方保留暖色氛围，列表区域从 Bank 卡片开始就是白色。
+  static const payoutAccountPageGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Color(0xFFF09D87), Color(0xFFFEE7C2), Color(0xFFFFFFFF)],
+    stops: [0, 0.128, 0.216],
+  );
+  static const payoutLogoSurface = Color(0xFFE8EBF1);
+
   /// 证件类型选择页的整页底色（设计稿画布 375x988）。
   ///
   /// 这一页比其它页更高，设计稿的底色在中段奶油色 `#FEE9C3` 之后又回到桃色

@@ -100,15 +100,16 @@ class ReportService {
     unawaited(reportPushToken());
   }
 
-  /// 登录成功：记录登录时间，等定位授权弹窗结束后补报注册埋点、渠道归因、
-  /// 定位与设备详情。
+  /// 登录成功：记录登录时间，补报注册埋点、渠道归因、定位与设备详情。
+  ///
+  /// 这里只上报已有授权能够取得的定位，不主动申请权限；定位授权由点击申请后
+  /// 的业务链路触发，避免用户刚登录就看到与当前操作无关的系统弹窗。
   ///
   /// [registeredAtSeconds] 是注册时长的起点，由登录页在打开时取一次、之后每次
   /// 成功获取验证码再刷新（参考端同款）；不传则退化为“从现在开始计时”，时长会偏短。
   Future<void> loginSucceeded({int? registeredAtSeconds}) async {
     await store.saveLoginAt(_clock());
-    // 注册埋点的结束时间是「登录成功」，必须在等授权之前取：授权弹窗停留的
-    // 时间是用户的操作时间，算进注册时长会把这条样本拉歪。
+    // 注册埋点的结束时间固定取「登录成功」这一刻，后续异步上报不能影响时长。
     final endedAtSeconds = _clock() ~/ 1000;
     unawaited(
       _reportAfterLogin(
@@ -118,22 +119,10 @@ class ReportService {
     );
   }
 
-  /// 文档「埋点1的上报时机」：登录之后如果定位授权弹窗还没弹过，先等用户完成
-  /// 授权——给不给权限都算完成——再上报；已经弹过就直接上报。
-  ///
-  /// 这里不设等待上限：给弹窗加超时会在用户还看着弹窗时提前上报，参考端也是在
-  /// 授权回调里才继续下一步的。原生侧保证这条调用一定会回调（弹窗结束、已决定、
-  /// 定位服务被关都算完成）。
   Future<void> _reportAfterLogin({
     required int startedAtSeconds,
     required int endedAtSeconds,
   }) async {
-    try {
-      await bridge.requestLocationPermission();
-    } catch (error) {
-      // 弹窗异常不拦上报：上报本来就是尽力而为。
-      _log(error);
-    }
     unawaited(
       reportScene(
         scene: ReportScene.registration,

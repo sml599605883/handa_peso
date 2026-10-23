@@ -19,6 +19,7 @@ import '../../features/certification/emergency_contact_models.dart';
 import '../../features/certification/face_models.dart';
 import '../../features/certification/identity_models.dart';
 import '../../features/certification/personal_information_models.dart';
+import '../../features/webview/payout_account_models.dart';
 import '../routes/app_routes.dart';
 import '../widgets/ios_permission_prompt.dart';
 import 'h5_paths.dart';
@@ -179,6 +180,71 @@ abstract final class AppNavigator {
       },
     );
     return outcome;
+  }
+
+  /// 打开更换放款账户页（设计稿 04-01）。
+  ///
+  /// 列表页以普通页面压在来源 H5 上；新增账户时再从列表页压入绑卡页。最终
+  /// 成功结果只带回新的订单地址，由来源 WebView 替换自身并清掉旧 H5。
+  static Future<PayoutAccountFlowOutcome> toPayoutAccounts({
+    required PayoutAccountCatalog catalog,
+    required String productId,
+    required String orderNo,
+  }) async {
+    final outcome = PayoutAccountFlowOutcome();
+    await Get.toNamed<void>(
+      AppRoutes.payoutAccounts,
+      arguments: <String, dynamic>{
+        'catalog': catalog,
+        'productId': productId,
+        'orderNo': orderNo,
+        PayoutAccountFlowOutcome.argumentKey: outcome,
+      },
+    );
+    return outcome;
+  }
+
+  /// 查询账户并进入原生换卡流程。
+  ///
+  /// 调用方只负责拿到最终结果：来源是 H5 时替换来源 WebView；来源是首页进度
+  /// 卡片时，再打开接口返回的订单页。账户为空时直接进入绑卡页。
+  static Future<PayoutAccountFlowOutcome> changePayoutAccount({
+    required String productId,
+    required String orderNo,
+  }) async {
+    final product = productId.trim();
+    final order = orderNo.trim();
+    if (product.isEmpty || order.isEmpty) {
+      throw const GatewayFailure('Missing account information');
+    }
+    final client = Get.isRegistered<GatewayClient>()
+        ? Get.find<GatewayClient>()
+        : null;
+    if (client == null) {
+      throw const GatewayFailure('Payout account is unavailable');
+    }
+
+    await showLoading();
+    late final PayoutAccountCatalog catalog;
+    try {
+      final reply = await client.fetchBoundCards(productId: product);
+      reply.orThrow();
+      catalog = PayoutAccountCatalog.fromReply(reply);
+    } finally {
+      await dismissLoading();
+    }
+
+    if (catalog.isEmpty) {
+      final bound = await toBindCard(productId: product, changeOrderNo: order);
+      return PayoutAccountFlowOutcome()
+        ..changed = bound.changed
+        ..redirectUrl = bound.redirectUrl;
+    }
+    return toPayoutAccounts(
+      catalog: catalog,
+      productId: product,
+      orderNo: order,
+    );
   }
 
   static Future<PersonalInformationFlowOutcome> _toInformation({
@@ -616,7 +682,11 @@ abstract final class AppNavigator {
   }
 
   static Future<void> showLoading([String status = 'Loading...']) =>
-      EasyLoading.show(status: status);
+      EasyLoading.show(
+        status: status,
+        dismissOnTap: false,
+        maskType: EasyLoadingMaskType.clear,
+      );
 
   static Future<void> dismissLoading() => EasyLoading.dismiss();
 
@@ -644,10 +714,10 @@ abstract final class AppNavigator {
 
   static void showError(String message) => EasyLoading.showError(message);
 
-  /// 位置权限被系统挡下时的二次说明，返回用户是否选择去系统设置。
+  /// 定位受系统限制或服务关闭时的说明，返回用户是否选择去系统设置。
   ///
-  /// 系统弹窗只会出现一次，之后拒绝过的用户在设置里才能改回来，因此这里补一条
-  /// 说明并提供入口。选择「Not Now」不算拒绝：调用方照常继续申请。
+  /// 这里承接用户仍可继续申请的分支：选择「Not Now」时调用方照常继续，
+  /// 选择去设置则由系统设置页接管本次流程。
   ///
   /// 文案按本应用自己的口径写，不要从别的工程整段搬运——用户可见的长文案是
   /// 跨应用比对时最直接的特征。

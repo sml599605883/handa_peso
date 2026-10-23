@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -550,91 +549,51 @@ class _BindCardPageState extends State<BindCardPage> {
   Widget build(BuildContext context) {
     final group = _group;
     final showsHint = group != null && _groupHint(group).isNotEmpty;
-    final cardHeight = BindCardDesign.cardHeight(
-      fieldCount: group?.fields.length ?? 0,
-      showsHint: showsHint,
-    );
-    final alertTop =
-        BindCardDesign.cardTop + cardHeight + BindCardDesign.alertTopGap;
-    final submitTop =
-        alertTop + BindCardDesign.alertHeight + BindCardDesign.submitTopGap;
-    final pageHeight = math.max(
-      BindCardDesign.minimumPageHeight,
-      submitTop +
-          IdentityDesign.submitHeight +
-          BindCardDesign.submitBottomInset,
-    );
 
     return IdentityPageScaffold(
       gradient: AppColors.facePageGradient,
-      designHeight: pageHeight,
-      builder: (context, metrics) {
-        final safeTop = metrics.safeTopInDesign;
-        final shift = safeTop > BindCardDesign.backTop - 8
-            ? safeTop - (BindCardDesign.backTop - 8)
-            : 0.0;
-        return Stack(
-          key: const Key('bind-card-page'),
-          children: <Widget>[
-            _pageHeader(metrics, shift),
-            Positioned(
-              left: metrics.x(BindCardDesign.progressLeft),
-              top: metrics.y(BindCardDesign.progressTop + shift),
+      builder: (context, metrics) => Column(
+        key: const Key('bind-card-page'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          IdentityPageHeader(metrics: metrics, title: 'Withdrawal Info'),
+          SizedBox(height: metrics.size(12)),
+          IdentityHeroBanner(
+            text: _heroCopy,
+            metrics: metrics,
+            top: SizedBox(
               width: metrics.size(BindCardDesign.progressWidth),
               child: CertificationProgressBar(
                 metrics: metrics,
                 activeSegments: 4,
               ),
             ),
-            Positioned(
-              left: 0,
-              top: metrics.y(BindCardDesign.heroTop + shift),
-              width: metrics.screenWidth,
-              height: metrics.size(BindCardDesign.heroHeight),
-              child: IdentityHeroBanner(
-                text: _heroCopy,
-                metrics: metrics,
-                moneyBagTopOffset: -21,
-                maxLines: 3,
-                minFontSize: 14,
-                maxFontSize: 20,
-              ),
+            maxLines: 3,
+            minFontSize: 14,
+            maxFontSize: 20,
+          ),
+          SizedBox(height: metrics.size(36)),
+          if (_data?.groups.isNotEmpty ?? false) ...<Widget>[
+            SizedBox(
+              height: metrics.size(BindCardDesign.typeHeight),
+              child: _typeSelector(metrics, _data!.groups),
             ),
-            if (_data?.groups.isNotEmpty ?? false)
-              Positioned(
-                left: metrics.x(BindCardDesign.typeLeft),
-                top: metrics.y(BindCardDesign.typeTop + shift),
-                width: metrics.size(BindCardDesign.cardWidth),
-                height: metrics.size(BindCardDesign.typeHeight),
-                child: _typeSelector(metrics, _data!.groups),
-              ),
-            Positioned(
-              left: metrics.x(BindCardDesign.cardLeft),
-              top: metrics.y(BindCardDesign.cardTop + shift),
-              width: metrics.size(BindCardDesign.cardWidth),
-              height: metrics.size(cardHeight),
-              child: _formCard(metrics, group, showsHint),
-            ),
-            Positioned(
-              left: metrics.x(BindCardDesign.cardLeft),
-              top: metrics.y(alertTop + shift),
-              width: metrics.size(BindCardDesign.cardWidth),
-              height: metrics.size(BindCardDesign.alertHeight),
-              child: _alert(metrics),
-            ),
-            Positioned(
-              left: metrics.x(78),
-              top: metrics.y(submitTop + shift),
-              child: IdentitySubmitButton(
-                key: const Key('bind-card-submit'),
-                metrics: metrics,
-                label: 'Submit',
-                onPressed: _hasContent && !_submitting ? _submit : null,
-              ),
-            ),
+            SizedBox(height: metrics.size(14)),
           ],
-        );
-      },
+          _formCard(metrics, group, showsHint),
+          SizedBox(height: metrics.size(BindCardDesign.alertTopGap)),
+          _alert(metrics),
+          SizedBox(height: metrics.size(BindCardDesign.submitTopGap)),
+          Center(
+            child: IdentitySubmitButton(
+              key: const Key('bind-card-submit'),
+              metrics: metrics,
+              label: 'Submit',
+              onPressed: _hasContent && !_submitting ? _submit : null,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -644,46 +603,6 @@ class _BindCardPageState extends State<BindCardPage> {
     if (cached.isNotEmpty) return cached;
     final prompt = _data?.prompt.trim() ?? '';
     return prompt.isEmpty ? BindCardDesign.defaultHeroCopy : prompt;
-  }
-
-  Widget _pageHeader(IdentityMetrics metrics, double shift) {
-    return SizedBox(
-      width: metrics.screenWidth,
-      height: metrics.size(120),
-      child: Stack(
-        children: <Widget>[
-          Positioned(
-            left: 0,
-            top: metrics.y(BindCardDesign.headerTop + shift),
-            width: metrics.screenWidth,
-            height: metrics.size(BindCardDesign.titleHeight),
-            child: Stack(
-              children: <Widget>[
-                Center(
-                  child: Text(
-                    'Withdrawal Info',
-                    style: TextStyle(
-                      color: AppColors.identityTitle,
-                      fontFamily: 'Helvetica',
-                      fontSize: metrics.size(BindCardDesign.titleSize),
-                      fontWeight: FontWeight.w700,
-                      height: 30 / BindCardDesign.titleSize,
-                    ),
-                  ),
-                ),
-                Positioned(
-                  left: metrics.x(BindCardDesign.backLeft),
-                  top: metrics.size(-2),
-                  width: metrics.size(BindCardDesign.backSize),
-                  height: metrics.size(BindCardDesign.backSize),
-                  child: const IdentityBackButton(),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _typeSelector(IdentityMetrics metrics, List<BindCardGroup> groups) {
@@ -773,6 +692,13 @@ class _BindCardPageState extends State<BindCardPage> {
   ) {
     return Container(
       key: const Key('bind-card-form'),
+      constraints:
+          (group == null ||
+              _loadState == _BindCardLoadState.loading ||
+              _loadState == _BindCardLoadState.error ||
+              _loadState == _BindCardLoadState.empty)
+          ? BoxConstraints(minHeight: metrics.size(180))
+          : null,
       padding: EdgeInsets.symmetric(
         horizontal: metrics.size(BindCardDesign.cardPadding),
         vertical: metrics.size(BindCardDesign.cardPaddingY),
@@ -1064,6 +990,9 @@ class _BindCardPageState extends State<BindCardPage> {
     final copy = _data?.bottomPrompt.trim() ?? '';
     return Container(
       key: const Key('bind-card-bottom-prompt'),
+      constraints: BoxConstraints(
+        minHeight: metrics.size(BindCardDesign.alertHeight),
+      ),
       alignment: Alignment.center,
       padding: EdgeInsets.symmetric(horizontal: metrics.size(14)),
       decoration: BoxDecoration(

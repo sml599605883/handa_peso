@@ -222,14 +222,32 @@ class MainController extends GetxController with WidgetsBindingObserver {
 
   /// 点击进度卡片上的按钮。
   ///
-  /// `repay` / `early_repay` 由服务端下发跳转地址，直接打开；`retry`（原卡重试）
-  /// 与 `change`（更换账户）不下发地址，改为进订单详情页，由详情页内的原卡
-  /// 重试与换绑入口承接。
+  /// `repay` / `early_repay` 由服务端下发跳转地址，直接打开；`change`（更换
+  /// 账户）由原生直接查询账户列表并进入选卡页；`retry`（原卡重试）仍先进入
+  /// 订单详情页，由详情页内的原卡重试入口承接。
   Future<void> tapLoanProgressAction(
     LoanProgressItem item,
     LoanProgressAction action,
   ) {
     return _runProgressRequest(() async {
+      if (action.isChange) {
+        try {
+          final result = await AppNavigator.changePayoutAccount(
+            productId: item.productId,
+            orderNo: item.orderNo,
+          );
+          if (result.changed && result.redirectUrl.isNotEmpty) {
+            await AppNavigator.openTarget(
+              result.redirectUrl,
+              title: _loanDetailTitle,
+              cleanWorkflowForWeb: true,
+            );
+          }
+        } on GatewayFailure catch (error) {
+          AppNavigator.showError(error.message);
+        }
+        return;
+      }
       final target = action.route.trim();
       if (target.isNotEmpty) {
         await AppNavigator.openTarget(target, title: _repaymentTitle);
@@ -271,17 +289,47 @@ class MainController extends GetxController with WidgetsBindingObserver {
 
     overviewLoading.value = true;
     overviewError.value = null;
+    var ownsLoading = false;
+    var requestFinished = false;
+    Future<void>? loadingShown;
+    final mainIsTopRoute =
+        Get.currentRoute.isEmpty || Get.currentRoute == AppRoutes.main;
+    if (mainIsTopRoute) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (requestFinished || isClosed) return;
+        ownsLoading = true;
+        loadingShown = AppNavigator.showLoading();
+      });
+      WidgetsBinding.instance.scheduleFrame();
+    }
     try {
       final response = await gatewayClient.fetchHomeOverview();
+      requestFinished = true;
       overviewData.value = HomeData.fromJson(response.payload);
       _loadedOnce = true;
+      if (ownsLoading) {
+        await loadingShown;
+        await AppNavigator.dismissLoading();
+        ownsLoading = false;
+      }
       unawaited(_showScenePopup(1));
     } on GatewayFailure catch (error) {
+      requestFinished = true;
+      if (ownsLoading) {
+        await loadingShown;
+        await AppNavigator.dismissLoading();
+        ownsLoading = false;
+      }
       overviewError.value = error.message;
       CrashReporter.record(error, StackTrace.current);
       // 已有内容时保留旧数据，只用轻提示反馈本次刷新失败。
       if (overviewData.value != null) AppNavigator.showError(error.message);
     } finally {
+      requestFinished = true;
+      if (ownsLoading) {
+        await loadingShown;
+        await AppNavigator.dismissLoading();
+      }
       overviewLoading.value = false;
     }
   }
@@ -394,8 +442,8 @@ class MainController extends GetxController with WidgetsBindingObserver {
   /// 才按本地认证状态继续（未认证进认证流程，已认证进借款计算页），避免服务端
   /// 配置缺省时点击毫无反应。
   ///
-  /// 走准入之前先要一次定位权限：风控要看这一次申请发生时的位置，用户拒绝也
-  /// 不硬拦（取消二次说明后照常申请，与其它支线同款）。
+  /// 走准入之前先要一次定位权限：风控要看这一次申请发生时的位置。用户拒绝时
+  /// 中止本次申请；系统限制或定位服务关闭时说明原因，取消说明后仍可继续。
   Future<void> applyNow(String productId, {bool requestLocation = true}) async {
     final appliedProductId = productId.trim().isEmpty
         ? _homeApplyProductId
@@ -473,10 +521,10 @@ class MainController extends GetxController with WidgetsBindingObserver {
 
   /// 申请前的定位准入：拿到授权就继续，拿不到权限也不硬拦。
   ///
-  /// 与其它支线一致——定位只补全风控数据，不参与准入判断：权限被拒或被系统
-  /// 限制时给出一次去设置的说明，用户选择取消就照常申请，选择「Settings」则由
-  /// 系统设置页接管本次流程。等待弹窗期间被切到后台时本次申请直接作废（用户再
-  /// 点一次即可），不能把入口挂在一个不再返回的原生回调上。
+  /// 用户拒绝时中止本次申请；系统限制或定位服务关闭时给出一次去设置的说明，
+  /// 用户选择取消就照常申请，选择「Settings」则由系统设置页接管本次流程。
+  /// 等待弹窗期间被切到后台时本次申请直接作废（用户再点一次即可），不能把
+  /// 入口挂在一个不再返回的原生回调上。
   Future<bool> _ensureLocationAccess() async {
     final decision = await _awaitLocationDecision();
     switch (decision) {
@@ -486,6 +534,8 @@ class MainController extends GetxController with WidgetsBindingObserver {
       case LocationAccessDecision.unavailable:
         return true;
       case LocationAccessDecision.denied:
+        return false;
+      case LocationAccessDecision.restricted:
       case LocationAccessDecision.serviceDisabled:
         break;
     }

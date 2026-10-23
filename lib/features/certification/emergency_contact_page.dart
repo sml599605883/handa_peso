@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_native_contact_picker/flutter_native_contact_picker.dart';
@@ -18,6 +17,7 @@ import 'emergency_contact_models.dart';
 import 'identity_design.dart';
 import 'personal_information_models.dart';
 import 'widgets/certification_progress_bar.dart';
+import 'widgets/identity_retention_guard.dart';
 import 'widgets/personal_information_selectors.dart';
 
 typedef EmergencyContactPicker = Future<EmergencyPickedContact?> Function();
@@ -44,7 +44,8 @@ class EmergencyContactPage extends StatefulWidget {
   State<EmergencyContactPage> createState() => _EmergencyContactPageState();
 }
 
-class _EmergencyContactPageState extends State<EmergencyContactPage> {
+class _EmergencyContactPageState extends State<EmergencyContactPage>
+    with IdentityRetentionGuard<EmergencyContactPage> {
   static const String _defaultPrompt =
       'Tell us more about yourself to speed up your approval.';
 
@@ -70,25 +71,14 @@ class _EmergencyContactPageState extends State<EmergencyContactPage> {
 
   bool get _hasContent => _contacts.isNotEmpty && _error.isEmpty && !_loading;
 
-  int get _layoutContactCount => math.max(_contacts.length, 3);
+  @override
+  String get retentionScene => '4';
 
-  double get _submitTop {
-    return EmergencyContactDesign.cardTop +
-        (_layoutContactCount - 1) *
-            (EmergencyContactDesign.cardHeight +
-                EmergencyContactDesign.cardGap) +
-        EmergencyContactDesign.cardHeight +
-        EmergencyContactDesign.submitGap;
-  }
+  @override
+  String get retentionProductId => _productId;
 
-  double get _designHeight {
-    return math.max(
-      EmergencyContactDesign.minimumPageHeight,
-      _submitTop +
-          IdentityDesign.submitHeight +
-          EmergencyContactDesign.submitBottomInset,
-    );
-  }
+  @override
+  GatewayClient get retentionApiClient => _apiClient;
 
   @override
   void initState() {
@@ -242,60 +232,53 @@ class _EmergencyContactPageState extends State<EmergencyContactPage> {
 
   @override
   Widget build(BuildContext context) {
-    return IdentityPageScaffold(
-      gradient: AppColors.facePageGradient,
-      designHeight: _designHeight,
-      builder: (context, metrics) {
-        final safeTop = metrics.safeTopInDesign;
-        final shift = safeTop > IdentityDesign.backTop - 8
-            ? safeTop - (IdentityDesign.backTop - 8)
-            : 0.0;
-        return Stack(
+    return PopScope<void>(
+      canPop: retentionCanPop,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) handleRetentionExit();
+      },
+      child: IdentityPageScaffold(
+        gradient: AppColors.facePageGradient,
+        builder: (context, metrics) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            _pageHeader(metrics, shift),
-            Positioned(
-              left: metrics.x(14),
-              top: metrics.y(EmergencyContactDesign.progressTop + shift),
-              width: metrics.size(EmergencyContactDesign.progressWidth),
-              child: CertificationProgressBar(
-                metrics: metrics,
-                activeSegments: 3,
-              ),
+            IdentityPageHeader(
+              metrics: metrics,
+              title: 'Emergency Contacts',
+              onBack: handleRetentionExit,
             ),
-            Positioned(
-              left: 0,
-              top: metrics.y(EmergencyContactDesign.heroTop + shift),
-              width: metrics.screenWidth,
-              height: metrics.size(EmergencyContactDesign.heroHeight),
-              child: IdentityHeroBanner(
-                text: _heroCopy,
-                metrics: metrics,
-                moneyBagTopOffset: -21,
-                maxLines: 3,
-                minFontSize: 14,
-                maxFontSize: 20,
+            SizedBox(height: metrics.size(12)),
+            IdentityHeroBanner(
+              text: _heroCopy,
+              metrics: metrics,
+              top: SizedBox(
+                width: metrics.size(EmergencyContactDesign.progressWidth),
+                child: CertificationProgressBar(
+                  metrics: metrics,
+                  activeSegments: 3,
+                ),
               ),
+              maxLines: 3,
+              minFontSize: 14,
+              maxFontSize: 20,
             ),
-            if (_loading || _error.isNotEmpty || _contacts.isEmpty)
-              Positioned(
-                left: metrics.x(EmergencyContactDesign.cardLeft),
-                top: metrics.y(EmergencyContactDesign.cardTop + shift),
-                width: metrics.size(EmergencyContactDesign.cardWidth),
-                height: metrics.size(EmergencyContactDesign.cardHeight),
-                child: _statusCard(metrics),
-              )
-            else
+            if (_loading || _error.isNotEmpty || _contacts.isEmpty) ...<Widget>[
+              SizedBox(height: metrics.size(46)),
+              _statusCard(metrics),
+            ] else ...<Widget>[
+              SizedBox(height: metrics.size(30)),
               for (
                 var index = 0;
                 index < _contacts.length;
                 index++
               ) ...<Widget>[
-                _contactCard(metrics, index, shift),
-                _groupBadge(metrics, index, shift),
+                _contactBlock(metrics, index),
+                if (index != _contacts.length - 1)
+                  SizedBox(height: metrics.size(20)),
               ],
-            Positioned(
-              left: metrics.x(EmergencyContactDesign.submitLeft),
-              top: metrics.y(_submitTop + shift),
+            ],
+            SizedBox(height: metrics.size(20)),
+            Center(
               child: IdentitySubmitButton(
                 key: const Key('emergency-contact-submit'),
                 metrics: metrics,
@@ -304,8 +287,8 @@ class _EmergencyContactPageState extends State<EmergencyContactPage> {
               ),
             ),
           ],
-        );
-      },
+        ),
+      ),
     );
   }
 
@@ -316,45 +299,6 @@ class _EmergencyContactPageState extends State<EmergencyContactPage> {
     return _prompt.trim().isEmpty ? _defaultPrompt : _prompt;
   }
 
-  Widget _pageHeader(IdentityMetrics metrics, double shift) {
-    return SizedBox(
-      width: metrics.screenWidth,
-      height: metrics.size(120),
-      child: Stack(
-        children: <Widget>[
-          Positioned(
-            left: 0,
-            top: metrics.y(EmergencyContactDesign.headerTop + shift),
-            width: metrics.screenWidth,
-            height: metrics.size(IdentityDesign.titleHeight),
-            child: Stack(
-              children: <Widget>[
-                Center(
-                  child: Text(
-                    'Emergency Contacts',
-                    style: TextStyle(
-                      color: AppColors.identityTitle,
-                      fontSize: metrics.size(20),
-                      fontWeight: FontWeight.w700,
-                      height: 30 / 20,
-                    ),
-                  ),
-                ),
-                Positioned(
-                  left: metrics.x(14),
-                  top: metrics.size(-2),
-                  width: metrics.size(IdentityDesign.backSize),
-                  height: metrics.size(IdentityDesign.backSize),
-                  child: const IdentityBackButton(),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _statusCard(IdentityMetrics metrics) {
     final message = _loading
         ? 'Loading contacts...'
@@ -363,6 +307,9 @@ class _EmergencyContactPageState extends State<EmergencyContactPage> {
         : 'No emergency contacts available';
     return Container(
       key: const Key('emergency-contact-status'),
+      constraints: BoxConstraints(
+        minHeight: metrics.size(EmergencyContactDesign.cardHeight),
+      ),
       decoration: BoxDecoration(
         color: AppColors.identityCardSurface,
         borderRadius: BorderRadius.circular(
@@ -386,70 +333,78 @@ class _EmergencyContactPageState extends State<EmergencyContactPage> {
     );
   }
 
-  Widget _contactCard(IdentityMetrics metrics, int index, double shift) {
+  Widget _contactBlock(IdentityMetrics metrics, int index) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: <Widget>[
+        Padding(
+          padding: EdgeInsets.only(
+            top: metrics.size(EmergencyContactDesign.badgeOverlap),
+          ),
+          child: _contactCard(metrics, index),
+        ),
+        Positioned(
+          left: metrics.size(
+            index.isEven
+                ? EmergencyContactDesign.badgeLeft -
+                      EmergencyContactDesign.cardLeft
+                : EmergencyContactDesign.badgeRightLeft -
+                      EmergencyContactDesign.cardLeft,
+          ),
+          top: 0,
+          child: _groupBadge(metrics, index),
+        ),
+      ],
+    );
+  }
+
+  Widget _contactCard(IdentityMetrics metrics, int index) {
     final contact = _contacts[index];
-    return Positioned(
-      left: metrics.x(EmergencyContactDesign.cardLeft),
-      top: metrics.y(
-        EmergencyContactDesign.cardTop +
-            index *
-                (EmergencyContactDesign.cardHeight +
-                    EmergencyContactDesign.cardGap) +
-            shift,
+    return Container(
+      key: ValueKey<String>('emergency-contact-card-${contact.number}'),
+      width: double.infinity,
+      constraints: BoxConstraints(
+        minHeight: metrics.size(EmergencyContactDesign.cardHeight),
       ),
-      width: metrics.size(EmergencyContactDesign.cardWidth),
-      height: metrics.size(EmergencyContactDesign.cardHeight),
-      child: Container(
-        key: ValueKey<String>('emergency-contact-card-${contact.number}'),
-        padding: EdgeInsets.symmetric(
-          horizontal: metrics.size(EmergencyContactDesign.cardPaddingX),
-          vertical: metrics.size(EmergencyContactDesign.cardPaddingY),
+      padding: EdgeInsets.symmetric(
+        horizontal: metrics.size(EmergencyContactDesign.cardPaddingX),
+        vertical: metrics.size(EmergencyContactDesign.cardPaddingY),
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.identityCardSurface,
+        borderRadius: BorderRadius.circular(
+          metrics.size(EmergencyContactDesign.cardRadius),
         ),
-        decoration: BoxDecoration(
-          color: AppColors.identityCardSurface,
-          borderRadius: BorderRadius.circular(
-            metrics.size(EmergencyContactDesign.cardRadius),
-          ),
-          border: Border.all(
-            color: AppColors.identityCardBorder,
-            width: metrics.size(1),
-          ),
+        border: Border.all(
+          color: AppColors.identityCardBorder,
+          width: metrics.size(1),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            _label(metrics, 'Relationship'),
-            SizedBox(height: metrics.size(EmergencyContactDesign.fieldGap)),
-            SizedBox(
-              height: metrics.size(
-                EmergencyContactDesign.relationshipFieldHeight,
-              ),
-              child: _relationshipField(metrics, contact),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          _label(metrics, 'Relationship'),
+          SizedBox(height: metrics.size(EmergencyContactDesign.fieldGap)),
+          SizedBox(
+            height: metrics.size(
+              EmergencyContactDesign.relationshipFieldHeight,
             ),
-            SizedBox(height: metrics.size(EmergencyContactDesign.sectionGap)),
-            _label(metrics, 'Contact Information'),
-            SizedBox(height: metrics.size(EmergencyContactDesign.sectionGap)),
-            Expanded(child: _contactField(metrics, contact)),
-          ],
-        ),
+            child: _relationshipField(metrics, contact),
+          ),
+          SizedBox(height: metrics.size(EmergencyContactDesign.sectionGap)),
+          _label(metrics, 'Contact Information'),
+          SizedBox(height: metrics.size(EmergencyContactDesign.sectionGap)),
+          ConstrainedBox(
+            constraints: BoxConstraints(minHeight: metrics.size(76)),
+            child: _contactField(metrics, contact),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _groupBadge(IdentityMetrics metrics, int index, double shift) {
-    final cardTop =
-        EmergencyContactDesign.cardTop +
-        index *
-            (EmergencyContactDesign.cardHeight +
-                EmergencyContactDesign.cardGap) +
-        shift;
-    return Positioned(
-      left: metrics.x(
-        index.isEven
-            ? EmergencyContactDesign.badgeLeft
-            : EmergencyContactDesign.badgeRightLeft,
-      ),
-      top: metrics.y(cardTop - EmergencyContactDesign.badgeOverlap),
+  Widget _groupBadge(IdentityMetrics metrics, int index) {
+    return SizedBox(
       width: metrics.size(EmergencyContactDesign.badgeWidth),
       height: metrics.size(EmergencyContactDesign.badgeHeight),
       child: Stack(
@@ -484,8 +439,10 @@ class _EmergencyContactPageState extends State<EmergencyContactPage> {
   }
 
   Widget _label(IdentityMetrics metrics, String text) {
-    return SizedBox(
-      height: metrics.size(EmergencyContactDesign.labelHeight),
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        minHeight: metrics.size(EmergencyContactDesign.labelHeight),
+      ),
       child: Text(
         text,
         style: TextStyle(

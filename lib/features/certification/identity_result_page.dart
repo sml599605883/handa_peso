@@ -15,6 +15,7 @@ import '../../core/report/report_service.dart';
 import 'identity_design.dart';
 import 'identity_models.dart';
 import 'widgets/identity_birthday_picker.dart';
+import 'widgets/identity_retention_guard.dart';
 
 /// 上传成功（设计稿 03-01 - 身份认证-上传成功）。
 ///
@@ -37,7 +38,8 @@ class IdentityResultPage extends StatefulWidget {
   State<IdentityResultPage> createState() => _IdentityResultPageState();
 }
 
-class _IdentityResultPageState extends State<IdentityResultPage> {
+class _IdentityResultPageState extends State<IdentityResultPage>
+    with IdentityRetentionGuard<IdentityResultPage> {
   late final GatewayClient _apiClient =
       widget.apiClient ?? Get.find<GatewayClient>();
   late final IdentityRecognition _recognition =
@@ -66,6 +68,15 @@ class _IdentityResultPageState extends State<IdentityResultPage> {
   IdentityFlowOutcome? _outcome;
 
   @override
+  String get retentionScene => '0';
+
+  @override
+  String get retentionProductId => _productId;
+
+  @override
+  GatewayClient get retentionApiClient => _apiClient;
+
+  @override
   void initState() {
     super.initState();
     _outcome = IdentityFlowOutcome.of(Get.arguments);
@@ -92,116 +103,116 @@ class _IdentityResultPageState extends State<IdentityResultPage> {
 
   @override
   Widget build(BuildContext context) {
-    return IdentityPageScaffold(
-      gradient: AppColors.identityPageGradient,
-      designHeight: IdentityDesign.pageHeight,
-      builder: (context, metrics) => IdentityPageChrome(
-        metrics: metrics,
-        contentTop: IdentityDesign.heroContentTop,
-        heroCopy: _heroCopy,
-        child: SizedBox(
-          height: metrics.size(
-            IdentityDesign.pageHeight - IdentityDesign.heroContentTop,
-          ),
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: <Widget>[
-              Positioned(
-                left: metrics.x(IdentityDesign.cardLeft),
-                top: metrics.y(_cardTop),
-                child: Container(
-                  key: const Key('identity-result-card'),
-                  width: metrics.size(IdentityDesign.cardWidth),
-                  height: metrics.size(IdentityDesign.resultCardHeight),
-                  decoration: BoxDecoration(
-                    color: AppColors.identityCardSurface,
-                    borderRadius: BorderRadius.vertical(
-                      bottom: Radius.circular(
-                        metrics.size(IdentityDesign.cardRadius),
-                      ),
-                    ),
-                    border: Border(
-                      left: BorderSide(
-                        color: AppColors.identityCardBorder,
-                        width: metrics.size(1),
-                      ),
-                      right: BorderSide(
-                        color: AppColors.identityCardBorder,
-                        width: metrics.size(1),
-                      ),
-                      bottom: BorderSide(
-                        color: AppColors.identityCardBorder,
-                        width: metrics.size(1),
-                      ),
-                    ),
+    return PopScope<void>(
+      canPop: retentionCanPop,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) handleRetentionExit();
+      },
+      child: IdentityPageScaffold(
+        gradient: AppColors.identityPageGradient,
+        builder: (context, metrics) => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            IdentityPageHeader(
+              metrics: metrics,
+              title: IdentityStrings.pageTitle,
+              onBack: handleRetentionExit,
+            ),
+            IdentityHeroBanner(
+              text: _heroCopy,
+              metrics: metrics,
+              maxLines: 2,
+              minFontSize: 14,
+              maxFontSize: 20,
+            ),
+            SizedBox(height: metrics.size(15)),
+            DecoratedBox(
+              key: const Key('identity-result-card'),
+              decoration: BoxDecoration(
+                color: AppColors.identityCardSurface,
+                borderRadius: BorderRadius.vertical(
+                  bottom: Radius.circular(
+                    metrics.size(IdentityDesign.cardRadius),
+                  ),
+                ),
+                border: Border(
+                  left: BorderSide(
+                    color: AppColors.identityCardBorder,
+                    width: metrics.size(1),
+                  ),
+                  right: BorderSide(
+                    color: AppColors.identityCardBorder,
+                    width: metrics.size(1),
+                  ),
+                  bottom: BorderSide(
+                    color: AppColors.identityCardBorder,
+                    width: metrics.size(1),
                   ),
                 ),
               ),
-              Positioned(
-                left: metrics.x(IdentityDesign.cardLeft),
-                top: metrics.y(_pillTop),
-                child: IdentityCardHeader(
-                  key: const Key('identity-result-pill'),
-                  title: IdentityStrings.resultCardTitle,
-                  metrics: metrics,
-                  height: IdentityDesign.resultPillHeight,
-                  attachedToCard: true,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  IdentityCardHeader(
+                    key: const Key('identity-result-pill'),
+                    title: IdentityStrings.resultCardTitle,
+                    metrics: metrics,
+                    height: IdentityDesign.resultPillHeight,
+                    attachedToCard: true,
+                  ),
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      metrics.size(20),
+                      metrics.size(20),
+                      metrics.size(20),
+                      metrics.size(21),
+                    ),
+                    child: AspectRatio(
+                      aspectRatio:
+                          IdentityDesign.resultPhotoWidth /
+                          IdentityDesign.resultPhotoHeight,
+                      child: _IdentityPhoto(
+                        url: _recognition.imageUrl,
+                        metrics: metrics,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              Positioned(
-                left: metrics.x(IdentityDesign.resultPhotoLeft),
-                top: metrics.y(_photoTop),
-                width: metrics.size(IdentityDesign.resultPhotoWidth),
-                height: metrics.size(IdentityDesign.resultPhotoHeight),
-                child: _IdentityPhoto(
-                  url: _recognition.imageUrl,
-                  metrics: metrics,
-                ),
-              ),
-              _row(
-                index: 0,
+            ),
+            SizedBox(height: metrics.size(14)),
+            _ResultRow(
+              key: const Key('identity-result-row-0'),
+              label: IdentityStrings.fullNameLabel,
+              metrics: metrics,
+              controller: _nameController,
+              fieldKey: const Key('identity-result-name'),
+            ),
+            SizedBox(height: metrics.size(14)),
+            _ResultRow(
+              key: const Key('identity-result-row-1'),
+              label: IdentityStrings.idNumberLabel,
+              metrics: metrics,
+              controller: _idController,
+              fieldKey: const Key('identity-result-id'),
+            ),
+            SizedBox(height: metrics.size(14)),
+            _ResultRow(
+              key: const Key('identity-result-row-2'),
+              label: IdentityStrings.birthdayLabel,
+              metrics: metrics,
+              value: _birthday,
+              onTap: _pickBirthday,
+            ),
+            SizedBox(height: metrics.size(20)),
+            Center(
+              child: IdentitySubmitButton(
+                key: const Key('identity-result-submit'),
                 metrics: metrics,
-                child: _ResultRow(
-                  key: const Key('identity-result-row-0'),
-                  label: IdentityStrings.fullNameLabel,
-                  metrics: metrics,
-                  controller: _nameController,
-                  fieldKey: const Key('identity-result-name'),
-                ),
+                onPressed: _busy ? null : _save,
               ),
-              _row(
-                index: 1,
-                metrics: metrics,
-                child: _ResultRow(
-                  key: const Key('identity-result-row-1'),
-                  label: IdentityStrings.idNumberLabel,
-                  metrics: metrics,
-                  controller: _idController,
-                  fieldKey: const Key('identity-result-id'),
-                ),
-              ),
-              _row(
-                index: 2,
-                metrics: metrics,
-                child: _ResultRow(
-                  key: const Key('identity-result-row-2'),
-                  label: IdentityStrings.birthdayLabel,
-                  metrics: metrics,
-                  value: _birthday,
-                  onTap: _pickBirthday,
-                ),
-              ),
-              Positioned(
-                left: metrics.x(_submitLeft),
-                top: metrics.y(_submitTop),
-                child: IdentitySubmitButton(
-                  key: const Key('identity-result-submit'),
-                  metrics: metrics,
-                  onPressed: _busy ? null : _save,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -212,35 +223,6 @@ class _IdentityResultPageState extends State<IdentityResultPage> {
         _apiClient.settings.localSession.productFlowCopy.identityConfirmation;
     return copy.isEmpty ? IdentityStrings.heroCopy : copy;
   }
-
-  /// 把一行识别信息摆到设计坐标上（454 起、行距 62）。
-  Widget _row({
-    required int index,
-    required IdentityMetrics metrics,
-    required Widget child,
-  }) {
-    return Positioned(
-      left: metrics.x(IdentityDesign.cardLeft),
-      top: metrics.y(_rowTop + index * IdentityDesign.resultRowPitch),
-      child: child,
-    );
-  }
-
-  /// 主按钮居中：设计稿 220x52 摆在 375 画布正中。
-  static const double _submitLeft =
-      (IdentityDesign.pageWidth - IdentityDesign.submitWidth) / 2;
-
-  /// 正文区从设计坐标 171（引导区下沿）起，所以正文里的纵向位置都要减掉它。
-  static const double _pillTop =
-      IdentityDesign.uploadPillTop - IdentityDesign.heroContentTop;
-  static const double _cardTop =
-      IdentityDesign.resultCardTop - IdentityDesign.heroContentTop;
-  static const double _photoTop =
-      IdentityDesign.resultPhotoTop - IdentityDesign.heroContentTop;
-  static const double _rowTop =
-      IdentityDesign.resultRowTop - IdentityDesign.heroContentTop;
-  static const double _submitTop =
-      IdentityDesign.resultSubmitTop - IdentityDesign.heroContentTop;
 
   /// 打开设计稿 03-02 的日期滚轮。识别不出生日时给一个成年人的默认值，
   /// 免得用户从 1900 年一路往下滚。
@@ -266,7 +248,7 @@ class _IdentityResultPageState extends State<IdentityResultPage> {
       return;
     }
     setState(() => _busy = true);
-    await EasyLoading.show(status: 'Loading...');
+    await AppNavigator.showLoading();
     try {
       await _apiClient.saveBasicProfile(
         name: name,
@@ -286,7 +268,7 @@ class _IdentityResultPageState extends State<IdentityResultPage> {
       }
       await _apiClient.verifyBasicProfile(productId: _productId);
       await _apiClient.settings.localSession.writeIdentityCardType(_cardType);
-      await EasyLoading.dismiss();
+      await AppNavigator.dismissLoading();
       if (!mounted) return;
       _outcome?.completed = true;
       _outcome?.cardType = _cardType;
@@ -367,7 +349,7 @@ class _ResultRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final row = Container(
-      width: metrics.size(IdentityDesign.cardWidth),
+      width: double.infinity,
       height: metrics.size(IdentityDesign.resultRowHeight),
       padding: EdgeInsets.symmetric(
         horizontal: metrics.size(IdentityDesign.resultRowPadding),

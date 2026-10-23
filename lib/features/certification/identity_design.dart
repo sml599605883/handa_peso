@@ -44,8 +44,6 @@ abstract final class IdentityAssets {
 abstract final class IdentityDesign {
   static const double pageWidth = 375;
   static const double pageHeight = 812;
-  static const double typePageHeight = 988;
-  static const Size pageSize = Size(pageWidth, pageHeight);
 
   /// 返回键与标题（设计稿 24x24 @ y=56、20 号字 @ y=58）。
   static const double backLeft = 14;
@@ -67,38 +65,26 @@ abstract final class IdentityDesign {
   static const double moneyBagWidth = 92;
   static const double moneyBagHeight = 81;
 
-  /// 带引导区的页面里，正文区的起点（设计坐标）：钱袋插画的下沿。
-  static const double heroContentTop = moneyBagTop + moneyBagHeight;
-
   /// 页面卡片与卡片头部（设计稿外层卡片从 y=186 开始，标题层是卡片顶部）。
   static const double cardLeft = 14;
   static const double cardWidth = 347;
   static const double cardRadius = 14;
 
   /// 上传页标题层（设计稿 `矩形` 347x46 @ (14,186)）。
-  static const double uploadPillTop = 186;
   static const double uploadPillHeight = 46;
 
   /// 上传证件页的整张卡片（设计稿 `矩形` 347x397 @ (14,186)）与卡片内的
   /// 演示切图（设计稿 `编组 9` 328x312 @ (19, 250)）。
-  static const double uploadCardTop = 186;
-  static const double uploadCardHeight = 397;
   static const double demoLeft = 19;
-  static const double demoTop = 250;
   static const double demoWidth = 328;
   static const double demoHeight = 312;
 
   /// 上传成功页整张卡片（设计稿 `矩形` 347x254 @ (14,186)）、证件图（设计稿 `block_6`
   /// 307x167）与三条识别信息（347x48，行距 62）。
-  static const double resultCardTop = 186;
-  static const double resultCardHeight = 254;
   static const double resultPillHeight = 46;
   static const double resultPhotoLeft = 34;
-  static const double resultPhotoTop = 252;
   static const double resultPhotoWidth = 307;
   static const double resultPhotoHeight = 167;
-  static const double resultRowTop = 454;
-  static const double resultRowPitch = 62;
   static const double resultRowHeight = 48;
   static const double resultRowRadius = 8;
   static const double resultRowBorder = 1;
@@ -110,8 +96,6 @@ abstract final class IdentityDesign {
   static const double submitHeight = 52;
   static const double submitRadius = 26;
   static const double submitSize = 20;
-  static const double uploadSubmitTop = 603;
-  static const double resultSubmitTop = 646;
 
   /// 证件类型选择页：两张 347x374 的分组卡片、两组横幅与一列 332x56 的按钮。
   static const double typeCardTop = 134;
@@ -176,13 +160,16 @@ abstract final class IdentityDesign {
   static const double birthdaySubmitTop = 362;
 }
 
-/// 证件流程的设计稿适配，口径与 `dali_cash` 的 `ScreenAdapter` 一致：
+/// 证件流程的 iPhone 适配参数。
 ///
-/// 缩放系数 = **实际屏幕宽度 / 设计稿宽度（375）**；宽度、高度、字号、圆角都乘同一个
-/// 系数（保持设计稿比例）。页面里写设计稿原始数值、由这里换算成设备像素——**只换算
-/// 一次**，不要再叠一层画布缩放，否则宽屏机型（例如 iPhone XR）会放大两次、右边出屏。
+/// 页面正文按屏宽扣除左右间距后铺排；图片和装饰按自身宽高比缩放，表单与卡片
+/// 使用内容高度。缩放只用于图标、间距和控件最小尺寸，并限制在合理范围内。
 class IdentityMetrics {
-  const IdentityMetrics({required this.screenWidth, this.safeTop = 0});
+  const IdentityMetrics({
+    required this.screenWidth,
+    this.safeTop = 0,
+    this.safeBottom = 0,
+  });
 
   /// 实际屏幕宽度（逻辑像素）。
   final double screenWidth;
@@ -190,8 +177,18 @@ class IdentityMetrics {
   /// 设备顶部安全区（逻辑像素）。
   final double safeTop;
 
-  /// 与 `ScreenAdapter` 相同的缩放系数。
-  double get scale => screenWidth / IdentityDesign.pageWidth;
+  /// 设备底部安全区（逻辑像素）。
+  final double safeBottom;
+
+  /// 以屏宽为基准，但限制在合理范围内，避免窄屏控件过小或平板无限放大。
+  double get scale => (screenWidth / IdentityDesign.pageWidth).clamp(0.85, 1.2);
+
+  /// 页面正文的实际宽度。左右各留 14 设计点，并保留安全上限。
+  double get contentWidth =>
+      math.min(math.max(0, screenWidth - 28 * scale), 480);
+
+  double get headerShift =>
+      math.max(0, safeTop + size(8) - size(IdentityDesign.backTop));
 
   /// 宽度 / 高度 / 字号 / 圆角 / 描边：乘同一个系数。
   double size(num designValue) => designValue * scale;
@@ -201,9 +198,6 @@ class IdentityMetrics {
 
   /// 纵向位置。
   double y(num designY) => designY * scale;
-
-  /// 顶部安全区换算回设计坐标，用于「机型比设计稿更高时内容整体下移」。
-  double get safeTopInDesign => scale == 0 ? 0 : safeTop / scale;
 }
 
 /// 证件流程的页面骨架：整屏底色 + 可滚动 + 点击空白收键盘，并把 [IdentityMetrics]
@@ -211,15 +205,11 @@ class IdentityMetrics {
 class IdentityPageScaffold extends StatelessWidget {
   const IdentityPageScaffold({
     required this.gradient,
-    required this.designHeight,
     required this.builder,
     super.key,
   });
 
   final Gradient gradient;
-
-  /// 内容在设计坐标下的高度（不足一屏时按一屏算）。
-  final double designHeight;
 
   final Widget Function(BuildContext context, IdentityMetrics metrics) builder;
 
@@ -228,127 +218,106 @@ class IdentityPageScaffold extends StatelessWidget {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.dark,
       child: Scaffold(
-        body: GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final metrics = IdentityMetrics(
-                screenWidth: constraints.maxWidth,
-                safeTop: MediaQuery.paddingOf(context).top,
-              );
-              final canvasHeight = math.max(
-                constraints.maxHeight,
-                metrics.size(designHeight),
-              );
-              return Stack(
-                children: <Widget>[
-                  Positioned.fill(
-                    child: DecoratedBox(
-                      key: const Key('identity-background'),
-                      decoration: BoxDecoration(gradient: gradient),
+        body: LayoutBuilder(
+          builder: (context, constraints) {
+            final metrics = IdentityMetrics(
+              screenWidth: constraints.maxWidth,
+              safeTop: MediaQuery.paddingOf(context).top,
+              safeBottom: MediaQuery.paddingOf(context).bottom,
+            );
+            return GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+              child: DecoratedBox(
+                key: const Key('identity-background'),
+                decoration: BoxDecoration(gradient: gradient),
+                child: SingleChildScrollView(
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: EdgeInsets.only(
+                    bottom: math.max(
+                      metrics.size(24),
+                      metrics.safeBottom + metrics.size(24),
                     ),
                   ),
-                  SingleChildScrollView(
+                  child: Align(
+                    alignment: Alignment.topCenter,
                     child: SizedBox(
-                      width: constraints.maxWidth,
-                      height: canvasHeight,
+                      width: metrics.contentWidth,
                       child: builder(context, metrics),
                     ),
                   ),
-                ],
-              );
-            },
-          ),
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
   }
 }
 
-/// 三页共用的页头：返回键 + 居中标题（+ 可选的引导区），下面是页面正文。
-class IdentityPageChrome extends StatelessWidget {
-  const IdentityPageChrome({
+class IdentityPageHeader extends StatelessWidget {
+  const IdentityPageHeader({
     required this.metrics,
-    required this.contentTop,
-    this.title = IdentityStrings.pageTitle,
-    this.heroCopy,
+    required this.title,
     this.onBack,
-    required this.child,
     super.key,
   });
 
   final IdentityMetrics metrics;
-
-  /// 正文区在设计坐标下的起点（带引导区的是 171，证件类型选择页是 134）。
-  final double contentTop;
-
-  /// 页面标题；人脸识别页在设计稿上使用 `Document verification`。
   final String title;
-
-  /// 顶部引导文案；证件类型选择页没有这一段，传 `null`。
-  final String? heroCopy;
-
-  /// 返回键动作；为空时使用默认的 Navigator 返回。
   final VoidCallback? onBack;
-
-  final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    // 机型比设计稿更高的部分留给顶部安全区：内容整体下移，避免标题被刘海压住。
-    final safeTop = metrics.safeTopInDesign;
-    final shift = safeTop > IdentityDesign.backTop - 8
-        ? safeTop - (IdentityDesign.backTop - 8)
-        : 0.0;
-    return Stack(
-      children: <Widget>[
-        Positioned(
-          left: 0,
-          top: metrics.y(IdentityDesign.titleTop + shift),
-          width: metrics.screenWidth,
-          height: metrics.size(IdentityDesign.titleHeight),
-          child: Stack(
-            children: <Widget>[
-              Center(
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    color: AppColors.identityTitle,
-                    fontSize: metrics.size(IdentityDesign.titleSize),
-                    fontWeight: FontWeight.w700,
-                    height:
-                        IdentityDesign.titleHeight / IdentityDesign.titleSize,
+    final shift = metrics.headerShift;
+    return Padding(
+      padding: EdgeInsets.only(top: shift),
+      child: SizedBox(
+        height: metrics.size(90),
+        child: Padding(
+          padding: EdgeInsets.only(top: metrics.size(IdentityDesign.titleTop)),
+          child: SizedBox(
+            height: metrics.size(IdentityDesign.titleHeight),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Transform.translate(
+                  offset: Offset(0, -metrics.size(2)),
+                  child: SizedBox(
+                    width: metrics.size(IdentityDesign.backSize),
+                    height: metrics.size(IdentityDesign.backSize),
+                    child: IdentityBackButton(onBack: onBack),
                   ),
                 ),
-              ),
-              Positioned(
-                left: metrics.x(IdentityDesign.backLeft),
-                top: metrics.size(
-                  IdentityDesign.backTop - IdentityDesign.titleTop,
+                Expanded(
+                  child: Center(
+                    child: Text(
+                      title,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: AppColors.identityTitle,
+                        fontSize: metrics.size(IdentityDesign.titleSize),
+                        fontWeight: FontWeight.w700,
+                        height:
+                            IdentityDesign.titleHeight /
+                            IdentityDesign.titleSize,
+                      ),
+                    ),
+                  ),
                 ),
-                width: metrics.size(IdentityDesign.backSize),
-                height: metrics.size(IdentityDesign.backSize),
-                child: IdentityBackButton(onBack: onBack),
-              ),
-            ],
+                SizedBox(
+                  width: metrics.size(IdentityDesign.backSize),
+                  height: metrics.size(IdentityDesign.backSize),
+                ),
+              ],
+            ),
           ),
         ),
-        if (heroCopy != null)
-          Positioned(
-            left: 0,
-            top: metrics.y(IdentityDesign.heroTop + shift),
-            width: metrics.screenWidth,
-            height: metrics.size(IdentityDesign.moneyBagHeight),
-            child: IdentityHeroBanner(text: heroCopy!, metrics: metrics),
-          ),
-        Positioned(
-          left: 0,
-          top: metrics.y(contentTop + shift),
-          width: metrics.screenWidth,
-          child: child,
-        ),
-      ],
+      ),
     );
   }
 }
@@ -361,8 +330,7 @@ class IdentityHeroBanner extends StatelessWidget {
   const IdentityHeroBanner({
     required this.text,
     required this.metrics,
-    this.moneyBagTopOffset =
-        IdentityDesign.moneyBagTop - IdentityDesign.heroTop,
+    this.top,
     this.maxLines,
     this.minFontSize = IdentityDesign.heroSize,
     this.maxFontSize = IdentityDesign.heroSize,
@@ -371,37 +339,43 @@ class IdentityHeroBanner extends StatelessWidget {
 
   final String text;
   final IdentityMetrics metrics;
-  final double moneyBagTopOffset;
+  final Widget? top;
   final int? maxLines;
   final double minFontSize;
   final double maxFontSize;
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
+    return Row(
       key: const Key('identity-hero-banner'),
-      clipBehavior: Clip.none,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Positioned(
-          left: metrics.x(IdentityDesign.heroLeft),
-          top: 0,
-          width: metrics.size(IdentityDesign.heroWidth),
-          child: IdentityHeroText(
-            text: text,
-            metrics: metrics,
-            maxLines: maxLines,
-            minFontSize: minFontSize,
-            maxFontSize: maxFontSize,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              if (top != null) ...<Widget>[
+                top!,
+                SizedBox(height: metrics.size(14)),
+              ] else
+                SizedBox(height: metrics.size(16)),
+              IdentityHeroText(
+                text: text,
+                metrics: metrics,
+                maxLines: maxLines,
+                minFontSize: minFontSize,
+                maxFontSize: maxFontSize,
+              ),
+            ],
           ),
         ),
-        Positioned(
-          left: metrics.x(IdentityDesign.moneyBagLeft),
-          top: metrics.y(moneyBagTopOffset),
+        SizedBox(width: metrics.size(9)),
+        SizedBox(
           width: metrics.size(IdentityDesign.moneyBagWidth),
           height: metrics.size(IdentityDesign.moneyBagHeight),
           child: const Image(
             image: AssetImage(IdentityAssets.moneyBag),
-            fit: BoxFit.fill,
+            fit: BoxFit.contain,
           ),
         ),
       ],
@@ -591,7 +565,7 @@ class IdentityCardHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final radius = metrics.size(IdentityDesign.cardRadius);
     return Container(
-      width: metrics.size(IdentityDesign.cardWidth),
+      width: double.infinity,
       height: metrics.size(height),
       decoration: BoxDecoration(
         color: AppColors.identityPanelSurface,
@@ -661,7 +635,7 @@ class IdentitySubmitButton extends StatelessWidget {
     );
     return SizedBox(
       width: metrics.size(width),
-      height: metrics.size(IdentityDesign.submitHeight),
+      height: math.max(48, metrics.size(IdentityDesign.submitHeight)),
       child: DecoratedBox(
         decoration: BoxDecoration(
           borderRadius: radius,

@@ -225,25 +225,27 @@ void main() {
     });
   });
 
-  test('换绑账户目录解析主卡与持卡人信息', () {
+  test('换绑账户目录按 Handa 文档字段解析主卡与持卡人信息', () {
     final reply = GatewayReply.parse(<String, dynamic>{
       'unaccepted': 0,
       'unstably': 'ok',
       'indulgences': <String, dynamic>{
-        'applicants': <Map<String, dynamic>>[
+        'latchstrings': <Map<String, dynamic>>[
           <String, dynamic>{
-            'burlesquer': 'Bank',
-            'geochronologist': <Map<String, dynamic>>[
+            'scarriest': 2,
+            'axmen': 'Bank',
+            'ranulas': <Map<String, dynamic>>[
               <String, dynamic>{
-                'retraction': 'card-1',
-                'photoduplicated': 'Example Bank',
-                'banisters': '1234',
-                'week': '',
-                'premillenarian': 1,
-                'rivieres': <String, dynamic>{
-                  'barehanded': 'Ana',
-                  'unforced': 'Cruz',
-                  'unenlightened': 'Santos',
+                'eyeglasses': 555,
+                'crankles': 'BDO',
+                'calipash': '1234',
+                'headway': '',
+                'uppropped': 1,
+                'assureds': 1,
+                'unworked': <String, dynamic>{
+                  'advisements': 'Ana',
+                  'chyme': 'Cruz',
+                  'recusant': 'Santos',
                 },
               },
             ],
@@ -254,8 +256,59 @@ void main() {
 
     final catalog = PayoutAccountCatalog.fromReply(reply);
     expect(catalog.isEmpty, isFalse);
-    expect(catalog.accounts.single.id, 'card-1');
+    expect(catalog.groups.single.title, 'Bank');
+    expect(catalog.groups.single.type, '2');
+    expect(catalog.accounts.single.id, '555');
+    expect(catalog.accounts.single.bankName, 'BDO');
+    expect(catalog.accounts.single.accountNumber, '1234');
     expect(catalog.accounts.single.holderName, 'Ana Cruz Santos');
     expect(catalog.accounts.single.isPrimary, isTrue);
+    expect(catalog.accounts.single.available, isTrue);
+    expect(catalog.accounts.single.holderFirstName, 'Ana');
+    expect(catalog.accounts.single.holderMiddleName, 'Cruz');
+    expect(catalog.accounts.single.holderLastName, 'Santos');
+  });
+
+  test('维护中的账户仍可解析并带默认维护提示', () {
+    final reply = GatewayReply.parse(<String, dynamic>{
+      'unaccepted': 0,
+      'unstably': 'ok',
+      'indulgences': <String, dynamic>{
+        'latchstrings': <Map<String, dynamic>>[
+          <String, dynamic>{
+            'scarriest': 1,
+            'axmen': 'E-wallet',
+            'ranulas': <Map<String, dynamic>>[
+              <String, dynamic>{
+                'eyeglasses': 556,
+                'crankles': 'GCash',
+                'calipash': '09171234567',
+                'uppropped': 0,
+                'assureds': 0,
+                'unworked': <String, dynamic>{},
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    final account = PayoutAccountCatalog.fromReply(reply).accounts.single;
+    expect(account.available, isFalse);
+    expect(account.maintenanceNote, PayoutAccount.defaultMaintenanceNote);
+    expect(account.isPrimary, isFalse);
+  });
+
+  test('换卡响应兼容历史跳转字段并返回首个非空地址', () {
+    final reply = GatewayReply.parse(<String, dynamic>{
+      'unaccepted': 0,
+      'unstably': 'ok',
+      'indulgences': <String, dynamic>{
+        'flowerpot': '',
+        'proclises': 'https://example.test/order-updated',
+      },
+    });
+
+    expect(payoutRedirectUrlFrom(reply), 'https://example.test/order-updated');
   });
 }

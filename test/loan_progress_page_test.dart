@@ -19,6 +19,7 @@ import 'package:handa_peso/features/loan_progress/loan_progress_item.dart';
 import 'package:handa_peso/features/main_shell/main_binding.dart';
 import 'package:handa_peso/features/main_shell/main_controller.dart';
 import 'package:handa_peso/features/main_shell/main_shell_page.dart';
+import 'package:handa_peso/features/webview/payout_accounts_page.dart';
 
 const Map<String, List<String>> _jsonHeaders = <String, List<String>>{
   Headers.contentTypeHeader: <String>[Headers.jsonContentType],
@@ -37,6 +38,12 @@ class _StubAdapter implements HttpClientAdapter {
 
   /// 准入接口（`/dropcloth/legongs`，文档「点击申请」）的调用次数。
   int get applyCalls => urls.where((url) => url.contains('legongs')).length;
+
+  int get accountListCalls =>
+      urls.where((url) => url.contains('dullard')).length;
+
+  int get changeAccountCalls =>
+      urls.where((url) => url.contains('circularise')).length;
 
   @override
   Future<ResponseBody> fetch(
@@ -203,6 +210,44 @@ String _applyBody({required String target}) {
   });
 }
 
+String _accountBody() {
+  return jsonEncode(<String, dynamic>{
+    'unaccepted': 0,
+    'unstably': 'success',
+    'indulgences': <String, dynamic>{
+      'latchstrings': <Map<String, dynamic>>[
+        <String, dynamic>{
+          'scarriest': 2,
+          'axmen': 'Bank',
+          'ranulas': <Map<String, dynamic>>[
+            <String, dynamic>{
+              'eyeglasses': 555,
+              'crankles': 'BDO',
+              'calipash': '1234',
+              'headway': '',
+              'uppropped': 1,
+              'assureds': 1,
+              'unworked': <String, dynamic>{
+                'advisements': 'Ana',
+                'chyme': 'Cruz',
+                'recusant': 'Santos',
+              },
+            },
+          ],
+        },
+      ],
+    },
+  });
+}
+
+String _changeAccountBody(String target) {
+  return jsonEncode(<String, dynamic>{
+    'unaccepted': '00',
+    'unstably': 'success',
+    'indulgences': <String, dynamic>{'proclises': target},
+  });
+}
+
 GatewaySettings _config() {
   return GatewaySettings(
     apiOrigin: 'http://home.test',
@@ -268,6 +313,14 @@ Future<void> _pumpLoanTab(
           name: AppRoutes.certification,
           page: () =>
               const Scaffold(body: Center(child: Text('certification'))),
+        ),
+        GetPage<void>(
+          name: AppRoutes.payoutAccounts,
+          page: () => const PayoutAccountsPage(),
+        ),
+        GetPage<void>(
+          name: AppRoutes.bindCard,
+          page: () => const Scaffold(body: Text('bind-card')),
         ),
       ],
     ),
@@ -535,7 +588,7 @@ void main() {
       );
     });
 
-    testWidgets('不下发地址的按钮（Try Again / Change）落到订单详情页', (tester) async {
+    testWidgets('原卡重试未下发地址时落到订单详情页', (tester) async {
       final config = _config();
       await config.localSession.writeSessionId('session-1');
       final adapter = _StubAdapter(
@@ -556,7 +609,102 @@ void main() {
       expect(find.textContaining('orderId=2'), findsOneWidget);
     });
 
-    testWidgets('没有订单详情地址时回到产品申请流程', (tester) async {
+    testWidgets('Change Account 直接进入原生账户列表并打开换卡后的订单页', (tester) async {
+      final config = _config();
+      await config.localSession.writeSessionId('session-1');
+      final adapter = _StubAdapter((options) async {
+        final url = options.uri.toString();
+        if (url.contains('dullard')) {
+          return ResponseBody.fromString(
+            _accountBody(),
+            200,
+            headers: _jsonHeaders,
+          );
+        }
+        if (url.contains('circularise')) {
+          expect(options.data['eelworm'], 'A1');
+          expect(options.data['eyeglasses'], '555');
+          return ResponseBody.fromString(
+            _changeAccountBody('http://example.test/changed-order'),
+            200,
+            headers: _jsonHeaders,
+          );
+        }
+        return ResponseBody.fromString(
+          _body(_designCards()),
+          200,
+          headers: _jsonHeaders,
+        );
+      });
+      await _pumpLoanTab(tester, _client(config, adapter));
+
+      await tester.tap(
+        find.descendant(of: _card('A1'), matching: find.text('Change')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(adapter.accountListCalls, 1);
+      expect(Get.currentRoute, AppRoutes.payoutAccounts);
+      expect(find.byKey(const Key('payout-account-page')), findsOneWidget);
+      expect(find.text('BDO'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('payout-account-submit')));
+      await tester.pumpAndSettle();
+
+      expect(adapter.changeAccountCalls, 1);
+      expect(Get.currentRoute, AppRoutes.webView);
+      expect(
+        find.text('webview:http://example.test/changed-order'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('没有已绑账户时 Change Account 直接进入绑卡页', (tester) async {
+      final config = _config();
+      await config.localSession.writeSessionId('session-1');
+      final adapter = _StubAdapter((options) async {
+        if (options.uri.toString().contains('dullard')) {
+          return ResponseBody.fromString(
+            jsonEncode(<String, dynamic>{
+              'unaccepted': 0,
+              'unstably': 'success',
+              'indulgences': <String, dynamic>{
+                'latchstrings': <Map<String, dynamic>>[],
+              },
+            }),
+            200,
+            headers: _jsonHeaders,
+          );
+        }
+        return ResponseBody.fromString(
+          _body(<Map<String, dynamic>>[
+            _progressCard(
+              orderNo: 'C1',
+              status: 5,
+              statusLabel: 'Funding Failed',
+              actions: <Map<String, dynamic>>[
+                _action(type: 'change', label: 'Change'),
+              ],
+            ),
+          ]),
+          200,
+          headers: _jsonHeaders,
+        );
+      });
+      await _pumpLoanTab(tester, _client(config, adapter));
+
+      await tester.tap(
+        find.descendant(of: _card('C1'), matching: find.text('Change')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(adapter.accountListCalls, 1);
+      expect(Get.currentRoute, AppRoutes.bindCard);
+      expect(find.text('bind-card'), findsOneWidget);
+      expect(find.byKey(const Key('payout-account-page')), findsNothing);
+    });
+
+    testWidgets('原卡重试没有订单详情地址时回到产品申请流程', (tester) async {
       final config = _config();
       await config.localSession.writeSessionId('session-1');
       final adapter = _StubAdapter((options) async {
@@ -576,7 +724,7 @@ void main() {
               status: 1,
               statusLabel: 'In Review',
               actions: <Map<String, dynamic>>[
-                _action(type: 'change', label: 'Change'),
+                _action(type: 'retry', label: 'Try Again'),
               ],
             ),
           ]),
@@ -587,7 +735,7 @@ void main() {
       await _pumpLoanTab(tester, _client(config, adapter));
 
       await tester.tap(
-        find.descendant(of: _card('B1'), matching: find.text('Change')),
+        find.descendant(of: _card('B1'), matching: find.text('Try Again')),
       );
       await tester.pumpAndSettle();
 
@@ -709,7 +857,7 @@ void main() {
       });
       await _pumpLoanTab(tester, _client(config, adapter), settle: false);
 
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsWidgets);
 
       completer.complete(
         ResponseBody.fromString(

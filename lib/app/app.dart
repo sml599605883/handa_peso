@@ -30,6 +30,7 @@ import '../features/mine/account_page.dart';
 import '../features/orders/orders_page.dart';
 import '../features/support/support_page.dart';
 import '../features/webview/app_webview_page.dart';
+import '../features/webview/payout_accounts_page.dart';
 
 class HandaPesoApp extends StatelessWidget {
   const HandaPesoApp({required this.dependencies, super.key});
@@ -101,6 +102,10 @@ class HandaPesoApp extends StatelessWidget {
           page: () => const EmergencyContactPage(),
         ),
         GetPage(name: AppRoutes.bindCard, page: () => const BindCardPage()),
+        GetPage(
+          name: AppRoutes.payoutAccounts,
+          page: () => const PayoutAccountsPage(),
+        ),
         GetPage(
           name: AppRoutes.creditReview,
           page: () => const CreditReviewPage(),

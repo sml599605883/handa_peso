@@ -59,6 +59,12 @@ const String _retentionBody =
     '"jollified":"Continuar","footrests":"Exit",'
     '"tidewaters":"https://retention.png"}}}';
 
+/// 业务失败但载荷里仍带插画：不能因此展示挽留弹窗。
+const String _retentionFailureBody =
+    '{"unaccepted":"500","unstably":"retention unavailable","indulgences":{'
+    '"revetting":{"jollified":"Continue","footrests":"Exit",'
+    '"tidewaters":"https://retention.png"}}}';
+
 /// 一次被记录的请求：只看 URL 与表单字段。
 class _RecordedRequest {
   const _RecordedRequest({required this.url, required this.fields});
@@ -72,6 +78,7 @@ class _StubAdapter implements HttpClientAdapter {
   _StubAdapter({this.uploadBody});
 
   final String? uploadBody;
+  String retentionBody = _retentionBody;
   final List<_RecordedRequest> requests = <_RecordedRequest>[];
 
   List<_RecordedRequest> where(String fragment) => requests
@@ -99,7 +106,7 @@ class _StubAdapter implements HttpClientAdapter {
 
     final url = options.uri.toString();
     if (url.contains('blockader')) return _json(_identityTypesBody);
-    if (url.contains('unchivalrous')) return _json(_retentionBody);
+    if (url.contains('unchivalrous')) return _json(retentionBody);
     if (url.contains('sikes')) {
       return _json(uploadBody ?? _uploadResultBody);
     }
@@ -372,6 +379,141 @@ void main() {
     await _pumpUntil(tester, () => find.text('home').evaluate().isNotEmpty);
     expect(find.text('home'), findsOneWidget);
     expect(adapter.where('unchivalrous'), hasLength(1));
+  });
+
+  testWidgets('证件类型页返回：挽留接口业务失败时直接回到入口页', (tester) async {
+    adapter.retentionBody = _retentionFailureBody;
+    await pumpFlow(tester);
+    Get.toNamed<void>(
+      AppRoutes.certificationIdentity,
+      arguments: <String, dynamic>{'productId': '1000460'},
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('identity-back')));
+    await _pumpUntil(tester, () => find.text('home').evaluate().isNotEmpty);
+
+    expect(find.text('home'), findsOneWidget);
+    expect(find.byKey(const Key('identity-retention-continue')), findsNothing);
+    expect(adapter.where('unchivalrous'), hasLength(1));
+  });
+
+  testWidgets('上传页返回：请求 scene=0 的挽留弹窗，继续时留在上传页', (tester) async {
+    await pumpFlow(tester);
+    Get.toNamed<void>(
+      AppRoutes.certificationIdentityUpload,
+      arguments: <String, dynamic>{
+        'productId': '1000460',
+        'cardType': 'SSS ID',
+      },
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('identity-back')));
+    await _pumpUntil(
+      tester,
+      () => find
+          .byKey(const Key('identity-retention-continue'))
+          .evaluate()
+          .isNotEmpty,
+    );
+    final retention = adapter.where('unchivalrous').single;
+    expect(retention.fields['ulterior'], '0');
+    expect(retention.fields['knife'], '1000460');
+
+    await tester.tap(find.byKey(const Key('identity-retention-continue')));
+    await tester.pumpAndSettle();
+    expect(find.byType(IdentityUploadPage), findsOneWidget);
+    expect(find.text('Demonstration!'), findsOneWidget);
+  });
+
+  testWidgets('上传页返回：挽留弹窗选择退出时回到入口页', (tester) async {
+    await pumpFlow(tester);
+    Get.toNamed<void>(
+      AppRoutes.certificationIdentityUpload,
+      arguments: <String, dynamic>{
+        'productId': '1000460',
+        'cardType': 'SSS ID',
+      },
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('identity-back')));
+    await _pumpUntil(
+      tester,
+      () => find
+          .byKey(const Key('identity-retention-exit'))
+          .evaluate()
+          .isNotEmpty,
+    );
+    await tester.tap(find.byKey(const Key('identity-retention-exit')));
+    await _pumpUntil(tester, () => find.text('home').evaluate().isNotEmpty);
+
+    expect(find.text('home'), findsOneWidget);
+    expect(find.byType(IdentityUploadPage), findsNothing);
+  });
+
+  testWidgets('证件识别确认页返回：请求 scene=0 的挽留弹窗', (tester) async {
+    await pumpFlow(tester);
+    Get.toNamed<void>(
+      AppRoutes.certificationIdentityResult,
+      arguments: <String, dynamic>{
+        'productId': '1000460',
+        'cardType': 'SSS ID',
+        'definitively': 'NAVEEN TOM VARGHESE',
+        'optically': '623099344112',
+        'gleeking': '23/11/1993',
+        'tidewaters': 'https://id-front.png',
+      },
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('identity-back')));
+    await _pumpUntil(
+      tester,
+      () => find
+          .byKey(const Key('identity-retention-continue'))
+          .evaluate()
+          .isNotEmpty,
+    );
+    final retention = adapter.where('unchivalrous').single;
+    expect(retention.fields['ulterior'], '0');
+    expect(retention.fields['knife'], '1000460');
+
+    await tester.tap(find.byKey(const Key('identity-retention-continue')));
+    await tester.pumpAndSettle();
+    expect(find.byType(IdentityResultPage), findsOneWidget);
+    expect(find.text('Successfully!'), findsOneWidget);
+  });
+
+  testWidgets('证件识别确认页返回：挽留弹窗选择退出时回到入口页', (tester) async {
+    await pumpFlow(tester);
+    Get.toNamed<void>(
+      AppRoutes.certificationIdentityResult,
+      arguments: <String, dynamic>{
+        'productId': '1000460',
+        'cardType': 'SSS ID',
+        'definitively': 'NAVEEN TOM VARGHESE',
+        'optically': '623099344112',
+        'gleeking': '23/11/1993',
+        'tidewaters': 'https://id-front.png',
+      },
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('identity-back')));
+    await _pumpUntil(
+      tester,
+      () => find
+          .byKey(const Key('identity-retention-exit'))
+          .evaluate()
+          .isNotEmpty,
+    );
+    await tester.tap(find.byKey(const Key('identity-retention-exit')));
+    await _pumpUntil(tester, () => find.text('home').evaluate().isNotEmpty);
+
+    expect(find.text('home'), findsOneWidget);
+    expect(find.byType(IdentityResultPage), findsNothing);
   });
 
   testWidgets('上传页只压缩所选图片，上传接口仍用项目自己的证件类型字段', (tester) async {

@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'responsive_layout.dart';
+
 /// 设计稿画布：内容仍按设计稿坐标绘制，整棵子树再等比缩放到设备宽度。
 ///
 /// 这样每个元素都写设计稿上的原始数值（`top: 58`、`fontSize: 16`），不必到处
@@ -36,7 +38,12 @@ class DesignCanvas extends StatelessWidget {
           onTap: _dismissKeyboard,
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final scale = constraints.maxWidth / designSize.width;
+              final responsive = AppResponsiveMetrics(
+                screenWidth: constraints.maxWidth,
+                safeTop: MediaQuery.paddingOf(context).top,
+                safeBottom: MediaQuery.paddingOf(context).bottom,
+              );
+              final scale = responsive.scale;
               final deviceHeight = math.max(
                 constraints.maxHeight,
                 designSize.height * scale,

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../../app/layout/responsive_layout.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/widgets/app_empty_state.dart';
 import '../home/customer_service_shortcut.dart';
@@ -17,8 +18,6 @@ import 'loan_progress_item.dart';
 /// 页面本身只负责三种状态（加载 / 失败 / 空）与卡片列表。
 class LoanProgressPage extends GetView<MainController> {
   const LoanProgressPage({super.key});
-
-  static const double _designWidth = 375;
 
   /// 标题上沿与行高（设计稿：20 号字、30 的行盒）。
   static const double _titleTop = 53;
@@ -64,12 +63,16 @@ class LoanProgressPage extends GetView<MainController> {
 
       return LayoutBuilder(
         builder: (context, constraints) {
-          final scale = constraints.maxWidth / _designWidth;
+          final metrics = AppResponsiveMetrics(
+            screenWidth: constraints.maxWidth,
+            safeTop: MediaQuery.paddingOf(context).top,
+            safeBottom: MediaQuery.paddingOf(context).bottom,
+          );
+          final scale = metrics.scale;
           double px(num value) => value * scale;
 
           // 安全区比设计稿的状态栏更高时，标题整体下移，避免压到刘海。
-          final safeTop = MediaQuery.paddingOf(context).top / scale;
-          final titleTop = math.max(_titleTop, safeTop + 8);
+          final titleTop = math.max(_titleTop, metrics.safeTop / scale + 8);
           final listTop = math.max(titleTop + _titleHeight, _listTop);
 
           return Stack(

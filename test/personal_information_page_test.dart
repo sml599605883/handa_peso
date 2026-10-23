@@ -92,6 +92,15 @@ const _workBody =
     '],"packwaxes":0,"monosyllabicity":"Once a Month|1"}'
     '],"flatfish":"Complete the filling and increase the borrowing limit"}}';
 
+/// 接口文档「获取挽留弹窗」：个人信息（2）与工作信息（3）共用同一份载荷。
+const _retentionBody =
+    '{"unaccepted":"0","unstably":"success","indulgences":{'
+    '"revetting":{"canonic":"Please wait, it only takes ",'
+    '"unstably":" for you to complete all certifications and get a loan!",'
+    '"luciferins":2000,"argala":"","sleeker":"xx/xxx/xxx.xxx",'
+    '"jollified":"Continuar","footrests":"Exit",'
+    '"tidewaters":"https://retention.png"}}}';
+
 class _RecordedRequest {
   const _RecordedRequest({required this.url, required this.fields});
 
@@ -125,7 +134,9 @@ class _StubAdapter implements HttpClientAdapter {
     }
     requests.add(_RecordedRequest(url: options.uri.toString(), fields: fields));
     final uri = options.uri.toString();
-    final body = uri.contains('endoscopes')
+    final body = uri.contains('unchivalrous')
+        ? _retentionBody
+        : uri.contains('endoscopes')
         ? _personalBody
         : uri.contains('counteract')
         ? _workBody
@@ -151,6 +162,15 @@ class _SilentTelemetrySink implements TelemetrySink {
 
   @override
   void setUserProperty(String name, String? value) {}
+}
+
+Future<void> _pumpUntil(WidgetTester tester, bool Function() done) async {
+  for (var frame = 0; frame < 40 && !done(); frame++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  for (var frame = 0; frame < 4; frame++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
 }
 
 void main() {
@@ -469,7 +489,7 @@ void main() {
 
     expect(
       tester.getRect(find.byKey(const Key('personal-information-submit'))),
-      const Rect.fromLTWH(78, 1001, 220, 52),
+      const Rect.fromLTWH(77.5, 1001, 220, 52),
     );
 
     await tester.tap(find.byKey(const Key('personal-information-submit')));
@@ -634,5 +654,233 @@ void main() {
     expect(save.fields['opportunities'], '11');
     expect(adapter.where('walleyed'), isEmpty);
     expect(outcome.completed, isTrue);
+  });
+
+  testWidgets('个人信息页返回：请求 scene=2 的挽留弹窗', (tester) async {
+    tester.view.physicalSize = const Size(375, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final adapter = _StubAdapter();
+    Get.put<GatewayClient>(
+      GatewayClient(
+        GatewaySettings(
+          signSecret: 'unit-test-secret',
+          localSession: LocalSession.memory(),
+        ),
+        dio: Dio()..httpClientAdapter = adapter,
+      ),
+      permanent: true,
+    );
+
+    await tester.pumpWidget(
+      GetMaterialApp(
+        initialRoute: '/stub',
+        builder: EasyLoading.init(),
+        getPages: <GetPage<dynamic>>[
+          GetPage<void>(
+            name: '/stub',
+            page: () => const Scaffold(body: SizedBox()),
+          ),
+          GetPage<void>(
+            name: AppRoutes.personalInformation,
+            page: () => const PersonalInformationPage(autoContinue: false),
+          ),
+        ],
+      ),
+    );
+    Get.toNamed<void>(
+      AppRoutes.personalInformation,
+      arguments: <String, dynamic>{'productId': '1000460'},
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('identity-back')));
+    await _pumpUntil(
+      tester,
+      () => find
+          .byKey(const Key('identity-retention-continue'))
+          .evaluate()
+          .isNotEmpty,
+    );
+    final retention = adapter.where('unchivalrous').single;
+    expect(retention.fields['ulterior'], '2');
+    expect(retention.fields['knife'], '1000460');
+
+    await tester.tap(find.byKey(const Key('identity-retention-continue')));
+    await tester.pumpAndSettle();
+    expect(find.byType(PersonalInformationPage), findsOneWidget);
+  });
+
+  testWidgets('个人信息页返回：挽留弹窗选择退出时回到入口页', (tester) async {
+    tester.view.physicalSize = const Size(375, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final adapter = _StubAdapter();
+    Get.put<GatewayClient>(
+      GatewayClient(
+        GatewaySettings(
+          signSecret: 'unit-test-secret',
+          localSession: LocalSession.memory(),
+        ),
+        dio: Dio()..httpClientAdapter = adapter,
+      ),
+      permanent: true,
+    );
+
+    await tester.pumpWidget(
+      GetMaterialApp(
+        initialRoute: '/stub',
+        builder: EasyLoading.init(),
+        getPages: <GetPage<dynamic>>[
+          GetPage<void>(
+            name: '/stub',
+            page: () => const Scaffold(body: SizedBox()),
+          ),
+          GetPage<void>(
+            name: AppRoutes.personalInformation,
+            page: () => const PersonalInformationPage(autoContinue: false),
+          ),
+        ],
+      ),
+    );
+    Get.toNamed<void>(
+      AppRoutes.personalInformation,
+      arguments: <String, dynamic>{'productId': '1000460'},
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('identity-back')));
+    await _pumpUntil(
+      tester,
+      () => find
+          .byKey(const Key('identity-retention-exit'))
+          .evaluate()
+          .isNotEmpty,
+    );
+    await tester.tap(find.byKey(const Key('identity-retention-exit')));
+    await _pumpUntil(
+      tester,
+      () => find.byType(PersonalInformationPage).evaluate().isEmpty,
+    );
+
+    expect(find.byType(PersonalInformationPage), findsNothing);
+    expect(find.byType(Scaffold), findsOneWidget);
+  });
+
+  testWidgets('工作信息页返回：请求 scene=3 的挽留弹窗', (tester) async {
+    tester.view.physicalSize = const Size(375, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final adapter = _StubAdapter();
+    Get.put<GatewayClient>(
+      GatewayClient(
+        GatewaySettings(
+          signSecret: 'unit-test-secret',
+          localSession: LocalSession.memory(),
+        ),
+        dio: Dio()..httpClientAdapter = adapter,
+      ),
+      permanent: true,
+    );
+
+    await tester.pumpWidget(
+      GetMaterialApp(
+        initialRoute: '/stub',
+        builder: EasyLoading.init(),
+        getPages: <GetPage<dynamic>>[
+          GetPage<void>(
+            name: '/stub',
+            page: () => const Scaffold(body: SizedBox()),
+          ),
+          GetPage<void>(
+            name: AppRoutes.workInformation,
+            page: () => const WorkInformationPage(autoContinue: false),
+          ),
+        ],
+      ),
+    );
+    Get.toNamed<void>(
+      AppRoutes.workInformation,
+      arguments: <String, dynamic>{'productId': '1000460'},
+    );
+    for (var i = 0; i < 30 && adapter.where('counteract').isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('identity-back')));
+    await _pumpUntil(
+      tester,
+      () => find
+          .byKey(const Key('identity-retention-continue'))
+          .evaluate()
+          .isNotEmpty,
+    );
+    final retention = adapter.where('unchivalrous').single;
+    expect(retention.fields['ulterior'], '3');
+    expect(retention.fields['knife'], '1000460');
+
+    await tester.tap(find.byKey(const Key('identity-retention-continue')));
+    await tester.pumpAndSettle();
+    expect(find.byType(WorkInformationPage), findsOneWidget);
+  });
+
+  testWidgets('工作信息页返回：挽留弹窗选择退出时回到入口页', (tester) async {
+    tester.view.physicalSize = const Size(375, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final adapter = _StubAdapter();
+    Get.put<GatewayClient>(
+      GatewayClient(
+        GatewaySettings(
+          signSecret: 'unit-test-secret',
+          localSession: LocalSession.memory(),
+        ),
+        dio: Dio()..httpClientAdapter = adapter,
+      ),
+      permanent: true,
+    );
+
+    await tester.pumpWidget(
+      GetMaterialApp(
+        initialRoute: '/stub',
+        builder: EasyLoading.init(),
+        getPages: <GetPage<dynamic>>[
+          GetPage<void>(
+            name: '/stub',
+            page: () => const Scaffold(body: SizedBox()),
+          ),
+          GetPage<void>(
+            name: AppRoutes.workInformation,
+            page: () => const WorkInformationPage(autoContinue: false),
+          ),
+        ],
+      ),
+    );
+    Get.toNamed<void>(
+      AppRoutes.workInformation,
+      arguments: <String, dynamic>{'productId': '1000460'},
+    );
+    for (var i = 0; i < 30 && adapter.where('counteract').isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('identity-back')));
+    await _pumpUntil(
+      tester,
+      () => find
+          .byKey(const Key('identity-retention-exit'))
+          .evaluate()
+          .isNotEmpty,
+    );
+    await tester.tap(find.byKey(const Key('identity-retention-exit')));
+    await _pumpUntil(
+      tester,
+      () => find.byType(WorkInformationPage).evaluate().isEmpty,
+    );
+
+    expect(find.byType(WorkInformationPage), findsNothing);
+    expect(find.byType(Scaffold), findsOneWidget);
   });
 }

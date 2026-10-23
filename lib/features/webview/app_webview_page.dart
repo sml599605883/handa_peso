@@ -20,8 +20,6 @@ import '../../core/report/report_service.dart';
 import '../certification/identity_models.dart';
 import '../certification/widgets/identity_retention_dialog.dart';
 import 'h5_bridge.dart';
-import 'payout_account_models.dart';
-import 'payout_account_sheet.dart';
 
 const String _legacyConfirmationPathSegment = 'AmalgamatorsMarqueterie';
 
@@ -87,7 +85,10 @@ String _responseUrl(Map<String, dynamic> payload) {
 /// 换绑等网页无法独立完成的动作。页面本身只接受 http(s) 地址，防止服务端
 /// 配置异常时把 WebView 带入不可控内容。
 class AppWebViewPage extends StatefulWidget {
-  const AppWebViewPage({super.key});
+  const AppWebViewPage({this.retentionImageProvider, super.key});
+
+  /// 测试时注入本地图片，避免挽留弹窗依赖网络。
+  final ImageProvider<Object>? retentionImageProvider;
 
   @override
   State<AppWebViewPage> createState() => _AppWebViewPageState();
@@ -219,47 +220,14 @@ class _AppWebViewPageState extends State<AppWebViewPage> {
     if (_replacingAccount) return;
     _replacingAccount = true;
     try {
-      await AppNavigator.showLoading();
-      final reply = await _gateway.fetchBoundCards(productId: productId);
-      reply.orThrow();
-      final catalog = PayoutAccountCatalog.fromReply(reply);
-      await AppNavigator.dismissLoading();
-      if (!mounted) return;
-
-      final choice = catalog.isEmpty
-          ? const NewPayoutAccount()
-          : await showPayoutAccountSheet(context, catalog);
-      if (!mounted || choice == null) return;
-
-      switch (choice) {
-        case ExistingPayoutAccount():
-          await AppNavigator.showLoading();
-          try {
-            final changed = await _gateway.switchPayoutCard(
-              orderNo: orderNo,
-              cardId: choice.accountId,
-            );
-            changed.orThrow();
-            final target = _responseUrl(changed.payload);
-            if (target.isEmpty) {
-              throw StateError('Updated order link is unavailable');
-            }
-            await AppNavigator.dismissLoading();
-            await _replaceWithPage(target);
-          } finally {
-            await AppNavigator.dismissLoading();
-          }
-        case NewPayoutAccount():
-          final result = await AppNavigator.toBindCard(
-            productId: productId,
-            changeOrderNo: orderNo,
-          );
-          if (result.changed && result.redirectUrl.isNotEmpty) {
-            await _replaceWithPage(result.redirectUrl);
-          }
+      final result = await AppNavigator.changePayoutAccount(
+        productId: productId,
+        orderNo: orderNo,
+      );
+      if (mounted && result.changed && result.redirectUrl.isNotEmpty) {
+        await _replaceWithPage(result.redirectUrl);
       }
     } finally {
-      await AppNavigator.dismissLoading();
       _replacingAccount = false;
     }
   }
@@ -352,7 +320,11 @@ class _AppWebViewPageState extends State<AppWebViewPage> {
         await AppNavigator.dismissLoading();
       }
       if (!mounted || !prompt.shouldShow) return false;
-      return await showIdentityRetentionDialog(context, prompt: prompt);
+      return await showIdentityRetentionDialog(
+        context,
+        prompt: prompt,
+        imageProvider: widget.retentionImageProvider,
+      );
     } finally {
       _checkingRetention = false;
     }

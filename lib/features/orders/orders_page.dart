@@ -1,9 +1,9 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../../app/layout/responsive_layout.dart';
 import '../../app/navigation/app_navigator.dart';
 import '../../app/navigation/app_route_observer.dart';
 import '../../app/theme/app_colors.dart';
@@ -33,8 +33,6 @@ class OrdersPage extends StatefulWidget {
 }
 
 class _OrdersPageState extends State<OrdersPage> with RouteAware {
-  static const double _designWidth = 375;
-
   /// 返回键与标题（设计稿 24x24 @ y=56、20 号字 @ y=58）。
   static const double _backLeft = 14;
   static const double _backTop = 56;
@@ -54,9 +52,6 @@ class _OrdersPageState extends State<OrdersPage> with RouteAware {
   static const double _emptyIllustrationSize = 200;
   static const String _emptyIllustration =
       'assets/orders_empty_illustration.png';
-
-  /// 状态栏比设计稿更高时的兜底间距。
-  static const double _safeGap = 8;
 
   static const String _repaymentTitle = 'Repayment';
   static const String _loanDetailTitle = 'Loan detail';
@@ -196,67 +191,76 @@ class _OrdersPageState extends State<OrdersPage> with RouteAware {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final scale = constraints.maxWidth / _designWidth;
+        final metrics = AppResponsiveMetrics(
+          screenWidth: constraints.maxWidth,
+          safeTop: MediaQuery.paddingOf(context).top,
+          safeBottom: MediaQuery.paddingOf(context).bottom,
+          designHorizontalInset: _backLeft,
+        );
+        final scale = metrics.scale;
         double px(num value) => value * scale;
+        final shift = metrics.headerShift;
 
-        // 设计稿把状态栏画进画布；机型刘海更高时整块头部下移，别压住标题。
-        final safeTop = MediaQuery.paddingOf(context).top / scale;
-        final shift = math.max(0, safeTop + _safeGap - _titleTop);
-
-        return Stack(
-          children: [
-            const Positioned.fill(
-              child: DecoratedBox(
-                key: Key('orders-background'),
-                decoration: BoxDecoration(
-                  gradient: AppColors.accountPageGradient,
-                ),
+        return DecoratedBox(
+          key: const Key('orders-background'),
+          decoration: const BoxDecoration(
+            gradient: AppColors.accountPageGradient,
+          ),
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: SizedBox(
+              width: metrics.contentWidth,
+              height: constraints.maxHeight,
+              child: Column(
+                children: [
+                  SizedBox(height: px(_titleTop + shift)),
+                  SizedBox(height: px(_titleHeight), child: _buildTitleBar(px)),
+                  SizedBox(height: px(_filterTop - _titleTop - _titleHeight)),
+                  OrdersFilterBar(
+                    selected: _selected,
+                    onSelect: _selectStatus,
+                    scale: scale,
+                  ),
+                  SizedBox(
+                    height: px(_listTop - _filterTop - OrdersFilterBar.height),
+                  ),
+                  Expanded(child: _buildBody(scale)),
+                ],
               ),
             ),
-            Column(
-              children: [
-                SizedBox(height: px(_titleTop + shift)),
-                SizedBox(height: px(_titleHeight), child: _buildTitleBar(px)),
-                SizedBox(height: px(_filterTop - _titleTop - _titleHeight)),
-                OrdersFilterBar(
-                  selected: _selected,
-                  onSelect: _selectStatus,
-                  scale: scale,
-                ),
-                SizedBox(
-                  height: px(_listTop - _filterTop - OrdersFilterBar.height),
-                ),
-                Expanded(child: _buildBody(scale)),
-              ],
-            ),
-          ],
+          ),
         );
       },
     );
   }
 
-  /// 标题栏：返回键绝对定位在左上角，标题居中。
+  /// 标题栏：返回键在左，标题在剩余空间居中。
   Widget _buildTitleBar(double Function(num) px) {
-    return Stack(
-      children: [
-        Center(
-          child: Text(
-            OrdersPage.title,
-            style: TextStyle(
-              color: AppColors.textStrong,
-              fontSize: px(_titleSize),
-              fontWeight: FontWeight.w700,
-              height: _titleHeight / _titleSize,
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Transform.translate(
+          offset: Offset(0, px(_backTop - _titleTop)),
+          child: SizedBox(
+            width: px(_backSize),
+            height: px(_backSize),
+            child: const DesignBackButton(),
+          ),
+        ),
+        Expanded(
+          child: Center(
+            child: Text(
+              OrdersPage.title,
+              style: TextStyle(
+                color: AppColors.textStrong,
+                fontSize: px(_titleSize),
+                fontWeight: FontWeight.w700,
+                height: _titleHeight / _titleSize,
+              ),
             ),
           ),
         ),
-        Positioned(
-          left: px(_backLeft),
-          top: px(_backTop - _titleTop),
-          width: px(_backSize),
-          height: px(_backSize),
-          child: const DesignBackButton(),
-        ),
+        SizedBox(width: px(_backSize)),
       ],
     );
   }
