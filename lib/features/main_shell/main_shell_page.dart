@@ -95,6 +95,7 @@ class _PushRouteHostState extends State<_PushRouteHost> {
       title: 'Notification',
       fromPush: true,
       cleanWorkflowForWeb: true,
+      source: 3,
     );
   }
 

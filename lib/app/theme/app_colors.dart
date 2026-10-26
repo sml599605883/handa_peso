@@ -291,6 +291,17 @@ abstract final class AppColors {
   /// 上传成功页证件图缺省时的占位底色（设计稿 `矩形` `#F1EEEB`）。
   static const identityPlaceholderSurface = Color(0xFFF1EEEB);
 
+  // 认证项退出挽留弹窗（设计稿 03-01 - 身份认证-挽留弹窗）
+  /// 左侧「返回」按钮的底色（设计稿 `矩形备份` `#BCB7B2`）。
+  static const identityRetentionExitSurface = Color(0xFFBCB7B2);
+
+  /// 右侧「继续」按钮的渐变（设计稿 `矩形`：左 `#9E3E10` → 右 `#E39149`）。
+  static const identityRetentionPrimaryGradient = LinearGradient(
+    begin: Alignment.centerLeft,
+    end: Alignment.centerRight,
+    colors: <Color>[Color(0xFF9E3E10), Color(0xFFE39149)],
+  );
+
   // 个人信息（设计稿 03-03）
   static const personalInformationLabel = Color(0xFF716F5F);
   static const personalInformationValue = Color(0xFF151200);

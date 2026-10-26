@@ -42,6 +42,15 @@ import UserNotifications
     ReportBridgeRegistrar.shared.updatePushToken(token)
   }
 
+  /// 注册失败时留一条日志：签名缺少 aps-environment 能力时这里能直接看出来，
+  /// 否则推送收不到只在真机上表现为「没有反应」。
+  override func application(
+    _ application: UIApplication,
+    didFailToRegisterForRemoteNotificationsWithError error: Error
+  ) {
+    NSLog("APNs registration failed: \(error.localizedDescription)")
+  }
+
   /// 前台收到带目标地址的通知时直接走 App 内路由，不再重复展示系统横幅。
   override func userNotificationCenter(
     _ center: UNUserNotificationCenter,

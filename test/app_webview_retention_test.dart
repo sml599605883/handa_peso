@@ -14,8 +14,12 @@ import 'package:handa_peso/core/network/gateway_settings.dart';
 import 'package:handa_peso/core/session/local_session.dart';
 import 'package:handa_peso/features/webview/app_webview_page.dart';
 
-const String _confirmationUrl =
-    'http://host/#/OIUCatrionaMonodrame?drippier=1000460';
+const String _confirmationUrl = 'http://host/#/BanefullyHorse?drippier=1000460';
+
+/// 服务端当前实际下发的确认用款地址：产品 ID 在 `knife`，`drippier` 不再出现。
+const String _knifeConfirmationUrl =
+    'http://8.220.176.2/#/BanefullyHorse?prefabricating=1&knife=1'
+    '&changeAcount=1&redecorates=1772026101617112334539943';
 
 const String _retentionBody =
     '{"unaccepted":"0","unstably":"success","indulgences":{'
@@ -73,6 +77,26 @@ void main() {
     expect(platform.controller.goBackCalls, 0);
   });
 
+  testWidgets('确认用款地址改用 knife 下发产品 ID 时也触发 scene=5 挽留', (tester) async {
+    platform.controller = _FakePlatformController(_knifeConfirmationUrl);
+    final adapter = _StubAdapter();
+    await _pumpPage(tester, adapter, url: _knifeConfirmationUrl);
+
+    await tester.tap(find.byKey(const Key('webview-back')));
+    await _pumpUntil(
+      tester,
+      () => find
+          .byKey(const Key('identity-retention-continue'))
+          .evaluate()
+          .isNotEmpty,
+    );
+
+    final retention = adapter.where('unchivalrous').single;
+    expect(retention.fields['ulterior'], '5');
+    expect(retention.fields['knife'], '1');
+    expect(platform.controller.goBackCalls, 0);
+  });
+
   testWidgets('确认用款 H5 返回时选择退出后继续执行网页返回', (tester) async {
     final adapter = _StubAdapter();
     await _pumpPage(tester, adapter);
@@ -94,7 +118,11 @@ void main() {
   });
 }
 
-Future<void> _pumpPage(WidgetTester tester, _StubAdapter adapter) async {
+Future<void> _pumpPage(
+  WidgetTester tester,
+  _StubAdapter adapter, {
+  String url = _confirmationUrl,
+}) async {
   tester.view.physicalSize = const Size(375, 812);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -127,10 +155,7 @@ Future<void> _pumpPage(WidgetTester tester, _StubAdapter adapter) async {
   await tester.pumpAndSettle();
   Get.toNamed<void>(
     AppRoutes.webView,
-    arguments: <String, dynamic>{
-      'url': _confirmationUrl,
-      'title': 'Confirmation',
-    },
+    arguments: <String, dynamic>{'url': url, 'title': 'Confirmation'},
   );
   await _pumpUntil(
     tester,

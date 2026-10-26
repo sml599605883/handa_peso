@@ -591,21 +591,18 @@ void main() {
     expect(Get.currentRoute, _homeRoute);
   });
 
-  testWidgets('登录成功不等外壳刷新：刷新还在路上，也要收起 Loading 并离开登录页', (tester) async {
-    final homeGate = Completer<void>();
+  testWidgets('登录成功先收尾登录页，外壳刷新等回到外壳再做', (tester) async {
     adapter = _StubAdapter((options) async {
       final path = options.uri.path;
-      if (path.contains('indulgences')) {
-        // 首次（外壳初始化）立刻回来，登录后的那次挂起，模拟慢接口。
-        if (adapter.homeRequests > 1) await homeGate.future;
-        return ResponseBody.fromString(_envelope(), 200, headers: _jsonHeaders);
-      }
       if (path.contains('checkreins')) {
         return ResponseBody.fromString(
           _envelope(data: <String, dynamic>{'sandman': 'session-123'}),
           200,
           headers: _jsonHeaders,
         );
+      }
+      if (path.contains('indulgences')) {
+        return ResponseBody.fromString(_envelope(), 200, headers: _jsonHeaders);
       }
       return ResponseBody.fromString(
         _envelope(note: _codeSentNote),
@@ -634,15 +631,15 @@ void main() {
       await tester.pump(const Duration(milliseconds: 250));
     }
 
-    // 外壳那条刷新还挂着，登录页也必须已经收尾：不然用户会一直停在登录页上等。
-    expect(adapter.homeRequests, 2);
-    expect(shell.overviewLoading.value, isTrue);
+    // 登录页收尾不等外壳刷新：登录成功当场离开登录页。
     expect(find.text('Loading...'), findsNothing);
     expect(Get.currentRoute, _homeRoute);
     expect(await store.readSessionId(), 'session-123');
+    expect(shell.sessionPhone.value, '9171234567');
 
-    homeGate.complete();
-    await tester.pumpAndSettle();
+    // 首页刷新交给「回到外壳」那一次（见 home_page_test 的登录用例），登录页上
+    // 不再重复请求首页+弹窗接口。
+    expect(adapter.homeRequests, 1);
     expect(shell.overviewLoading.value, isFalse);
   });
 
@@ -1025,13 +1022,13 @@ void main() {
 
     // 接口文档「值映射 -> Scheme -> h5页面混淆」：域名取服务端下发，路径用混淆段。
     final controller = Get.find<LoginController>();
-    expect(controller.privacyUrl, 'http://web.test/#/AppraisesSolatia');
-    expect(controller.termsUrl, 'http://web.test/#/SclerizedLugingSonnetary');
+    expect(controller.privacyUrl, 'http://web.test/#/Pederast');
+    expect(controller.termsUrl, 'http://web.test/#/Carbonate');
 
     await tester.tapOnText(find.textRange.ofSubstring('Privacy Policy'));
     await tester.pumpAndSettle();
 
-    expect(webViewUrls, <String>['http://web.test/#/AppraisesSolatia']);
+    expect(webViewUrls, <String>['http://web.test/#/Pederast']);
     expect(webViewTitles, <String>['Privacy Policy']);
 
     Get.back<void>();
@@ -1040,7 +1037,7 @@ void main() {
     _tapAgreementSpan(tester, 'Terms of Service');
     await tester.pumpAndSettle();
 
-    expect(webViewUrls.last, 'http://web.test/#/SclerizedLugingSonnetary');
+    expect(webViewUrls.last, 'http://web.test/#/Carbonate');
     expect(webViewTitles.last, 'Terms of Service');
   });
 

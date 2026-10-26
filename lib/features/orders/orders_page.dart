@@ -57,12 +57,16 @@ class _OrdersPageState extends State<OrdersPage> with RouteAware {
   static const String _loanDetailTitle = 'Loan detail';
 
   late final GatewayClient _apiClient = Get.find<GatewayClient>();
+  final ScrollController _scrollController = ScrollController();
 
   OrderListStatus _selected = OrderListStatus.all;
   List<OrderItem> _items = const <OrderItem>[];
   String? _error;
   bool _loading = true;
+  bool _loadingMore = false;
   bool _needsLogin = false;
+  int _currentPage = 1;
+  int _totalPages = 1;
 
   /// 正在跳转的订单：同一订单连点只保留一次，避免叠出多个落地页。
   final Set<String> _activeActions = <String>{};
@@ -77,6 +81,7 @@ class _OrdersPageState extends State<OrdersPage> with RouteAware {
   void initState() {
     super.initState();
     _selected = _initialStatus();
+    _scrollController.addListener(_onScroll);
     _load();
   }
 
@@ -105,6 +110,7 @@ class _OrdersPageState extends State<OrdersPage> with RouteAware {
   @override
   void dispose() {
     appRouteObserver.unsubscribe(this);
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -124,6 +130,7 @@ class _OrdersPageState extends State<OrdersPage> with RouteAware {
     final generation = ++_generation;
     setState(() {
       _loading = true;
+      _loadingMore = false;
       _error = null;
     });
     try {
@@ -141,6 +148,8 @@ class _OrdersPageState extends State<OrdersPage> with RouteAware {
       if (!mounted || generation != _generation) return;
       setState(() {
         _items = parseOrderItems(response.payload);
+        _currentPage = 1;
+        _totalPages = parseOrderTotalPages(response.payload);
         _needsLogin = false;
         _loading = false;
       });
@@ -152,6 +161,49 @@ class _OrdersPageState extends State<OrdersPage> with RouteAware {
         _error = error.message;
         _loading = false;
       });
+    }
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients ||
+        _scrollController.position.pixels <
+            _scrollController.position.maxScrollExtent - 200) {
+      return;
+    }
+    unawaited(_loadMore());
+  }
+
+  Future<void> _loadMore() async {
+    if (_loading || _loadingMore || _currentPage >= _totalPages) return;
+
+    final generation = _generation;
+    final nextPage = _currentPage + 1;
+    setState(() => _loadingMore = true);
+    try {
+      final response = await _apiClient.fetchOrders(
+        status: _selected.code,
+        page: '$nextPage',
+      );
+      if (!mounted || generation != _generation) return;
+      setState(() {
+        _items = <OrderItem>[..._items, ...parseOrderItems(response.payload)];
+        _currentPage = nextPage;
+        _totalPages = parseOrderTotalPages(response.payload);
+      });
+    } on GatewayFailure catch (error) {
+      CrashReporter.record(error, StackTrace.current);
+      if (mounted && generation == _generation) {
+        AppNavigator.showError(error.message);
+      }
+    } catch (error) {
+      CrashReporter.record(error, StackTrace.current);
+      if (mounted && generation == _generation) {
+        AppNavigator.showError('Unable to load more orders');
+      }
+    } finally {
+      if (mounted && generation == _generation) {
+        setState(() => _loadingMore = false);
+      }
     }
   }
 
@@ -177,7 +229,7 @@ class _OrdersPageState extends State<OrdersPage> with RouteAware {
           title: action ? _repaymentTitle : _loanDetailTitle,
         );
       } else if (productId.isNotEmpty) {
-        await Get.find<MainController>().applyNow(productId);
+        await Get.find<MainController>().applyNow(productId, source: 8);
       }
     } catch (error) {
       CrashReporter.record(error, StackTrace.current);
@@ -327,10 +379,18 @@ class _OrdersPageState extends State<OrdersPage> with RouteAware {
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView.builder(
+        controller: _scrollController,
         physics: const AlwaysScrollableScrollPhysics(),
         padding: EdgeInsets.only(bottom: px(_listBottom)),
-        itemCount: _items.length,
+        itemCount: _items.length + (_loadingMore ? 1 : 0),
         itemBuilder: (context, index) {
+          if (index >= _items.length) {
+            return const Padding(
+              key: Key('orders-load-more'),
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Center(child: CircularProgressIndicator()),
+            );
+          }
           final item = _items[index];
           return Padding(
             padding: EdgeInsets.only(bottom: gap),

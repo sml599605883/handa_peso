@@ -35,6 +35,7 @@ class _StubAdapter implements HttpClientAdapter {
 
   final Future<ResponseBody> Function(RequestOptions options) handler;
   final List<String> urls = <String>[];
+  final List<String> applySources = <String>[];
 
   int get homeCalls => urls.where((url) => url.contains('indulgences')).length;
 
@@ -52,6 +53,10 @@ class _StubAdapter implements HttpClientAdapter {
     Future<void>? cancelFuture,
   ) {
     urls.add(options.uri.toString());
+    if (options.uri.path.contains('legongs')) {
+      final body = options.data is Map ? options.data as Map : const {};
+      applySources.add('${body['efflorescence'] ?? ''}');
+    }
     return handler(options);
   }
 
@@ -699,6 +704,38 @@ void main() {
       expect(Get.currentRoute, AppRoutes.webView);
     });
 
+    testWidgets('点击上报迟迟不返回时 Banner 也立刻进入落地页', (tester) async {
+      final config = _config();
+      await config.localSession.writeSessionId('session-1');
+      final reportGate = Completer<void>();
+      final adapter = _StubAdapter((options) async {
+        final path = options.uri.path;
+        if (path.contains('fluorochromes')) {
+          await reportGate.future;
+        }
+        final body = path.contains('indulgences')
+            ? _bannerBody(<Map<String, dynamic>>[
+                _bannerItem(8, link: 'http://example.test/landing/8'),
+              ])
+            : path.contains('counterchecked')
+            ? _popupBody(visible: false)
+            : _plainBody();
+        return ResponseBody.fromString(body, 200, headers: _jsonHeaders);
+      });
+      await _pumpShell(tester, _client(config, adapter));
+
+      await tester.tap(find.byKey(const ValueKey('home-banner-8')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // 上报还挂在网络上，落地页已经打开了：点击不被上报阻塞。
+      expect(adapter.bannerClickCalls, 1);
+      expect(find.text('webview'), findsOneWidget);
+
+      reportGate.complete();
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('跳转链接为空的 Banner 只展示，不跳转也不上报', (tester) async {
       final config = _config();
       await config.localSession.writeSessionId('session-1');
@@ -909,6 +946,39 @@ void main() {
       await tester.pumpAndSettle();
       expect(adapter.homeCalls, 2);
     });
+
+    testWidgets('登录页盖在首页上时，登录成功只刷新一次首页与弹窗', (tester) async {
+      final config = _config();
+      final adapter = _StubAdapter(
+        (options) async => ResponseBody.fromString(
+          options.uri.toString().contains('counterchecked')
+              ? _popupBody(visible: false)
+              : _plainBody(),
+          200,
+          headers: _jsonHeaders,
+        ),
+      );
+      await _pumpShell(tester, _client(config, adapter));
+      expect(adapter.homeCalls, 1);
+
+      unawaited(Get.toNamed<void>(AppRoutes.login));
+      await tester.pumpAndSettle();
+
+      // 登录成功那一刻登录页还盖在外壳上：不在登录页上拉首页，等路由返回时再拉。
+      await config.localSession.writeSessionId('session-1');
+      await Get.find<MainController>().onSessionStarted('09170000000');
+      await tester.pumpAndSettle();
+      expect(adapter.homeCalls, 1);
+
+      Get.back<void>();
+      await tester.pumpAndSettle();
+
+      expect(adapter.homeCalls, 2);
+      expect(
+        adapter.urls.where((url) => url.contains('counterchecked')),
+        hasLength(1),
+      );
+    });
   });
 
   group('首页大卡点击', () {
@@ -923,8 +993,21 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(adapter.applyCalls, 1);
+      expect(adapter.applySources, <String>['0']);
       expect(Get.currentRoute, AppRoutes.webView);
       expect(find.text('webview'), findsOneWidget);
+    });
+
+    testWidgets('显式来源写入准入接口', (tester) async {
+      final adapter = _adapterWithApply(
+        _applyBody(target: 'http://example.test/admission'),
+      );
+      await _pumpLoggedIn(tester, adapter);
+
+      unawaited(Get.find<MainController>().applyNow('main', source: 7));
+      await tester.pumpAndSettle();
+
+      expect(adapter.applySources, <String>['7']);
     });
 
     testWidgets('游客点击大卡只弹登录页，不发准入请求', (tester) async {
@@ -1092,6 +1175,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(adapter.applyCalls, 1);
+      expect(adapter.applySources, <String>['7']);
       expect(Get.currentRoute, AppRoutes.webView);
     });
   });

@@ -1,23 +1,21 @@
 import 'dart:convert';
 
-/// 当前线上 H5 的桥接契约。
-///
-/// 网页端暂时保留了旧项目前缀；原生侧同时注册新的 Handa 通道，便于 H5
-/// 后续单独换名，不要求客户端和网页同版本发布。
-abstract final class H5Bridge {
-  static const legacyHandler = 'ph_cash_alalay_ios';
-  static const currentHandler = 'ph_handa_peso_ios';
-  static const handlers = <String>[legacyHandler, currentHandler];
+import '../../core/network/gateway_failure.dart';
 
-  static const reportLoan = 'cash_alalay_ios_BulpJ0rgaYaU6Fn';
-  static const openExternal = 'cash_alalay_ios_xfh1bs20COCGTmq';
-  static const openLink = 'cash_alalay_ios_gzuoJBjQGU42MRv';
-  static const closePage = 'cash_alalay_ios_rXM95kcpoNFbdVd';
-  static const goHome = 'cash_alalay_ios_lVHfWn47O8oT1oA';
-  static const appReview = 'cash_alalay_ios_Zf7dNN1vn4hLDre';
-  static const retryLoan = 'cash_alalay_ios_HCDGUlbAXsAjnQT';
-  static const replaceAccount = 'cash_alalay_ios_XYxDLYsI7etxIZC';
-  static const signedParams = 'cash_alalay_ios_pijsHm7O1BWkeR0';
+/// Handa Peso H5 的桥接契约。
+abstract final class H5Bridge {
+  static const handler = 'ph_handa_peso_ios';
+  static const handlers = <String>[handler];
+
+  static const reportLoan = 'handa_peso_9aVEhYqLCbo4HEw';
+  static const openExternal = 'handa_peso_nJdWCogSiNgDih0';
+  static const openLink = 'handa_peso_IfCsnOIi3iNbkbN';
+  static const closePage = 'handa_peso_dQmLjJivOqwg07W';
+  static const goHome = 'handa_peso_iBxwnEBwgWHNFiA';
+  static const appReview = 'handa_peso_wxOCeAtVisJ1aHb';
+  static const retryLoan = 'handa_peso_N49CG5gSlbEVpbr';
+  static const replaceAccount = 'handa_peso_rCe7xygqL7gajXP';
+  static const signedParams = 'handa_peso_WtSM7etm0nBvu2E';
 }
 
 class H5BridgeMessage {
@@ -177,7 +175,9 @@ class H5ActionDispatcher {
         _ => H5BridgeResult.error('Unsupported action: ${message.action}'),
       };
     } catch (error) {
-      final text = error.toString().trim();
+      // 网关失败要露出服务端文案；直接把异常 toString 给用户会看到
+      // `GatewayFailure(code: ...)` 这种调试串。
+      final text = FailureMessage.describe(error).trim();
       final messageText = text.isEmpty ? 'Unable to complete action' : text;
       await showError?.call(messageText);
       return H5BridgeResult.error(messageText);
@@ -185,15 +185,11 @@ class H5ActionDispatcher {
   }
 
   Future<H5BridgeResult> _report(H5BridgeMessage message) async {
-    final productId = message.text(const <String>[
-      'drippier',
-      'polarimetric',
-      'productId',
-    ]);
+    final productId = message.text(const <String>['knife', 'productId']);
     if (productId.isEmpty) return H5BridgeResult.error('Missing product ID');
     await reportLoan?.call(
       productId: productId,
-      orderNo: message.text(const <String>['qktp', 'cysticercosis', 'orderNo']),
+      orderNo: message.text(const <String>['redecorates', 'orderNo']),
       startedAtSeconds:
           nowSeconds?.call() ?? DateTime.now().millisecondsSinceEpoch ~/ 1000,
     );
@@ -252,7 +248,7 @@ class H5ActionDispatcher {
   }
 
   Future<H5BridgeResult> _retry(H5BridgeMessage message) async {
-    final orderNo = message.text(const <String>['qktp', 'orderNo']);
+    final orderNo = message.text(const <String>['redecorates', 'orderNo']);
     if (orderNo.isEmpty) return H5BridgeResult.error('Missing order number');
     await showLoading?.call();
     try {
@@ -268,8 +264,8 @@ class H5ActionDispatcher {
   }
 
   Future<H5BridgeResult> _replace(H5BridgeMessage message) async {
-    final productId = message.text(const <String>['drippier', 'productId']);
-    final orderNo = message.text(const <String>['qktp', 'orderNo']);
+    final productId = message.text(const <String>['knife', 'productId']);
+    final orderNo = message.text(const <String>['redecorates', 'orderNo']);
     if (productId.isEmpty || orderNo.isEmpty) {
       return H5BridgeResult.error('Missing account information');
     }

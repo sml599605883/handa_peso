@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
-import 'package:handa_peso/app/navigation/app_navigator.dart';
 import 'package:handa_peso/app/routes/app_routes.dart';
 import 'package:handa_peso/features/certification/bind_card_models.dart';
 import 'package:handa_peso/features/webview/payout_account_models.dart';
@@ -250,6 +249,60 @@ void main() {
     expect(outcome.redirectUrl, 'https://example.test/new-account-order');
     expect(find.byKey(const Key('source-web')), findsOneWidget);
     expect(find.byKey(const Key('payout-account-page')), findsNothing);
+  });
+
+  testWidgets('没有主卡时不默认勾选，未勾选点提交只给提示', (tester) async {
+    tester.view.physicalSize = const Size(375, 939);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    var switchCalls = 0;
+    final catalog = PayoutAccountCatalog(const <PayoutAccountGroup>[
+      PayoutAccountGroup(
+        title: 'E-wallet',
+        type: '1',
+        accounts: <PayoutAccount>[
+          PayoutAccount(
+            id: 'wallet-1',
+            bankName: 'GCash',
+            accountNumber: '09171234567',
+            logoUrl: '',
+            holderName: 'Ana Cruz Santos',
+            maintenanceNote: '',
+            isPrimary: false,
+          ),
+        ],
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      GetMaterialApp(
+        builder: EasyLoading.init(),
+        home: PayoutAccountsPage(
+          catalog: catalog,
+          productId: 'p1',
+          orderNo: 'o1',
+          switchAccount: ({required orderNo, required cardId}) async {
+            switchCalls += 1;
+            return 'https://example.test/updated-order';
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // 非主卡不能默认勾选。
+    expect(
+      find.byKey(const Key('payout-account-unselected-wallet-1')),
+      findsOneWidget,
+    );
+
+    // 未勾选就点提交：不发请求，只给提示。
+    await tester.tap(find.byKey(const Key('payout-account-submit')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(switchCalls, 0);
+    expect(find.text('Please select a payout account'), findsOneWidget);
   });
 }
 

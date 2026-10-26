@@ -45,6 +45,9 @@ class _StubAdapter implements HttpClientAdapter {
   int get changeAccountCalls =>
       urls.where((url) => url.contains('circularise')).length;
 
+  int get retryCalls =>
+      urls.where((url) => Uri.parse(url).path.endsWith('/cotype')).length;
+
   @override
   Future<ResponseBody> fetch(
     RequestOptions options,
@@ -196,17 +199,11 @@ List<Map<String, dynamic>> _designCards() {
   ];
 }
 
-/// 组装准入通过且有跳转地址的信封；字段名与接口文档「点击申请」一致。
-String _applyBody({required String target}) {
+String _retryBody(String target) {
   return jsonEncode(<String, dynamic>{
     'unaccepted': 0,
     'unstably': 'success',
-    'indulgences': <String, dynamic>{
-      'murdering': 200,
-      'tidewaters': target,
-      'trollopy': 1,
-      'bioscope': 'success',
-    },
+    'indulgences': <String, dynamic>{'proclises': target},
   });
 }
 
@@ -561,7 +558,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(Get.currentRoute, AppRoutes.webView);
-      expect(find.text('webview:$_webOrigin/#/Toolcutting'), findsOneWidget);
+      expect(
+        find.text('webview:$_webOrigin/#/PonderersCollotypies'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('带跳转地址的按钮直接打开还款页', (tester) async {
@@ -588,16 +588,24 @@ void main() {
       );
     });
 
-    testWidgets('原卡重试未下发地址时落到订单详情页', (tester) async {
+    testWidgets('原卡重试直接调用接口并打开返回的订单详情页', (tester) async {
       final config = _config();
       await config.localSession.writeSessionId('session-1');
-      final adapter = _StubAdapter(
-        (options) async => ResponseBody.fromString(
+      final adapter = _StubAdapter((options) async {
+        if (options.uri.path.endsWith('/cotype')) {
+          expect(options.data['chattinesses'], 'A2');
+          return ResponseBody.fromString(
+            _retryBody('/#/FiggingJuncture?orderId=2&retried=1'),
+            200,
+            headers: _jsonHeaders,
+          );
+        }
+        return ResponseBody.fromString(
           _body(_designCards()),
           200,
           headers: _jsonHeaders,
-        ),
-      );
+        );
+      });
       await _pumpLoanTab(tester, _client(config, adapter));
 
       await tester.tap(
@@ -605,8 +613,15 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      expect(adapter.retryCalls, 1);
       expect(Get.currentRoute, AppRoutes.webView);
-      expect(find.textContaining('orderId=2'), findsOneWidget);
+      expect(
+        find.text(
+          'webview:$_webOrigin/#/FiggingJuncture'
+          '?orderId=2&retried=1',
+        ),
+        findsOneWidget,
+      );
     });
 
     testWidgets('Change Account 直接进入原生账户列表并打开换卡后的订单页', (tester) async {
@@ -704,15 +719,14 @@ void main() {
       expect(find.byKey(const Key('payout-account-page')), findsNothing);
     });
 
-    testWidgets('原卡重试没有订单详情地址时回到产品申请流程', (tester) async {
+    testWidgets('原卡重试不依赖卡片详情地址', (tester) async {
       final config = _config();
       await config.localSession.writeSessionId('session-1');
       final adapter = _StubAdapter((options) async {
-        // 没有详情地址时卡片回到产品申请流程：与大小卡一样先走准入接口，
-        // 再按服务端下发的地址跳转。
-        if (options.uri.toString().contains('legongs')) {
+        if (options.uri.path.endsWith('/cotype')) {
+          expect(options.data['chattinesses'], 'B1');
           return ResponseBody.fromString(
-            _applyBody(target: 'http://example.test/admission'),
+            _retryBody('http://example.test/retried-order'),
             200,
             headers: _jsonHeaders,
           );
@@ -739,10 +753,11 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(adapter.applyCalls, 1);
+      expect(adapter.retryCalls, 1);
+      expect(adapter.applyCalls, 0);
       expect(Get.currentRoute, AppRoutes.webView);
       expect(
-        find.text('webview:http://example.test/admission'),
+        find.text('webview:http://example.test/retried-order'),
         findsOneWidget,
       );
     });

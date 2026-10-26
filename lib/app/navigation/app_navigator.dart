@@ -25,13 +25,18 @@ import '../widgets/ios_permission_prompt.dart';
 import 'h5_paths.dart';
 import '../widgets/app_hint.dart';
 
+typedef AdmissionHandler = Future<void> Function(
+  String productId, {
+  int source,
+});
+
 /// 供各业务控制器共用的导航与反馈辅助方法。
 ///
 /// 在这里封装 `Get` 可以让业务代码不掺杂路由细节，也提供统一的位置来添加
 /// 拦截（例如申请前要求资料已完善）。
 abstract final class AppNavigator {
   static void Function(int index)? mainTabSelector;
-  static Future<void> Function(String productId)? admissionHandler;
+  static AdmissionHandler? admissionHandler;
 
   /// 在当前页面之上推入登录路由，返回用户离开登录页时是否已有会话。
   ///
@@ -64,6 +69,26 @@ abstract final class AppNavigator {
     await Get.offAllNamed<void>(AppRoutes.login);
   }
 
+  /// H5 判定登录态失效后下发的 login 深链。
+  ///
+  /// 与接口返回 `-2` 的处理对齐：先清掉本地会话，回到首页 Tab，再把登录页开在
+  /// 首页之上，同时移除已经失效的网页等中间页。这样登录页的返回键和登录成功
+  /// 都落在首页，而不是退回那张已经失效的 H5。
+  static Future<void> openLoginAfterSessionExpiry() async {
+    await _localSession()?.resetSession();
+    AnalyticsService.setUserId(null);
+    switchMainTab(0);
+    final navigator = Get.key.currentState;
+    if (navigator == null) {
+      await toLogin();
+      return;
+    }
+    await navigator.pushNamedAndRemoveUntil<void>(AppRoutes.login, (candidate) {
+      final name = candidate.settings.name;
+      return name == null || name == AppRoutes.main;
+    });
+  }
+
   static Future<void>? toMain() => Get.offAllNamed<void>(AppRoutes.main);
 
   static void switchMainTab(int index) => mainTabSelector?.call(index);
@@ -72,10 +97,18 @@ abstract final class AppNavigator {
       Get.toNamed<void>(AppRoutes.calculator);
 
   /// 等待授信页；轮询器为常驻对象，离开页面后仍会继续检查结果。
-  static Future<void> toCreditReview({required String productId}) async {
+  ///
+  /// [clearWebViews] 为真时连同来源 WebView 一起清掉：准入从订单详情 H5 发起、
+  /// 下发的是授信 loading 页时，旧详情页会留在栈底继续轮询，退出授信页还会回退
+  /// 到它。
+  static Future<void> toCreditReview({
+    required String productId,
+    bool clearWebViews = false,
+  }) async {
     await _toTopLevelCertification<void>(
       AppRoutes.creditReview,
       arguments: <String, dynamic>{'productId': productId},
+      clearWebViews: clearWebViews,
     );
   }
 
@@ -277,26 +310,45 @@ abstract final class AppNavigator {
   };
 
   /// 打开顶层认证页并移除已有认证页，对齐 Peso Shield 的认证导航。
+  ///
+  /// [clearWebViews] 为真时同时移除来源 WebView：准入派发到原生页（授信 loading、
+  /// 订单列表）时，旧的订单详情 H5 不该留在栈底继续轮询，也不该在退出后回退到。
   static Future<T?>? _toTopLevelCertification<T>(
     String route, {
     Object? arguments,
+    bool clearWebViews = false,
   }) {
     final navigator = Get.key.currentState;
     if (navigator == null) return null;
     return navigator.pushNamedAndRemoveUntil<T>(route, (candidate) {
       final name = candidate.settings.name;
+      if (clearWebViews && name == AppRoutes.webView) return false;
       return name == null || !_certificationRoutes.contains(name);
     }, arguments: arguments);
   }
 
   /// 打开订单列表。[status] 是接口文档里的筛选状态码
   /// （4 全部 / 7 进行中 / 6 待还款 / 5 已结清），空串表示默认「全部」。
-  static Future<void>? toOrders({String status = ''}) => Get.toNamed<void>(
-    AppRoutes.orders,
-    arguments: status.trim().isEmpty
+  static Future<void>? toOrders({
+    String status = '',
+    bool clearWebViews = false,
+  }) {
+    final arguments = status.trim().isEmpty
         ? null
-        : <String, dynamic>{'status': status.trim()},
-  );
+        : <String, dynamic>{'status': status.trim()};
+    if (!clearWebViews) {
+      return Get.toNamed<void>(AppRoutes.orders, arguments: arguments);
+    }
+    final navigator = Get.key.currentState;
+    if (navigator == null) {
+      return Get.toNamed<void>(AppRoutes.orders, arguments: arguments);
+    }
+    return navigator.pushNamedAndRemoveUntil<void>(
+      AppRoutes.orders,
+      (candidate) => candidate.settings.name != AppRoutes.webView,
+      arguments: arguments,
+    );
+  }
 
   /// 打开账号页（设计稿 07-01 - 个人中心-退出）。
   static Future<void>? toAccount() => Get.toNamed<void>(AppRoutes.account);
@@ -345,6 +397,7 @@ abstract final class AppNavigator {
     bool fromPush = false,
     bool cleanWorkflowForWeb = false,
     String fallbackProductId = '',
+    int source = 0,
   }) async {
     final link = target.trim();
     if (link.isEmpty) return;
@@ -400,7 +453,10 @@ abstract final class AppNavigator {
         showError(_unopenableLink);
         return;
       }
-      await toCreditReview(productId: productId);
+      await toCreditReview(
+        productId: productId,
+        clearWebViews: cleanWorkflowForWeb,
+      );
       return;
     }
     final isCurrentScheme = scheme == 'ph' && uri?.host == _schemeHost;
@@ -410,17 +466,23 @@ abstract final class AppNavigator {
         segments.first == 'ios') {
       switch (segments.last) {
         case _BannerTarget.home:
+          if (cleanWorkflowForWeb) await _popWebViews();
           switchMainTab(0);
           return;
         case _BannerTarget.login:
           if (fromPush) {
             await redirectToLoginAfterSessionExpiry();
           } else {
-            await toLogin();
+            // H5 把 login 深链当作「登录态失效」的信号：过期页面不能留在栈里，
+            // 否则登录页的返回键还会退回去。
+            await openLoginAfterSessionExpiry();
           }
           return;
         case _BannerTarget.order:
-          await toOrders(status: _orderStatusOf(uri));
+          await toOrders(
+            status: _orderStatusOf(uri),
+            clearWebViews: cleanWorkflowForWeb,
+          );
           return;
         case _BannerTarget.setting:
           await toAccount();
@@ -429,10 +491,14 @@ abstract final class AppNavigator {
           await _openProductDetail(uri, fallbackProductId);
           return;
         case _BannerTarget.admission:
-          await _openAdmission(uri, fallbackProductId);
+          await _openAdmission(uri, fallbackProductId, fallbackSource: source);
           return;
         case _BannerTarget.recredit:
-          await _openRecredit(uri, fallbackProductId);
+          await _openRecredit(
+            uri,
+            fallbackProductId,
+            clearWebViews: cleanWorkflowForWeb,
+          );
           return;
       }
     }
@@ -465,23 +531,40 @@ abstract final class AppNavigator {
     );
   }
 
-  static Future<void> _openAdmission(Uri uri, String fallbackProductId) async {
+  static Future<void> _openAdmission(
+    Uri uri,
+    String fallbackProductId, {
+    required int fallbackSource,
+  }) async {
     final productId = _productIdOf(uri, fallbackProductId);
     final starter = admissionHandler;
     if (productId.isEmpty || starter == null) {
       showError(_unopenableLink);
       return;
     }
-    await starter(productId);
+    await starter(productId, source: _admissionSourceOf(uri, fallbackSource));
   }
 
-  static Future<void> _openRecredit(Uri uri, String fallbackProductId) async {
+  static Future<void> _openRecredit(
+    Uri uri,
+    String fallbackProductId, {
+    bool clearWebViews = false,
+  }) async {
     final productId = _productIdOf(uri, fallbackProductId);
     if (productId.isEmpty) {
       showError(_unopenableLink);
       return;
     }
-    await toCreditReview(productId: productId);
+    await toCreditReview(productId: productId, clearWebViews: clearWebViews);
+  }
+
+  /// 收起栈里的 WebView 回到外壳：准入派发回首页 Tab 时用。
+  static Future<void> _popWebViews() async {
+    if (Get.key.currentState == null) return;
+    Get.until((candidate) {
+      final name = candidate.settings.name;
+      return name == AppRoutes.main || candidate.isFirst;
+    });
   }
 
   /// 当前认证页保存成功后刷新产品详情并打开下一项认证。
@@ -679,6 +762,16 @@ abstract final class AppNavigator {
       if (value != null && value.trim().isNotEmpty) return value.trim();
     }
     return '';
+  }
+
+  /// 准入深链的来源字段。新接口使用 `efflorescence`，旧链接仍可能带
+  /// Peso Shield 时代的 `parliament`。
+  static int _admissionSourceOf(Uri uri, int fallback) {
+    for (final key in const <String>['efflorescence', 'parliament']) {
+      final value = int.tryParse(uri.queryParameters[key]?.trim() ?? '');
+      if (value != null && value >= 0) return value;
+    }
+    return fallback;
   }
 
   static Future<void> showLoading([String status = 'Loading...']) =>

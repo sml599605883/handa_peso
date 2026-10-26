@@ -867,62 +867,44 @@ class _BindCardPageState extends State<BindCardPage> {
           metrics.size(BindCardDesign.fieldRadius),
         ),
       ),
-      child: Stack(
-        children: <Widget>[
-          TextField(
-            key: Key('bind-card-input-$key'),
-            controller: controller,
-            focusNode: _focusNodes[key],
-            contextMenuBuilder: AppTextSelectionMenu.build,
-            keyboardType: field.numeric
-                ? TextInputType.number
-                : TextInputType.text,
-            inputFormatters: field.numeric
-                ? <TextInputFormatter>[FilteringTextInputFormatter.digitsOnly]
-                : null,
-            onChanged: (value) => _onTextChanged(group, field, value),
-            style: TextStyle(
-              color: AppColors.personalInformationValue,
-              fontFamily: 'Helvetica',
-              fontSize: metrics.size(BindCardDesign.fieldSize),
-              fontWeight: FontWeight.w700,
-            ),
-            decoration: InputDecoration(
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              disabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-              errorBorder: InputBorder.none,
-              focusedErrorBorder: InputBorder.none,
-              filled: false,
-              hintText: _fieldHint(field),
-              hintStyle: TextStyle(
-                color: AppColors.personalInformationHint,
-                fontFamily: 'Helvetica',
-                fontSize: metrics.size(BindCardDesign.fieldSize),
-                fontWeight: FontWeight.normal,
-              ),
-              contentPadding: EdgeInsets.fromLTRB(
-                metrics.size(20),
-                metrics.size(14),
-                metrics.size(44),
-                metrics.size(14),
-              ),
-            ),
+      child: TextField(
+        key: Key('bind-card-input-$key'),
+        controller: controller,
+        focusNode: _focusNodes[key],
+        contextMenuBuilder: AppTextSelectionMenu.build,
+        keyboardType: field.numeric ? TextInputType.number : TextInputType.text,
+        inputFormatters: field.numeric
+            ? <TextInputFormatter>[FilteringTextInputFormatter.digitsOnly]
+            : null,
+        onChanged: (value) => _onTextChanged(group, field, value),
+        style: TextStyle(
+          color: AppColors.personalInformationValue,
+          fontFamily: 'Helvetica',
+          fontSize: metrics.size(BindCardDesign.fieldSize),
+          fontWeight: FontWeight.w700,
+        ),
+        decoration: InputDecoration(
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          disabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          errorBorder: InputBorder.none,
+          focusedErrorBorder: InputBorder.none,
+          filled: false,
+          hintText: _fieldHint(field),
+          hintStyle: TextStyle(
+            color: AppColors.personalInformationHint,
+            fontFamily: 'Helvetica',
+            fontSize: metrics.size(BindCardDesign.fieldSize),
+            fontWeight: FontWeight.normal,
           ),
-          Positioned(
-            right: metrics.size(20),
-            top: metrics.size(18),
-            width: metrics.size(6),
-            height: metrics.size(12),
-            child: IgnorePointer(
-              child: Image.asset(
-                BindCardAssets.fieldChevron,
-                fit: BoxFit.contain,
-              ),
-            ),
+          contentPadding: EdgeInsets.fromLTRB(
+            metrics.size(20),
+            metrics.size(14),
+            metrics.size(20),
+            metrics.size(14),
           ),
-        ],
+        ),
       ),
     );
   }

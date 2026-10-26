@@ -146,3 +146,9 @@ List<OrderItem> parseOrderItems(Map<String, dynamic> payload) {
       .map(OrderItem.fromJson)
       .toList(growable: false);
 }
+
+/// 订单列表总页数（`cabildo`）。缺字段或非法值时按一页处理。
+int parseOrderTotalPages(Map<String, dynamic> payload) {
+  final total = payload.intValue('cabildo', fallback: 1);
+  return total < 1 ? 1 : total;
+}

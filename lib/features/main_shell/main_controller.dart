@@ -10,6 +10,7 @@ import '../../app/routes/app_routes.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/network/gateway_client.dart';
 import '../../core/network/gateway_failure.dart';
+import '../../core/order/order_redirect.dart';
 import '../../core/permissions/permission_coordinator.dart';
 import '../../core/product/product_apply_outcome.dart';
 import '../../core/report/report_service.dart';
@@ -49,7 +50,8 @@ class MainController extends GetxController with WidgetsBindingObserver {
     PermissionCoordinator? permissionCoordinator,
   }) : permissionCoordinator =
            permissionCoordinator ?? PermissionCoordinator() {
-    AppNavigator.admissionHandler = applyNow;
+    AppNavigator.admissionHandler = (productId, {int source = 0}) =>
+        applyNow(productId, source: source);
   }
 
   final GatewayClient gatewayClient;
@@ -223,8 +225,8 @@ class MainController extends GetxController with WidgetsBindingObserver {
   /// 点击进度卡片上的按钮。
   ///
   /// `repay` / `early_repay` 由服务端下发跳转地址，直接打开；`change`（更换
-  /// 账户）由原生直接查询账户列表并进入选卡页；`retry`（原卡重试）仍先进入
-  /// 订单详情页，由详情页内的原卡重试入口承接。
+  /// 账户）由原生直接查询账户列表；`retry`（原卡重试）直接调用服务端并打开
+  /// 返回的订单详情地址。
   Future<void> tapLoanProgressAction(
     LoanProgressItem item,
     LoanProgressAction action,
@@ -246,6 +248,33 @@ class MainController extends GetxController with WidgetsBindingObserver {
         } on GatewayFailure catch (error) {
           AppNavigator.showError(error.message);
         }
+        return;
+      }
+      if (action.isRetry) {
+        final orderNo = item.orderNo.trim();
+        if (orderNo.isEmpty) {
+          throw const GatewayFailure('Missing order number');
+        }
+
+        late final String target;
+        await AppNavigator.showLoading();
+        try {
+          final reply = await gatewayClient.reorderExistingLoan(
+            orderNo: orderNo,
+          );
+          reply.orThrow();
+          target = orderRedirectUrlFrom(reply);
+          if (target.isEmpty) {
+            throw const GatewayFailure('Retry link is unavailable');
+          }
+        } finally {
+          await AppNavigator.dismissLoading();
+        }
+        await AppNavigator.openTarget(
+          target,
+          title: _loanDetailTitle,
+          cleanWorkflowForWeb: true,
+        );
         return;
       }
       final target = action.route.trim();
@@ -274,6 +303,9 @@ class MainController extends GetxController with WidgetsBindingObserver {
     _progressRequesting = true;
     try {
       await action();
+    } on GatewayFailure catch (error) {
+      CrashReporter.record(error, StackTrace.current);
+      AppNavigator.showError(error.message);
     } catch (error) {
       CrashReporter.record(error, StackTrace.current);
       AppNavigator.showError('Unable to open link');
@@ -335,9 +367,14 @@ class MainController extends GetxController with WidgetsBindingObserver {
   }
 
   /// 在任意页面登录成功后重新同步游客状态。
+  ///
+  /// 只有外壳正露在登录页下面时才在这里拉数据；其余情况交给外壳自己：
+  /// 登录页关闭会触发 `didPopNext` 刷新，登录页作为根页面时则由重新创建的外壳
+  /// 在 `onInit` 里拉一次。两边都拉会让首页+弹窗接口连着请求两次。
   Future<void> onSessionStarted(String phone) async {
     sessionPhone.value = phone;
     _loadedOnce = false;
+    if (!_homeIsTopRoute) return;
     await loadOverview(force: true);
   }
 
@@ -351,20 +388,26 @@ class MainController extends GetxController with WidgetsBindingObserver {
     if (target.isEmpty || _openingBanner) return;
     _openingBanner = true;
     try {
-      try {
-        final id = banner.id.trim();
-        if (id.isNotEmpty && (await localSession.readSessionId()).isNotEmpty) {
-          await gatewayClient.recordBannerClick(bannerId: id);
-        }
-      } catch (_) {
-        // 上报失败不影响跳转。
-      }
-      await AppNavigator.openTarget(target);
+      // 点击上报是可选的分析数据（接口文档要求登录态 + 链接非空），失败不能挡住
+      // 跳转。这里发出去就不等它：上报慢的时候用户点 banner 不能没有反应。
+      unawaited(_reportBannerClick(banner.id));
+      await AppNavigator.openTarget(target, source: 1);
     } catch (error) {
       CrashReporter.record(error, StackTrace.current);
       AppNavigator.showError('Unable to open link');
     } finally {
       _openingBanner = false;
+    }
+  }
+
+  Future<void> _reportBannerClick(String bannerId) async {
+    final id = bannerId.trim();
+    if (id.isEmpty) return;
+    try {
+      if ((await localSession.readSessionId()).isEmpty) return;
+      await gatewayClient.recordBannerClick(bannerId: id);
+    } catch (error) {
+      CrashReporter.record(error, StackTrace.current);
     }
   }
 
@@ -432,7 +475,7 @@ class MainController extends GetxController with WidgetsBindingObserver {
         }
       }
     }
-    await AppNavigator.openTarget(target, title: 'Offer');
+    await AppNavigator.openTarget(target, title: 'Offer', source: 2);
   }
 
   /// 点击首页大卡 / 推荐卡：先过登录门禁，再走准入接口（文档「点击申请」）。
@@ -444,7 +487,11 @@ class MainController extends GetxController with WidgetsBindingObserver {
   ///
   /// 走准入之前先要一次定位权限：风控要看这一次申请发生时的位置。用户拒绝时
   /// 中止本次申请；系统限制或定位服务关闭时说明原因，取消说明后仍可继续。
-  Future<void> applyNow(String productId, {bool requestLocation = true}) async {
+  Future<void> applyNow(
+    String productId, {
+    bool requestLocation = true,
+    int source = 0,
+  }) async {
     final appliedProductId = productId.trim().isEmpty
         ? _homeApplyProductId
         : productId.trim();
@@ -470,6 +517,7 @@ class MainController extends GetxController with WidgetsBindingObserver {
         outcome = ProductApplyOutcome.fromReply(
           await gatewayClient.startProductApplication(
             productId: appliedProductId,
+            source: '$source',
           ),
         );
       } finally {

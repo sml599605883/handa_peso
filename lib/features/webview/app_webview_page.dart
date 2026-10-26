@@ -13,35 +13,43 @@ import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/client/platform_bridge.dart';
-import '../../core/json/json_utils.dart';
 import '../../core/network/gateway_client.dart';
+import '../../core/order/order_redirect.dart';
 import '../../core/report/report_scene.dart';
 import '../../core/report/report_service.dart';
 import '../certification/identity_models.dart';
 import '../certification/widgets/identity_retention_dialog.dart';
 import 'h5_bridge.dart';
 
-const String _legacyConfirmationPathSegment = 'AmalgamatorsMarqueterie';
-
 bool _isInlineScheme(String scheme) => switch (scheme.toLowerCase()) {
   'http' || 'https' || 'about' || 'data' || 'javascript' || 'file' => true,
   _ => false,
 };
 
+/// 进度回调不能把已经完成的主文档重新标记为加载中。
+///
+/// H5 在 `onLoadStop` 之后仍可能继续加载图片或接口。此时 WebView 进度可能
+/// 回落或停在 99 以下，但不应该再次显示顶部进度条。
+bool keepWebViewLoadingAfterProgress({
+  required bool loading,
+  required int progress,
+}) {
+  if (progress >= 100) return false;
+  return loading;
+}
+
+/// 确认用款页地址里的产品 ID。
+///
+/// 当前服务端下发的是 `knife`（同一地址里 `redecorates` 是订单号、
+/// `prefabricating` 是订单 ID）；其余键是旧包或接口文档登记过的别名，保留兼容。
 String confirmationProductIdFromH5Url(String source) {
   final uri = Uri.tryParse(source.trim());
   if (uri == null) return '';
   final fragment = Uri.tryParse(uri.fragment);
-  final confirmation =
-      uri.pathSegments.contains(H5Paths.loanConfirmationSegment) ||
-      uri.pathSegments.contains(_legacyConfirmationPathSegment) ||
-      (fragment?.pathSegments.contains(H5Paths.loanConfirmationSegment) ??
-          false) ||
-      (fragment?.pathSegments.contains(_legacyConfirmationPathSegment) ??
-          false);
-  if (!confirmation) return '';
+  if (!H5Paths.isLoanConfirmation(uri)) return '';
 
   for (final key in const <String>[
+    'knife',
     'drippier',
     'polarimetric',
     'productId',
@@ -62,21 +70,6 @@ bool _isLoginTarget(String target) {
   return uri.pathSegments.length == 2 &&
       uri.pathSegments.first == 'ios' &&
       uri.pathSegments.last == 'Disaccording';
-}
-
-String _responseUrl(Map<String, dynamic> payload) {
-  for (final key in const <String>[
-    'url',
-    'flowerpot',
-    'proclises',
-    'antineoplastic',
-    'redirectUrl',
-  ]) {
-    final value = payload.stringValue(key).trim();
-    if (value.isNotEmpty) return value;
-  }
-  final list = payload.listValue('list');
-  return list.isEmpty ? '' : list.first?.toString().trim() ?? '';
 }
 
 /// 承载 H5 业务流程，并提供网页与原生之间的命令通道。
@@ -184,9 +177,15 @@ class _AppWebViewPageState extends State<AppWebViewPage> {
   }
 
   Future<void> _openInternal(String target) async {
+    if (_isLoginTarget(target)) {
+      // 登录态失效：导航层会清掉本地会话、收起这张 H5 再打开登录页。这里不等
+      // 用户登录完——这张页面马上就不在栈里了。
+      unawaited(AppNavigator.openTarget(target, title: _fallbackTitle));
+      return;
+    }
     final previousSession = await _sessionMarker();
     await AppNavigator.openTarget(target, title: _fallbackTitle);
-    if (!mounted || !_isLoginTarget(target)) return;
+    if (!mounted) return;
     final currentSession = await _sessionMarker();
     if (currentSession.isEmpty || currentSession == previousSession) return;
     await _reload();
@@ -208,7 +207,7 @@ class _AppWebViewPageState extends State<AppWebViewPage> {
   Future<String> _retryLoan(String orderNo) async {
     final reply = await _gateway.reorderExistingLoan(orderNo: orderNo);
     reply.orThrow();
-    final target = _responseUrl(reply.payload);
+    final target = orderRedirectUrlFrom(reply);
     if (target.isEmpty) throw StateError('Retry link is unavailable');
     return target;
   }
@@ -466,7 +465,12 @@ class _AppWebViewPageState extends State<AppWebViewPage> {
                       if (!mounted || !identical(controller, _controller)) {
                         return;
                       }
-                      setState(() => _loading = progress < 100);
+                      setState(() {
+                        _loading = keepWebViewLoadingAfterProgress(
+                          loading: _loading,
+                          progress: progress,
+                        );
+                      });
                     },
                     onReceivedError: (controller, request, error) {
                       if (!mounted ||

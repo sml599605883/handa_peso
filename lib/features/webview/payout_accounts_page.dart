@@ -44,6 +44,9 @@ class PayoutAccountsPage extends StatefulWidget {
 }
 
 class _PayoutAccountsPageState extends State<PayoutAccountsPage> {
+  /// 没有任何账户被勾选时点提交的提示。
+  static const String _selectAccountHint = 'Please select a payout account';
+
   late final PayoutAccountCatalog _catalog;
   late final PayoutAccountFlowOutcome? _outcome;
   late final GatewayClient? _apiClient;
@@ -78,21 +81,39 @@ class _PayoutAccountsPageState extends State<PayoutAccountsPage> {
         ? values['orderNo']?.toString().trim() ?? ''
         : widget.orderNo.trim();
 
+    // 只预选主卡；没有主卡时保持未选中，交给用户自己勾。把非主卡默认勾上会
+    // 让用户以为当前正在用的就是这张卡，提交后却把放款账户换掉了。
     final preferred = _catalog.accounts.firstWhereOrNull(
       (account) => account.isPrimary,
     );
-    _selectedId = preferred?.id ?? _catalog.accounts.firstOrNull?.id ?? '';
+    _selectedId = preferred?.id ?? '';
   }
 
   Future<void> _submit() async {
-    if (_switching || _selectedId.isEmpty || _orderNo.isEmpty) return;
+    if (_switching) return;
+    // 未勾选时按钮仍可点：直接给提示，比置灰按钮更容易让用户知道漏了哪一步。
+    if (_selectedId.isEmpty) {
+      AppNavigator.showToast(_selectAccountHint);
+      return;
+    }
+    if (_orderNo.isEmpty) return;
     setState(() => _switching = true);
     await AppNavigator.showLoading();
+    // 转圈与提示共用同一个浮层：收起转圈必须发生在提示之前，否则 finally 里的
+    // dismiss 会把刚弹出来的错误提示一起关掉，用户什么都看不到。
+    var loadingDismissed = false;
+    Future<void> closeLoading() async {
+      if (loadingDismissed) return;
+      loadingDismissed = true;
+      await AppNavigator.dismissLoading();
+    }
+
     try {
       final target = await _switchAccount(_selectedId);
       if (target.isEmpty) {
         throw const GatewayFailure('Updated order link is unavailable');
       }
+      await closeLoading();
       AnalyticsService.logEvent(AppEvents.certificationStepCompleted, {
         'step': 'Payout account',
         'action': 'selected_existing',
@@ -100,14 +121,18 @@ class _PayoutAccountsPageState extends State<PayoutAccountsPage> {
       _finish(target);
     } on GatewayFailure catch (error) {
       CrashReporter.record(error, StackTrace.current);
-      AppNavigator.showError(error.message);
+      await closeLoading();
+      if (mounted) AppNavigator.showError(error.message);
     } catch (error) {
       CrashReporter.record(error, StackTrace.current);
-      AppNavigator.showError(
-        'Unable to change your payout account. Please try again.',
-      );
+      await closeLoading();
+      if (mounted) {
+        AppNavigator.showError(
+          'Unable to change your payout account. Please try again.',
+        );
+      }
     } finally {
-      await AppNavigator.dismissLoading();
+      await closeLoading();
       if (mounted) setState(() => _switching = false);
     }
   }
@@ -247,10 +272,7 @@ class _PayoutAccountsPageState extends State<PayoutAccountsPage> {
               metrics: metrics,
               label: 'Submit',
               width: PayoutAccountDesign.submitWidth,
-              onPressed:
-                  _selectedId.isNotEmpty && !_switching && !_addingAccount
-                  ? _submit
-                  : null,
+              onPressed: !_switching && !_addingAccount ? _submit : null,
             ),
           ),
           SizedBox(height: metrics.size(PayoutAccountDesign.bottomPadding)),

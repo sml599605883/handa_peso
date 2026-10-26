@@ -455,6 +455,34 @@ void main() {
     expect(bubble, findsNothing);
   });
 
+  testWidgets('只有选择字段显示右侧箭头', (tester) async {
+    final adapter = _StubAdapter(cardBody: _cardBody());
+    final outcome = BindCardFlowOutcome();
+    await _pumpPage(tester, client: _clientFor(adapter), outcome: outcome);
+
+    Finder arrowFor(String asset) => find.byWidgetPredicate(
+      (widget) =>
+          widget is Image &&
+          widget.image is AssetImage &&
+          (widget.image as AssetImage).assetName == asset,
+    );
+
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('bind-card-field-1:channelCode')),
+        matching: arrowFor(BindCardAssets.fieldChevron),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey<String>('bind-card-field-1:cardNo')),
+        matching: arrowFor(BindCardAssets.fieldChevron),
+      ),
+      findsNothing,
+    );
+  });
+
   testWidgets('两次账号输入不一致时不提交', (tester) async {
     final adapter = _StubAdapter(cardBody: _cardBody());
     final outcome = BindCardFlowOutcome();

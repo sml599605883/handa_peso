@@ -31,16 +31,31 @@ abstract final class PersonalAddressSelector {
     );
   }
 
+  /// 进入个人信息 / 工作信息页时预取地址目录。
+  ///
+  /// 地址接口只在点开地址字段时才需要结果，但那一刻再请求会让弹层先转圈等
+  /// 接口；页面一进来就拉好，点选时直接命中缓存。预取失败不打扰用户：真正
+  /// 点开时会重新请求并给出提示。
+  static Future<void> prefetch(GatewayClient apiClient) async {
+    if (_cached != null) return;
+    try {
+      await _load(apiClient, silent: true);
+    } catch (_) {
+      // 预取失败只影响这一次提速，不是用户可感知的错误。
+    }
+  }
+
   static Future<List<PersonalAddressNode>> _load(
-    GatewayClient apiClient,
-  ) async {
+    GatewayClient apiClient, {
+    bool silent = false,
+  }) async {
     final cached = _cached;
     if (cached != null) return cached;
 
     final pending = _pending;
     if (pending != null) return pending;
 
-    final request = _request(apiClient);
+    final request = _request(apiClient, silent: silent);
     _pending = request;
     try {
       return await request;
@@ -50,9 +65,10 @@ abstract final class PersonalAddressSelector {
   }
 
   static Future<List<PersonalAddressNode>> _request(
-    GatewayClient apiClient,
-  ) async {
-    await AppNavigator.showLoading();
+    GatewayClient apiClient, {
+    bool silent = false,
+  }) async {
+    if (!silent) await AppNavigator.showLoading();
     try {
       final reply = await apiClient.fetchCityOptions();
       reply.orThrow();
@@ -60,10 +76,10 @@ abstract final class PersonalAddressSelector {
       _cached = addresses;
       return addresses;
     } catch (_) {
-      AppNavigator.showError('Unable to load address options');
+      if (!silent) AppNavigator.showError('Unable to load address options');
       rethrow;
     } finally {
-      await AppNavigator.dismissLoading();
+      if (!silent) await AppNavigator.dismissLoading();
     }
   }
 

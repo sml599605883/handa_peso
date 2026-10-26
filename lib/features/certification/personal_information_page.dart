@@ -85,6 +85,8 @@ class _PersonalInformationPageState extends State<PersonalInformationPage>
       _productId = arguments['productId']?.toString().trim() ?? '';
     }
     unawaited(_load());
+    // 地址目录进页面就预取：点地址字段时直接弹选择器，不必先等接口。
+    unawaited(PersonalAddressSelector.prefetch(_apiClient));
   }
 
   @override

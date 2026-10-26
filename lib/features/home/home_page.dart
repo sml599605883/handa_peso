@@ -90,7 +90,8 @@ class HomePage extends GetView<MainController> {
                     HomeRecommendations(
                       offers: data.offers,
                       scale: scale,
-                      onApply: (offer) => controller.applyNow(offer.productId),
+                      onApply: (offer) =>
+                          controller.applyNow(offer.productId, source: 7),
                     ),
                   ],
                   SizedBox(height: _sectionGap * scale),

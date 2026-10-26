@@ -17,13 +17,33 @@ void main() {
 
   test('准入 scheme 带产品 ID 时交回产品准入流程', () async {
     String? productId;
-    AppNavigator.admissionHandler = (value) async => productId = value;
+    int? capturedSource;
+    AppNavigator.admissionHandler = (value, {int source = 0}) async {
+      productId = value;
+      capturedSource = source;
+    };
 
     await AppNavigator.openTarget(
-      'ph://handa-peso/ios/PeacefulnessesQuesters?cotype=1000460',
+      'ph://handa-peso/ios/PeacefulnessesQuesters'
+      '?cotype=1000460&efflorescence=7',
     );
 
     expect(productId, '1000460');
+    expect(capturedSource, 7);
+  });
+
+  test('准入 scheme 未带来源时使用调用方兜底来源', () async {
+    var capturedSource = 0;
+    AppNavigator.admissionHandler = (_, {int source = 0}) async {
+      capturedSource = source;
+    };
+
+    await AppNavigator.openTarget(
+      'ph://handa-peso/ios/PeacefulnessesQuesters?cotype=1000460',
+      source: 3,
+    );
+
+    expect(capturedSource, 3);
   });
 
   testWidgets('推送打开 H5 时移除当前绑卡流程页', (tester) async {
@@ -142,5 +162,86 @@ void main() {
 
     expect(find.text('http://h5.test/credit-approved'), findsOneWidget);
     expect(find.text('credit-review'), findsNothing);
+  });
+
+  testWidgets('H5 登录态失效深链清掉过期网页，登录页盖在首页之上', (tester) async {
+    await tester.pumpWidget(
+      GetMaterialApp(
+        initialRoute: AppRoutes.main,
+        getPages: <GetPage<dynamic>>[
+          GetPage<void>(
+            name: AppRoutes.main,
+            page: () => const Scaffold(body: Text('home')),
+          ),
+          GetPage<void>(
+            name: AppRoutes.webView,
+            page: () => const Scaffold(body: Text('expired-web')),
+          ),
+          GetPage<void>(
+            name: AppRoutes.login,
+            page: () => const Scaffold(body: Text('login-page')),
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+    unawaited(Get.toNamed<void>(AppRoutes.webView));
+    await tester.pumpAndSettle();
+    expect(find.text('expired-web'), findsOneWidget);
+
+    // H5 判定登录态失效后下发 login 深链。
+    unawaited(AppNavigator.openTarget('ph://handa-peso/ios/Disaccording'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('login-page'), findsOneWidget);
+    // 过期网页被移除：登录页的返回键只能回到首页。
+    expect(find.text('expired-web'), findsNothing);
+
+    Get.back<void>();
+    await tester.pumpAndSettle();
+    expect(find.text('home'), findsOneWidget);
+  });
+
+  testWidgets('准入下发授信页时把来源订单详情 H5 一起清掉', (tester) async {
+    await tester.pumpWidget(
+      GetMaterialApp(
+        initialRoute: AppRoutes.main,
+        getPages: <GetPage<dynamic>>[
+          GetPage<void>(
+            name: AppRoutes.main,
+            page: () => const Scaffold(body: Text('home')),
+          ),
+          GetPage<void>(
+            name: AppRoutes.webView,
+            page: () => const Scaffold(body: Text('order-detail')),
+          ),
+          GetPage<void>(
+            name: AppRoutes.creditReview,
+            page: () => const Scaffold(body: Text('credit-review')),
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+    unawaited(Get.toNamed<void>(AppRoutes.webView));
+    await tester.pumpAndSettle();
+    expect(find.text('order-detail'), findsOneWidget);
+
+    unawaited(
+      AppNavigator.openTarget(
+        'gold://pocket/recredit',
+        fallbackProductId: '1000460',
+        cleanWorkflowForWeb: true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('credit-review'), findsOneWidget);
+    // 订单详情 H5 被移除：它不会继续留在栈底轮询，退出授信页也不回到它。
+    expect(find.text('order-detail'), findsNothing);
+
+    Get.back<void>();
+    await tester.pumpAndSettle();
+    expect(find.text('home'), findsOneWidget);
   });
 }

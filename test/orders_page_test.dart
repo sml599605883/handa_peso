@@ -26,14 +26,16 @@ const String _webOrigin = 'http://h5.test';
 
 /// 订单列表的脚本化适配器：记录筛选状态码并按状态返回脚本化的响应。
 class _OrdersAdapter implements HttpClientAdapter {
-  _OrdersAdapter({this.bodyFor, this.failFirst = false});
+  _OrdersAdapter({this.bodyFor, this.bodyForPage, this.failFirst = false});
 
   final String Function(String status)? bodyFor;
+  final String Function(String status, String page)? bodyForPage;
 
   /// 第一次请求返回业务失败，用于验证错误态与重试。
   bool failFirst;
 
   final List<String> statusCodes = <String>[];
+  final List<String> pages = <String>[];
   int calls = 0;
 
   /// 只统计订单列表接口（`/dropcloth/pyranoside`）的调用，首页信息流不算。
@@ -57,7 +59,9 @@ class _OrdersAdapter implements HttpClientAdapter {
       );
     }
     final status = '${(options.data as Map?)?['corequisites'] ?? ''}';
+    final page = '${(options.data as Map?)?['girlies'] ?? ''}';
     statusCodes.add(status);
+    pages.add(page);
     if (failFirst) {
       failFirst = false;
       return Future<ResponseBody>.value(
@@ -68,7 +72,10 @@ class _OrdersAdapter implements HttpClientAdapter {
         ),
       );
     }
-    final body = bodyFor?.call(status) ?? _body(status);
+    final body =
+        bodyForPage?.call(status, page) ??
+        bodyFor?.call(status) ??
+        _body(status);
     return Future<ResponseBody>.value(
       ResponseBody.fromString(body, 200, headers: _jsonHeaders),
     );
@@ -91,10 +98,16 @@ class _RecordingMainController extends MainController {
   });
 
   final List<String> appliedProductIds = <String>[];
+  final List<int> appliedSources = <int>[];
 
   @override
-  Future<void> applyNow(String productId, {bool requestLocation = true}) async {
+  Future<void> applyNow(
+    String productId, {
+    bool requestLocation = true,
+    int source = 0,
+  }) async {
     appliedProductIds.add(productId);
+    appliedSources.add(source);
   }
 }
 
@@ -472,6 +485,53 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(controller.appliedProductIds, <String>['88']);
+      expect(controller.appliedSources, <int>[8]);
+    });
+
+    testWidgets('滚动到底部按 cabildo 继续加载后续页', (tester) async {
+      final config = _config();
+      await config.localSession.writeSessionId('session-1');
+      final adapter = _OrdersAdapter(
+        bodyForPage: (status, page) {
+          final cards = page == '2'
+              ? <String>[
+                  _card(
+                    orderId: 5,
+                    orderNo: 'A5',
+                    statusCode: 200,
+                    statusText: 'Settled',
+                    actionText: '',
+                  ),
+                ]
+              : <String>[
+                  for (var index = 1; index <= 4; index++)
+                    _card(
+                      orderId: index,
+                      orderNo: 'A$index',
+                      statusCode: 200,
+                      statusText: 'Settled',
+                      actionText: '',
+                    ),
+                ];
+          return '{"unaccepted":0,"unstably":"success","indulgences":'
+              '{"latchstrings":[${cards.join(',')}],"cabildo":2}}';
+        },
+      );
+      await _pumpOrders(
+        tester,
+        _client(config, adapter),
+        size: const Size(375, 600),
+      );
+
+      expect(adapter.pages, <String>['1']);
+      expect(_cardFinder('A1'), findsOneWidget);
+      expect(_cardFinder('A5'), findsNothing);
+
+      await tester.fling(find.byType(ListView), const Offset(0, -900), 2000);
+      await tester.pumpAndSettle();
+
+      expect(adapter.pages, <String>['1', '2']);
+      expect(_cardFinder('A5'), findsOneWidget);
     });
   });
 }

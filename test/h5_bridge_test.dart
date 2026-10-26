@@ -5,6 +5,35 @@ import 'package:handa_peso/features/webview/h5_bridge.dart';
 import 'package:handa_peso/features/webview/payout_account_models.dart';
 
 void main() {
+  test('WebView 加载完成后后续低进度不会重新显示加载条', () {
+    expect(
+      keepWebViewLoadingAfterProgress(loading: false, progress: 30),
+      isFalse,
+    );
+    expect(
+      keepWebViewLoadingAfterProgress(loading: true, progress: 30),
+      isTrue,
+    );
+    expect(
+      keepWebViewLoadingAfterProgress(loading: true, progress: 100),
+      isFalse,
+    );
+  });
+
+  test('H5 桥接名称与交互 ID 使用 Handa 当前契约', () {
+    expect(H5Bridge.handler, 'ph_handa_peso_ios');
+    expect(H5Bridge.handlers, <String>['ph_handa_peso_ios']);
+    expect(H5Bridge.reportLoan, 'handa_peso_9aVEhYqLCbo4HEw');
+    expect(H5Bridge.openExternal, 'handa_peso_nJdWCogSiNgDih0');
+    expect(H5Bridge.openLink, 'handa_peso_IfCsnOIi3iNbkbN');
+    expect(H5Bridge.closePage, 'handa_peso_dQmLjJivOqwg07W');
+    expect(H5Bridge.goHome, 'handa_peso_iBxwnEBwgWHNFiA');
+    expect(H5Bridge.appReview, 'handa_peso_wxOCeAtVisJ1aHb');
+    expect(H5Bridge.retryLoan, 'handa_peso_N49CG5gSlbEVpbr');
+    expect(H5Bridge.replaceAccount, 'handa_peso_rCe7xygqL7gajXP');
+    expect(H5Bridge.signedParams, 'handa_peso_WtSM7etm0nBvu2E');
+  });
+
   group('H5BridgeMessage', () {
     test('decodes string data and callback identifiers', () {
       final message = H5BridgeMessage.decode({
@@ -22,12 +51,12 @@ void main() {
     test('accepts JSON strings and map payloads', () {
       final message = H5BridgeMessage.decode(
         '{"name":"${H5Bridge.replaceAccount}","payload":'
-        '{"drippier":"p1","qktp":42}}',
+        '{"knife":"p1","redecorates":42}}',
       );
 
       expect(message.action, H5Bridge.replaceAccount);
-      expect(message.text(const <String>['drippier']), 'p1');
-      expect(message.text(const <String>['qktp']), '42');
+      expect(message.text(const <String>['knife']), 'p1');
+      expect(message.text(const <String>['redecorates']), '42');
     });
   });
 
@@ -53,7 +82,7 @@ void main() {
       final result = await dispatcher.dispatch(
         H5BridgeMessage.decode({
           'action': H5Bridge.reportLoan,
-          'data': {'drippier': 'p1', 'qktp': 42},
+          'data': {'knife': 'p1', 'redecorates': 42},
         }),
       );
 
@@ -105,7 +134,7 @@ void main() {
       final result = await dispatcher.dispatch(
         H5BridgeMessage.decode({
           'action': H5Bridge.retryLoan,
-          'data': {'qktp': 42},
+          'data': {'redecorates': 42},
         }),
       );
 
@@ -128,7 +157,7 @@ void main() {
         final result = await dispatcher.dispatch(
           H5BridgeMessage.decode({
             'action': H5Bridge.retryLoan,
-            'data': {'qktp': 42},
+            'data': {'redecorates': 42},
           }),
         );
 
@@ -155,11 +184,11 @@ void main() {
 
       expect(result.data, <String, dynamic>{'sandman': 'session'});
       expect(
-        result.callbackScript(H5Bridge.legacyHandler, 'cb_9'),
+        result.callbackScript(H5Bridge.handler, 'cb_9'),
         contains('"callbackId":"cb_9"'),
       );
       expect(
-        result.callbackScript(H5Bridge.legacyHandler, 'cb_9'),
+        result.callbackScript(H5Bridge.handler, 'cb_9'),
         contains('"sandman":"session"'),
       );
     });
@@ -205,13 +234,37 @@ void main() {
   });
 
   group('confirmationProductIdFromH5Url', () {
-    test('reads the product ID from the live confirmation route', () {
+    test('reads the product ID from the MyTools confirmation route', () {
       expect(
         confirmationProductIdFromH5Url(
-          'http://host/#/OIUCatrionaMonodrame?drippier=1000460',
+          'http://host/#/BanefullyHorse?drippier=1000460',
         ),
         '1000460',
       );
+    });
+
+    test('reads the product ID from the current server confirmation URL', () {
+      expect(
+        confirmationProductIdFromH5Url(
+          'http://8.220.176.2/#/BanefullyHorse?prefabricating=1&knife=1'
+          '&changeAcount=1&redecorates=1772026101617112334539943',
+        ),
+        '1',
+      );
+    });
+
+    test('still recognizes confirmation routes from older packages', () {
+      for (final segment in const <String>[
+        'OIUCatrionaMonodrame',
+        'AmalgamatorsMarqueterie',
+      ]) {
+        expect(
+          confirmationProductIdFromH5Url(
+            'http://host/#/$segment?drippier=1000460',
+          ),
+          '1000460',
+        );
+      }
     });
 
     test('ignores unrelated routes', () {
