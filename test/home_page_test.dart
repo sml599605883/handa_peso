@@ -1023,6 +1023,41 @@ void main() {
       expect(adapter.applyCalls, 0);
     });
 
+    testWidgets('游客登录成功后不续跑本次申请，也不立刻请求定位权限', (tester) async {
+      final config = _config();
+      final adapter = _adapterWithApply(
+        _applyBody(target: 'http://example.test/admission'),
+      );
+      final permissions = _StubPermissions(LocationAccessDecision.granted);
+      await _pumpShell(
+        tester,
+        _client(config, adapter),
+        permissions: permissions,
+      );
+
+      await tester.tapAt(const Offset(180, 200));
+      await tester.pumpAndSettle();
+      expect(Get.currentRoute, AppRoutes.login);
+      expect(permissions.requests, 0);
+      expect(adapter.applyCalls, 0);
+
+      // 登录成功、登录页关闭：这次点击到此为止，不能顺手弹系统定位弹窗。
+      await config.localSession.writeSessionId('session-1');
+      Get.back<void>();
+      await tester.pumpAndSettle();
+
+      expect(Get.currentRoute, AppRoutes.main);
+      expect(permissions.requests, 0);
+      expect(adapter.applyCalls, 0);
+
+      // 用户重新点一次，才按「定位准入 → 准入接口」的顺序执行。
+      await tester.tapAt(const Offset(180, 200));
+      await tester.pumpAndSettle();
+
+      expect(permissions.requests, 1);
+      expect(adapter.applyCalls, 1);
+    });
+
     testWidgets('连点大卡只发一次准入请求', (tester) async {
       final adapter = _adapterWithApply(
         _applyBody(target: 'http://example.test/admission'),
@@ -1196,7 +1231,7 @@ void main() {
       expect(Get.currentRoute, AppRoutes.webView);
     });
 
-    testWidgets('权限被拒绝时中止本次申请', (tester) async {
+    testWidgets('权限被拒绝时给出设置说明，取消后照常申请', (tester) async {
       final adapter = _adapterWithApply(
         _applyBody(target: 'http://example.test/admission'),
       );
@@ -1206,10 +1241,100 @@ void main() {
       await tester.tapAt(const Offset(180, 200));
       await tester.pumpAndSettle();
 
-      expect(find.byType(CupertinoAlertDialog), findsNothing);
-      expect(adapter.applyCalls, 0);
+      // 刚在系统弹窗里点「不允许」也要说明一次，不能看起来没反应。
+      expect(find.text('Location Access Is Off'), findsOneWidget);
+      await tester.tap(find.text('Not Now'));
+      await tester.pumpAndSettle();
+
       expect(permissions.settingsOpened, isFalse);
+      expect(adapter.applyCalls, 1);
+      expect(Get.currentRoute, AppRoutes.webView);
+    });
+
+    testWidgets('权限被拒绝时选择去设置则中止本次申请', (tester) async {
+      final adapter = _adapterWithApply(
+        _applyBody(target: 'http://example.test/admission'),
+      );
+      final permissions = _StubPermissions(LocationAccessDecision.denied);
+      await _pumpLoggedIn(tester, adapter, permissions: permissions);
+
+      await tester.tapAt(const Offset(180, 200));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Open Settings'));
+      await tester.pumpAndSettle();
+
+      expect(permissions.settingsOpened, isTrue);
+      expect(adapter.applyCalls, 0);
       expect(Get.currentRoute, AppRoutes.main);
+    });
+
+    testWidgets('原生返回 denied 时也弹设置说明，不会静默结束', (tester) async {
+      final adapter = _adapterWithApply(
+        _applyBody(target: 'http://example.test/admission'),
+      );
+      // 走真实的 PermissionCoordinator 映射，模拟原生桥接直接回 denied。
+      final permissions = PermissionCoordinator(
+        requestLocationPermission: () async => 'denied',
+      );
+      await _pumpLoggedIn(tester, adapter, permissions: permissions);
+
+      await tester.tapAt(const Offset(180, 200));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Location Access Is Off'), findsOneWidget);
+      await tester.tap(find.text('Not Now'));
+      await tester.pumpAndSettle();
+
+      expect(adapter.applyCalls, 1);
+      expect(Get.currentRoute, AppRoutes.webView);
+    });
+
+    testWidgets('定位授权回调丢失时超时放行，不会锁死申请入口', (tester) async {
+      final adapter = _adapterWithApply(
+        _applyBody(target: 'http://example.test/admission'),
+      );
+      final permissions = _PendingPermissions();
+      await _pumpLoggedIn(tester, adapter, permissions: permissions);
+
+      await tester.tapAt(const Offset(180, 200));
+      await tester.pump();
+      expect(permissions.requests, 1);
+      expect(adapter.applyCalls, 0);
+
+      // 超过等待上限后按「拿不到授权状态」放行，而不是让 _applying 永远为真。
+      await tester.pump(const Duration(seconds: 16));
+      await tester.pumpAndSettle();
+
+      expect(adapter.applyCalls, 1);
+      expect(Get.currentRoute, AppRoutes.webView);
+    });
+
+    testWidgets('定位弹窗关闭触发的首页刷新不会把申请转圈顶掉', (tester) async {
+      // 首页刷新比申请慢：弹窗关闭后首页会重新拉一次 overview，如果这次刷新
+      // 也去抢 EasyLoading 单例，申请那边的 showLoading Future 会被顶掉、
+      // 永远不返回，表现为点 Not Now 后没有后续。
+      final adapter = _StubAdapter((options) async {
+        final url = options.uri.toString();
+        if (url.contains('indulgences')) {
+          await Future<void>.delayed(const Duration(milliseconds: 300));
+        }
+        final body = url.contains('legongs')
+            ? _applyBody(target: 'http://example.test/admission')
+            : _plainBody();
+        return ResponseBody.fromString(body, 200, headers: _jsonHeaders);
+      });
+      final permissions = _StubPermissions(LocationAccessDecision.denied);
+      await _pumpLoggedIn(tester, adapter, permissions: permissions);
+
+      await tester.tapAt(const Offset(180, 200));
+      await tester.pumpAndSettle();
+      expect(find.text('Location Access Is Off'), findsOneWidget);
+
+      await tester.tap(find.text('Not Now'));
+      await tester.pumpAndSettle();
+
+      expect(adapter.applyCalls, 1);
+      expect(Get.currentRoute, AppRoutes.webView);
     });
 
     testWidgets('权限受系统限制时取消设置说明后照常申请', (tester) async {

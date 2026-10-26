@@ -228,23 +228,28 @@ class IdentityPageScaffold extends StatelessWidget {
             return GestureDetector(
               behavior: HitTestBehavior.translucent,
               onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-              child: DecoratedBox(
-                key: const Key('identity-background'),
-                decoration: BoxDecoration(gradient: gradient),
-                child: SingleChildScrollView(
-                  keyboardDismissBehavior:
-                      ScrollViewKeyboardDismissBehavior.onDrag,
-                  padding: EdgeInsets.only(
-                    bottom: math.max(
-                      metrics.size(24),
-                      metrics.safeBottom + metrics.size(24),
+              // 撑满整个视口：只包一层 DecoratedBox 时它会跟着滚动内容的高度
+              // 收缩，内容短的页面（上传页/上传成功页）底部会露出 Scaffold 的
+              // 默认底色，而设计稿的背景是铺满全屏的。
+              child: SizedBox.expand(
+                child: DecoratedBox(
+                  key: const Key('identity-background'),
+                  decoration: BoxDecoration(gradient: gradient),
+                  child: SingleChildScrollView(
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: EdgeInsets.only(
+                      bottom: math.max(
+                        metrics.size(24),
+                        metrics.safeBottom + metrics.size(24),
+                      ),
                     ),
-                  ),
-                  child: Align(
-                    alignment: Alignment.topCenter,
-                    child: SizedBox(
-                      width: metrics.contentWidth,
-                      child: builder(context, metrics),
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: SizedBox(
+                        width: metrics.contentWidth,
+                        child: builder(context, metrics),
+                      ),
                     ),
                   ),
                 ),
@@ -262,12 +267,16 @@ class IdentityPageHeader extends StatelessWidget {
     required this.metrics,
     required this.title,
     this.onBack,
+    this.showBack = true,
     super.key,
   });
 
   final IdentityMetrics metrics;
   final String title;
   final VoidCallback? onBack;
+
+  /// 为 false 时不摆放返回键（两侧留同样宽度的占位，标题仍然居中）。
+  final bool showBack;
 
   @override
   Widget build(BuildContext context) {
@@ -283,14 +292,20 @@ class IdentityPageHeader extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Transform.translate(
-                  offset: Offset(0, -metrics.size(2)),
-                  child: SizedBox(
+                if (showBack)
+                  Transform.translate(
+                    offset: Offset(0, -metrics.size(2)),
+                    child: SizedBox(
+                      width: metrics.size(IdentityDesign.backSize),
+                      height: metrics.size(IdentityDesign.backSize),
+                      child: IdentityBackButton(onBack: onBack),
+                    ),
+                  )
+                else
+                  SizedBox(
                     width: metrics.size(IdentityDesign.backSize),
                     height: metrics.size(IdentityDesign.backSize),
-                    child: IdentityBackButton(onBack: onBack),
                   ),
-                ),
                 Expanded(
                   child: Center(
                     child: Text(

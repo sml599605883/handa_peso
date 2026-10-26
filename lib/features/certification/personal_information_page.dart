@@ -77,6 +77,15 @@ class _PersonalInformationPageState extends State<PersonalInformationPage>
     return Get.isRegistered<ReportService>() ? Get.find<ReportService>() : null;
   }
 
+  /// 风控埋点的全局订单号（文档字段 `redecorates`）。
+  ///
+  /// 产品详情 `recurs.redecorates` 在打开本页之前已由 `ProductDetailLoader` 写进
+  /// 会话缓存：下一步认证由 `AppNavigator` 先拉详情再打开，认证清单入口也会在
+  /// 第一步之前补拉一次。因此这里直接读缓存即可，既不必改路由参数，也不会在
+  /// 保存成功后为埋点再发一次详情请求。
+  String get _reportOrderNo =>
+      _apiClient.settings.localSession.productFlowOrderNo.trim();
+
   @override
   void initState() {
     super.initState();
@@ -222,6 +231,7 @@ class _PersonalInformationPageState extends State<PersonalInformationPage>
         _reporter?.reportScene(
           scene: _isWork ? ReportScene.jobInfo : ReportScene.personalInfo,
           productId: _productId,
+          orderNo: _reportOrderNo,
           startedAtSeconds: _sceneStartedAt,
         ),
       );

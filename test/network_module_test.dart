@@ -78,8 +78,14 @@ void main() {
     });
 
     test('signs values in ascending key order', () {
-      final signature = RequestSigner.signatureOf({'b': '2', 'a': '1'}, 'secret');
-      expect(signature, RequestSigner.signatureOf({'a': '1', 'b': '2'}, 'secret'));
+      final signature = RequestSigner.signatureOf({
+        'b': '2',
+        'a': '1',
+      }, 'secret');
+      expect(
+        signature,
+        RequestSigner.signatureOf({'a': '1', 'b': '2'}, 'secret'),
+      );
       expect(
         signature,
         isNot(RequestSigner.signatureOf({'a': '2', 'b': '1'}, 'secret')),
@@ -105,6 +111,40 @@ void main() {
           isA<GatewayFailure>().having((e) => e.code, 'code', 'configuration'),
         ),
       );
+    });
+  });
+
+  group('产品准入', () {
+    test('不再发送文档标注已弃用的固定字段', () async {
+      final bodies = <Map<String, String>>[];
+      final client = _stubbedClient(
+        _StubAdapter((options) async {
+          final data = options.data;
+          if (data is Map) {
+            bodies.add(<String, String>{
+              for (final entry in data.entries)
+                '${entry.key}': '${entry.value}',
+            });
+          }
+          return ResponseBody.fromString(
+            '{"unaccepted":"0","unstably":"success","indulgences":{}}',
+            200,
+            headers: const <String, List<String>>{
+              Headers.contentTypeHeader: <String>[Headers.jsonContentType],
+            },
+          );
+        }),
+      );
+
+      await client.startProductApplication(productId: '1000460', source: '1');
+
+      // 文档「点击申请」只保留产品 id 与来源；模块/位置/子模块三个固定值
+      // 都标注了「已弃用」，不能再出现在请求体里。
+      expect(bodies.single['cotype'], '1000460');
+      expect(bodies.single['efflorescence'], '1');
+      expect(bodies.single.containsKey('jumpiest'), isFalse);
+      expect(bodies.single.containsKey('plundered'), isFalse);
+      expect(bodies.single.containsKey('caesium'), isFalse);
     });
   });
 

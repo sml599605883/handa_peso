@@ -26,9 +26,12 @@ class LocalSession {
   static const _productFlowCell = 'product.detail.copy';
 
   /// 退出登录/注销时要抹掉的账号事实；设备名与账号无关，保留。
+  ///
+  /// 手机号也不在这里：它只用于下次打开登录页时预填，不属于登录态。参考端
+  /// `peso_shield` 的 `SessionStore.clear()` 同样只清 token / 用户 id，手机号
+  /// 始终保留；清掉它会让用户每次退出后都要重新输入号码。
   static const _accountCells = <String>[
     _sessionIdCell,
-    _phoneCell,
     _certifiedCell,
     _identityCardTypeCell,
     _productFlowCell,
@@ -112,13 +115,15 @@ class LocalSession {
     }
   }
 
-  /// 清掉本次账号留下的状态。
+  /// 清掉本次账号留下的状态，保留手机号供下次登录预填。
   Future<void> resetSession() async {
     _productFlowCopy = const ProductStepCopy();
     _productFlowOrderNo = '';
     final draft = _draft;
     if (draft != null) {
-      draft.clear();
+      for (final cell in _accountCells) {
+        draft.remove(cell);
+      }
       return;
     }
     for (final cell in _accountCells) {

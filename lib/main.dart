@@ -67,8 +67,9 @@ Future<void> startHandaPeso({
     permanent: true,
   );
 
-  // 上报在首帧之前就开始跑：启动埋点、授权弹窗、APNs 注册与补报都要抢在
-  // 用户真正进入业务之前完成，页面随后只是往里追加业务埋点。
+  // 上报服务只先登记：启动埋点与系统授权弹窗要等启动门禁确认网关可达、真实
+  // 界面首帧渲染之后再跑（与 peso_shield 一致），否则通知与 ATT 弹窗会盖在
+  // 启动图/网络错误页上。推送路由必须现在开始监听，通知点击才不会被丢掉。
   final reportService = dependencies.reportService;
   if (reportService != null) {
     final pushRoutes = PushRouteCoordinator(reportService.bridge.events)
@@ -76,7 +77,6 @@ Future<void> startHandaPeso({
     Get.put<PushRouteCoordinator>(pushRoutes, permanent: true);
     Get.put<ReportService>(reportService, permanent: true);
     WidgetsBinding.instance.addObserver(ReportLifecycleObserver(reportService));
-    unawaited(reportService.start());
   }
   AppNavigator.mainTabSelector = (index) {
     if (Get.isRegistered<MainController>()) {
@@ -93,6 +93,10 @@ Future<void> startHandaPeso({
         reportSwitch: dependencies.gatewayClient.reportEndpointSwitch,
       ),
       readyBuilder: () => HandaPesoApp(dependencies: dependencies),
+      // 授权弹窗与启动上报都等到这里：门禁已放行且真实界面首帧已绘制。
+      onReady: reportService == null
+          ? null
+          : () => unawaited(reportService.start()),
     ),
   );
 }

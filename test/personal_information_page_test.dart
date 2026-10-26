@@ -12,6 +12,9 @@ import 'package:handa_peso/core/network/gateway_client.dart';
 import 'package:handa_peso/core/network/gateway_reply.dart';
 import 'package:handa_peso/core/network/gateway_settings.dart';
 import 'package:handa_peso/core/product/product_detail_snapshot.dart';
+import 'package:handa_peso/core/report/report_bridge.dart';
+import 'package:handa_peso/core/report/report_service.dart';
+import 'package:handa_peso/core/report/report_store.dart';
 import 'package:handa_peso/core/session/local_session.dart';
 import 'package:handa_peso/features/certification/identity_design.dart';
 import 'package:handa_peso/features/certification/personal_information_models.dart';
@@ -162,6 +165,34 @@ class _SilentTelemetrySink implements TelemetrySink {
 
   @override
   void setUserProperty(String name, String? value) {}
+}
+
+/// 只记录风控埋点参数的假上报服务；不发任何请求。
+class _SpyReportService extends ReportService {
+  _SpyReportService()
+    : super(
+        gatewayClient: GatewayClient(
+          GatewaySettings(
+            signSecret: 'unit-test-secret',
+            localSession: LocalSession.memory(),
+          ),
+        ),
+        store: ReportStore.memory(),
+        bridge: ReportNativeBridge(available: false),
+      );
+
+  final reports = <({String scene, String productId, String orderNo})>[];
+
+  @override
+  Future<void> reportScene({
+    required String scene,
+    String productId = '',
+    String orderNo = '',
+    required int startedAtSeconds,
+    int? endedAtSeconds,
+  }) async {
+    reports.add((scene: scene, productId: productId, orderNo: orderNo));
+  }
 }
 
 Future<void> _pumpUntil(WidgetTester tester, bool Function() done) async {
@@ -558,6 +589,129 @@ void main() {
     expect(adapter.where('walleyed'), hasLength(1));
     expect(outcome.completed, isFalse);
     expect(find.byType(PersonalInformationPage), findsOneWidget);
+  });
+
+  testWidgets('保存个人信息后按场景 5 上报，并带上产品详情缓存的订单号', (tester) async {
+    tester.view.physicalSize = const Size(375, 1107);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final adapter = _StubAdapter();
+    final reporter = _SpyReportService();
+    final client = GatewayClient(
+      GatewaySettings(
+        signSecret: 'unit-test-secret',
+        localSession: LocalSession.memory(),
+      ),
+      dio: Dio()..httpClientAdapter = adapter,
+    );
+    Get.put<GatewayClient>(client, permanent: true);
+    // 产品详情流程会把 `recurs.redecorates` 写进会话缓存；场景 5 直接从那里取。
+    await client.settings.localSession.cacheProductFlow(
+      const ProductStepCopy(),
+      orderNo: 'ORDER-1000460',
+    );
+
+    await tester.pumpWidget(
+      GetMaterialApp(
+        initialRoute: '/stub',
+        builder: EasyLoading.init(),
+        getPages: <GetPage<dynamic>>[
+          GetPage<void>(
+            name: '/stub',
+            page: () => const Scaffold(body: SizedBox()),
+          ),
+          GetPage<void>(
+            name: AppRoutes.personalInformation,
+            page: () => PersonalInformationPage(
+              reporter: reporter,
+              autoContinue: false,
+            ),
+          ),
+        ],
+      ),
+    );
+    final outcome = PersonalInformationFlowOutcome();
+    Get.toNamed<void>(
+      AppRoutes.personalInformation,
+      arguments: <String, dynamic>{
+        'productId': '1000460',
+        PersonalInformationFlowOutcome.argumentKey: outcome,
+      },
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('personal-information-submit')));
+    for (var i = 0; i < 30 && !outcome.completed; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+
+    expect(adapter.where('walleyed'), hasLength(1));
+    expect(outcome.completed, isTrue);
+    expect(reporter.reports, hasLength(1));
+    expect(reporter.reports.single.scene, '5');
+    expect(reporter.reports.single.productId, '1000460');
+    expect(reporter.reports.single.orderNo, 'ORDER-1000460');
+  });
+
+  testWidgets('保存工作信息后按场景 6 上报，并带上产品详情缓存的订单号', (tester) async {
+    tester.view.physicalSize = const Size(375, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final adapter = _StubAdapter();
+    final reporter = _SpyReportService();
+    final client = GatewayClient(
+      GatewaySettings(
+        signSecret: 'unit-test-secret',
+        localSession: LocalSession.memory(),
+      ),
+      dio: Dio()..httpClientAdapter = adapter,
+    );
+    Get.put<GatewayClient>(client, permanent: true);
+    await client.settings.localSession.cacheProductFlow(
+      const ProductStepCopy(),
+      orderNo: 'ORDER-1000460',
+    );
+
+    await tester.pumpWidget(
+      GetMaterialApp(
+        initialRoute: '/stub',
+        builder: EasyLoading.init(),
+        getPages: <GetPage<dynamic>>[
+          GetPage<void>(
+            name: '/stub',
+            page: () => const Scaffold(body: SizedBox()),
+          ),
+          GetPage<void>(
+            name: AppRoutes.workInformation,
+            page: () =>
+                WorkInformationPage(reporter: reporter, autoContinue: false),
+          ),
+        ],
+      ),
+    );
+    final outcome = PersonalInformationFlowOutcome();
+    Get.toNamed<void>(
+      AppRoutes.workInformation,
+      arguments: <String, dynamic>{
+        'productId': '1000460',
+        PersonalInformationFlowOutcome.argumentKey: outcome,
+      },
+    );
+    for (var i = 0; i < 30 && adapter.where('counteract').isEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('work-information-submit')));
+    for (var i = 0; i < 30 && !outcome.completed; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+
+    expect(adapter.where('latchstrings'), hasLength(1));
+    expect(outcome.completed, isTrue);
+    expect(reporter.reports, hasLength(1));
+    expect(reporter.reports.single.scene, '6');
+    expect(reporter.reports.single.productId, '1000460');
+    expect(reporter.reports.single.orderNo, 'ORDER-1000460');
   });
 
   testWidgets('工作信息页加载工作接口并提交二级选项值', (tester) async {

@@ -10,6 +10,12 @@ import '../theme/app_spacing.dart';
 typedef StartupNetworkProbe = Future<bool> Function();
 typedef StartupNetworkReadyBuilder = Widget Function();
 
+/// 门禁通过、真实界面首帧渲染完成后的一次性回调。
+///
+/// 上报与系统授权弹窗（通知、ATT）挂在这里：等界面真正出来再弹，
+/// 弹窗才不会盖在启动图上（与 peso_shield 的启动流程一致）。
+typedef StartupReadyCallback = void Function();
+
 /// 上报一次动态域名切换的日志载荷（app上报 `khedas=1`）。
 typedef EndpointSwitchReporter = Future<void> Function(String payload);
 
@@ -107,12 +113,16 @@ class StartupNetworkGate extends StatefulWidget {
   const StartupNetworkGate({
     required this.probe,
     required this.readyBuilder,
+    this.onReady,
     this.retryOnResume = true,
     super.key,
   });
 
   final StartupNetworkProbe probe;
   final StartupNetworkReadyBuilder readyBuilder;
+
+  /// 真正进入应用（首帧渲染完成）后回调一次；失败页的重试成功后同样会触发。
+  final StartupReadyCallback? onReady;
 
   /// 失败页停留期间，应用回到前台是否自动再探测一次。
   final bool retryOnResume;
@@ -124,6 +134,7 @@ class StartupNetworkGate extends StatefulWidget {
 class _StartupNetworkGateState extends State<StartupNetworkGate> {
   _GateStage _stage = _GateStage.launch;
   late final AppLifecycleListener _resumeWatcher;
+  bool _readyNotified = false;
 
   @override
   void initState() {
@@ -162,6 +173,24 @@ class _StartupNetworkGateState extends State<StartupNetworkGate> {
     if (!mounted) return;
     setState(() {
       _stage = reachable ? _GateStage.ready : _GateStage.offline;
+    });
+    if (reachable) {
+      _notifyReady();
+    }
+  }
+
+  /// 网关可达后通知调用方「真实界面已经出来」，只通知一次。
+  ///
+  /// 走帧后回调：此时 root page 已经绘制完，通知/ATT 系统弹窗才会叠在应用界面上，
+  /// 而不是盖着启动图。
+  void _notifyReady() {
+    if (_readyNotified) return;
+    _readyNotified = true;
+    final onReady = widget.onReady;
+    if (onReady == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      onReady();
     });
   }
 

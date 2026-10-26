@@ -25,6 +25,54 @@ void main() {
     expect(find.byKey(const Key('startup-launch')), findsNothing);
   });
 
+  testWidgets('进入应用后才回调 onReady，且只回调一次', (tester) async {
+    final probe = Completer<bool>();
+    var ready = 0;
+    await tester.pumpWidget(
+      StartupNetworkGate(
+        probe: () => probe.future,
+        readyBuilder: _readyPage,
+        onReady: () => ready++,
+      ),
+    );
+    await tester.pump();
+    // 启动图期间不得回调：授权弹窗必须等真实界面出来。
+    expect(ready, 0);
+
+    probe.complete(true);
+    await tester.pumpAndSettle();
+
+    expect(find.text('ready'), findsOneWidget);
+    expect(ready, 1);
+
+    _leaveAndReturnToForeground(tester);
+    await tester.pumpAndSettle();
+    expect(ready, 1);
+  });
+
+  testWidgets('探测失败不回调 onReady，重试成功后补回调一次', (tester) async {
+    var attempts = 0;
+    var ready = 0;
+    await tester.pumpWidget(
+      StartupNetworkGate(
+        probe: () async {
+          attempts++;
+          return attempts > 1;
+        },
+        readyBuilder: _readyPage,
+        onReady: () => ready++,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(ready, 0);
+
+    await tester.tap(find.byKey(const Key('startup-network-retry')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('ready'), findsOneWidget);
+    expect(ready, 1);
+  });
+
   testWidgets('shows the retry page when the probe fails', (tester) async {
     await tester.pumpWidget(
       StartupNetworkGate(probe: () async => false, readyBuilder: _readyPage),

@@ -95,8 +95,14 @@ void main() {
 
     expect(Get.isRegistered<ReportService>(), isTrue);
     expect(Get.find<ReportService>(), same(spy));
-    expect(spy.startCalls, 1);
+    // 授权弹窗不能抢在首帧之前弹：启动时只登记，等门禁放行后由 onReady 触发。
+    expect(spy.startCalls, 0);
     expect(launched, isA<StartupNetworkGate>());
+    final gate = launched! as StartupNetworkGate;
+    expect(gate.onReady, isNotNull);
+
+    gate.onReady!();
+    expect(spy.startCalls, 1);
 
     // 回到前台才补报；系统弹窗造成的 inactive/paused 不得触发。
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);

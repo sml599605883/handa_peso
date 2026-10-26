@@ -131,24 +131,13 @@ class _IdentityUploadPageState extends State<IdentityUploadPage>
               key: const Key('identity-upload-card'),
               decoration: BoxDecoration(
                 color: AppColors.identityCardSurface,
-                borderRadius: BorderRadius.vertical(
-                  bottom: Radius.circular(
-                    metrics.size(IdentityDesign.cardRadius),
-                  ),
+                // 与外层卡片同圆角：否则标题层圆角切角处会露出卡片底色的方角。
+                borderRadius: BorderRadius.circular(
+                  metrics.size(IdentityDesign.cardRadius),
                 ),
-                border: Border(
-                  left: BorderSide(
-                    color: AppColors.identityCardBorder,
-                    width: metrics.size(1),
-                  ),
-                  right: BorderSide(
-                    color: AppColors.identityCardBorder,
-                    width: metrics.size(1),
-                  ),
-                  bottom: BorderSide(
-                    color: AppColors.identityCardBorder,
-                    width: metrics.size(1),
-                  ),
+                border: Border.all(
+                  color: AppColors.identityCardBorder,
+                  width: metrics.size(1),
                 ),
               ),
               child: Column(
@@ -285,9 +274,12 @@ class _IdentityUploadPageState extends State<IdentityUploadPage>
         },
       );
       // 证件信息保存成功时标记已完成；这里退回上一屏，由上层继续退出流程。
-      if (mounted && _outcome?.completed == true) {
-        Get.back<void>();
-      }
+      //
+      // 保存成功后结果页可能已经用顶层导航切到下一项（人脸），本页也被一并
+      // 移除。此时不能再 pop：否则会把刚打开的人脸页顶掉，最终落回首页。
+      if (!mounted || _outcome?.completed != true) return;
+      if (ModalRoute.of(context)?.isCurrent != true) return;
+      Get.back<void>();
     } on GatewayFailure catch (error) {
       CrashReporter.record(error, StackTrace.current);
       await EasyLoading.showError(error.message);

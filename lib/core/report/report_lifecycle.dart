@@ -8,6 +8,9 @@ import 'report_service.dart';
 ///
 /// 上报只关心“回到前台”：初次启动由 `start()` 负责，退到后台不需要上报动作，
 /// 因此这里不做节流，直接转发即可。
+///
+/// 回前台还要补弹一次 ATT：启动阶段的系统弹窗可能被吞掉（状态停在未决），
+/// 而 ATT 只有未决时才能弹，不补这一下本次进程内就再也拿不到 IDFA。
 class ReportLifecycleObserver with WidgetsBindingObserver {
   ReportLifecycleObserver(this._service);
 
@@ -17,6 +20,7 @@ class ReportLifecycleObserver with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(_service.resumed());
+      unawaited(_service.retryTrackingPermission());
     }
   }
 }

@@ -146,20 +146,16 @@ class GatewayClient extends GatewayTransport {
   // ---------------------------------------------------------------------------
 
   /// 进入产品申请流程。
+  ///
+  /// 文档「点击申请」里的 `jumpiest` / `plundered` / `caesium`（模块id、位置、
+  /// 子模块id，固定值 1001/1000/1000）都标注了「已弃用」，本端不再发送。
   Future<GatewayReply> startProductApplication({
     required String productId,
     String source = '0',
   }) {
     return write(
       GatewayRoutes.productApply,
-      body: <String, dynamic>{
-        // 接口文档固定的渠道与终端标识。
-        'jumpiest': '1001',
-        'plundered': '1000',
-        'caesium': '1000',
-        'cotype': productId,
-        'efflorescence': source,
-      },
+      body: <String, dynamic>{'cotype': productId, 'efflorescence': source},
       noise: const <String>['strikes', 'somans'],
     );
   }

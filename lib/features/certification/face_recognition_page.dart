@@ -132,24 +132,13 @@ class _FaceRecognitionPageState extends State<FaceRecognitionPage>
               key: const Key('face-recognition-card'),
               decoration: BoxDecoration(
                 color: AppColors.identityCardSurface,
-                borderRadius: BorderRadius.vertical(
-                  bottom: Radius.circular(
-                    metrics.size(IdentityDesign.cardRadius),
-                  ),
+                // 与标题层同圆角，避免卡片底色从标题层上圆角处露出方角。
+                borderRadius: BorderRadius.circular(
+                  metrics.size(IdentityDesign.cardRadius),
                 ),
-                border: Border(
-                  left: BorderSide(
-                    color: AppColors.identityCardBorder,
-                    width: metrics.size(1),
-                  ),
-                  right: BorderSide(
-                    color: AppColors.identityCardBorder,
-                    width: metrics.size(1),
-                  ),
-                  bottom: BorderSide(
-                    color: AppColors.identityCardBorder,
-                    width: metrics.size(1),
-                  ),
+                border: Border.all(
+                  color: AppColors.identityCardBorder,
+                  width: metrics.size(1),
                 ),
               ),
               child: Column(

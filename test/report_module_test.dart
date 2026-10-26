@@ -388,6 +388,21 @@ void main() {
       },
     );
 
+    test('carries the order number in the documented risk field', () async {
+      native.snapshot = _snapshot;
+
+      await service.reportScene(
+        scene: ReportScene.bankCard,
+        productId: '1000460',
+        orderNo: 'ORDER-1000460',
+        startedAtSeconds: 1700000000,
+      );
+
+      final body = harness.callTo('/dropcloth/disgruntle').body;
+      expect(body['knife'], '1000460');
+      expect(body['redecorates'], 'ORDER-1000460');
+    });
+
     test('takes the scene end time before the async device work', () async {
       var nowMillis = 1700000000000;
       final timed = ReportService(
@@ -484,5 +499,32 @@ void main() {
         expect(harness.hasCall('/dropcloth/unglove'), isTrue);
       },
     );
+
+    test('回前台只在 ATT 未决时补弹，授权后补报渠道归因', () async {
+      native.snapshot = _snapshot;
+      await service.start();
+      native.order.clear();
+
+      // 已决定过：不再弹窗，也不重报。
+      native.trackingStatus = 'authorized';
+      await service.retryTrackingPermission();
+      expect(native.order, isNot(contains('requestTrackingPermission')));
+      expect(harness.hasCall('/dropcloth/phalarope'), isFalse);
+
+      // 启动时被系统吞掉：状态仍是未决，回前台补弹一次，用户授权后补报归因。
+      native.trackingStatus = 'not_determined';
+      native.onMethod = (method) {
+        if (method == 'requestTrackingPermission') {
+          native.trackingStatus = 'authorized';
+        }
+      };
+      await service.retryTrackingPermission();
+
+      expect(native.order, contains('requestTrackingPermission'));
+      expect(
+        harness.callTo('/dropcloth/phalarope').body['colickiest'],
+        'IDFA-1',
+      );
+    });
   });
 }

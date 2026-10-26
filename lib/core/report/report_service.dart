@@ -61,6 +61,7 @@ class ReportService {
   bool _starting = false;
   bool _reportingInstallSource = false;
   bool _awaitingTracking = false;
+  bool _requestingTracking = false;
   Future<ReportLocation?>? _pendingLocation;
   StreamSubscription<Map<String, dynamic>>? _events;
 
@@ -82,7 +83,7 @@ class ReportService {
       await bridge.requestNotificationPermission();
       // 通知弹窗与 ATT 弹窗不能在同一个瞬间接连弹出，留一点让 UIKit 收尾。
       await _pause(const Duration(milliseconds: 400));
-      await bridge.requestTrackingPermission();
+      await _requestTrackingOnce();
 
       await _afterPermissions();
       unawaited(reportLocationAndDevice());
@@ -98,6 +99,44 @@ class ReportService {
     if (!_started) return;
     unawaited(reportInstallSource());
     unawaited(reportPushToken());
+  }
+
+  /// 回到前台补弹一次 ATT。
+  ///
+  /// 启动阶段的系统弹窗有被吞掉的可能（App 还没激活、和通知弹窗撞在一起时
+  /// 会直接回 `not_determined` 且不展示），而 ATT 只在状态未决时才能弹一次。
+  /// 不补这一下，本次进程内 IDFA 会一直是空串，[reportInstallSource] 整条
+  /// 归因链路都会静默跳过——peso_shield 同样在每次回前台重试。
+  Future<void> retryTrackingPermission() async {
+    if (!_started) return;
+    try {
+      if (!await _trackingUndecided()) return;
+      // 与启动时一致：先让 UIKit 收尾回前台的转场，再弹系统弹窗。
+      await _pause(const Duration(milliseconds: 400));
+      // 等待期间启动那次请求可能已经有结论，弹之前再确认一次。
+      if (!await _trackingUndecided()) return;
+      await _requestTrackingOnce();
+      await reportInstallSource();
+    } catch (error) {
+      _log(error);
+    }
+  }
+
+  /// ATT 是否还没做过选择；原生不可用（空串）按“已有结论”处理，不去打扰用户。
+  Future<bool> _trackingUndecided() async {
+    final status = await bridge.trackingStatus();
+    return status == ReportNativeBridge.trackingNotDetermined;
+  }
+
+  /// 同一时刻只发一次 ATT 请求：启动那次还在等用户作答时，回前台不得再弹一次。
+  Future<void> _requestTrackingOnce() async {
+    if (_requestingTracking) return;
+    _requestingTracking = true;
+    try {
+      await bridge.requestTrackingPermission();
+    } finally {
+      _requestingTracking = false;
+    }
   }
 
   /// 登录成功：记录登录时间，补报注册埋点、渠道归因、定位与设备详情。

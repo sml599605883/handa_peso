@@ -11,6 +11,7 @@ import 'package:handa_peso/core/analytics/analytics_service.dart';
 import 'package:handa_peso/core/network/gateway_client.dart';
 import 'package:handa_peso/core/network/gateway_reply.dart';
 import 'package:handa_peso/core/network/gateway_settings.dart';
+import 'package:handa_peso/core/product/product_detail_snapshot.dart';
 import 'package:handa_peso/core/report/report_bridge.dart';
 import 'package:handa_peso/core/report/report_service.dart';
 import 'package:handa_peso/core/report/report_store.dart';
@@ -123,7 +124,10 @@ class _SpyReportService extends ReportService {
         bridge: ReportNativeBridge(available: false),
       );
 
-  final reports = <({String scene, String productId, int startedAtSeconds})>[];
+  final reports =
+      <
+        ({String scene, String productId, String orderNo, int startedAtSeconds})
+      >[];
 
   @override
   Future<void> reportScene({
@@ -136,6 +140,7 @@ class _SpyReportService extends ReportService {
     reports.add((
       scene: scene,
       productId: productId,
+      orderNo: orderNo,
       startedAtSeconds: startedAtSeconds,
     ));
   }
@@ -322,9 +327,15 @@ void main() {
     final adapter = _StubAdapter();
     final reporter = _SpyReportService();
     final outcome = EmergencyContactFlowOutcome();
+    final client = _clientFor(adapter);
+    // 产品详情流程会把 `recurs.redecorates` 写进会话缓存；场景 7 直接从那里取。
+    await client.settings.localSession.cacheProductFlow(
+      const ProductStepCopy(),
+      orderNo: 'ORDER-1000460',
+    );
     await _pumpPage(
       tester,
-      client: _clientFor(adapter),
+      client: client,
       reporter: reporter,
       outcome: outcome,
       contactPicker: () async =>
@@ -377,6 +388,7 @@ void main() {
     expect(reporter.reports, hasLength(1));
     expect(reporter.reports.single.scene, '7');
     expect(reporter.reports.single.productId, '1000460');
+    expect(reporter.reports.single.orderNo, 'ORDER-1000460');
     expect(find.byType(EmergencyContactPage), findsNothing);
   });
 

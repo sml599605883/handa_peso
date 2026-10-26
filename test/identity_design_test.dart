@@ -299,6 +299,14 @@ void main() {
       width: 220,
       height: 52,
     );
+    // 背景铺满整屏，而不是跟着滚动内容收缩到内容底部。
+    _expectRect(
+      tester.getRect(find.byKey(const Key('identity-background'))),
+      left: 0,
+      top: 0,
+      width: 375,
+      height: 812,
+    );
 
     // 设计稿里标题层直接叠在整张卡片的顶部：底卡也从 y=186 开始，标题和
     // 下面的示范内容同属一个 347x397 的容器。
@@ -326,9 +334,11 @@ void main() {
       headerDecoration.borderRadius,
       BorderRadius.vertical(top: Radius.circular(IdentityDesign.cardRadius)),
     );
+    // 外框四角同圆角：上半圈也必须收圆，否则标题层的圆角切角处会露出
+    // 卡片底色的方角。
     expect(
       cardDecoration.borderRadius,
-      BorderRadius.vertical(bottom: Radius.circular(IdentityDesign.cardRadius)),
+      BorderRadius.circular(IdentityDesign.cardRadius),
     );
   });
 
@@ -454,6 +464,15 @@ void main() {
       find.byKey(const Key('identity-result-name')),
     );
     expect(nameField.decoration?.filled, isFalse);
+    // 设计稿的输入框本身没有描边；显式关掉所有状态，避免全局
+    // `inputDecorationTheme` 的 enabled/focused 描边漏进行内。
+    final fieldDecoration = nameField.decoration!;
+    expect(fieldDecoration.border, InputBorder.none);
+    expect(fieldDecoration.enabledBorder, InputBorder.none);
+    expect(fieldDecoration.disabledBorder, InputBorder.none);
+    expect(fieldDecoration.focusedBorder, InputBorder.none);
+    expect(fieldDecoration.errorBorder, InputBorder.none);
+    expect(fieldDecoration.focusedErrorBorder, InputBorder.none);
     final row = tester.getRect(find.byKey(const Key('identity-result-row-0')));
     final input = tester.getRect(find.byKey(const Key('identity-result-name')));
     expect(
@@ -495,11 +514,19 @@ void main() {
     );
     expect(
       cardDecoration.borderRadius,
-      BorderRadius.vertical(bottom: Radius.circular(IdentityDesign.cardRadius)),
+      BorderRadius.circular(IdentityDesign.cardRadius),
     );
     expect(
       headerDecoration.borderRadius,
       BorderRadius.vertical(top: Radius.circular(IdentityDesign.cardRadius)),
+    );
+    // 背景铺满整屏，而不是跟着滚动内容收缩到内容底部。
+    _expectRect(
+      tester.getRect(find.byKey(const Key('identity-background'))),
+      left: 0,
+      top: 0,
+      width: 375,
+      height: 812,
     );
   });
 

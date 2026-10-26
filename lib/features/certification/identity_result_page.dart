@@ -15,7 +15,6 @@ import '../../core/report/report_service.dart';
 import 'identity_design.dart';
 import 'identity_models.dart';
 import 'widgets/identity_birthday_picker.dart';
-import 'widgets/identity_retention_guard.dart';
 
 /// 上传成功（设计稿 03-01 - 身份认证-上传成功）。
 ///
@@ -38,8 +37,7 @@ class IdentityResultPage extends StatefulWidget {
   State<IdentityResultPage> createState() => _IdentityResultPageState();
 }
 
-class _IdentityResultPageState extends State<IdentityResultPage>
-    with IdentityRetentionGuard<IdentityResultPage> {
+class _IdentityResultPageState extends State<IdentityResultPage> {
   late final GatewayClient _apiClient =
       widget.apiClient ?? Get.find<GatewayClient>();
   late final IdentityRecognition _recognition =
@@ -68,15 +66,6 @@ class _IdentityResultPageState extends State<IdentityResultPage>
   IdentityFlowOutcome? _outcome;
 
   @override
-  String get retentionScene => '0';
-
-  @override
-  String get retentionProductId => _productId;
-
-  @override
-  GatewayClient get retentionApiClient => _apiClient;
-
-  @override
   void initState() {
     super.initState();
     _outcome = IdentityFlowOutcome.of(Get.arguments);
@@ -101,13 +90,21 @@ class _IdentityResultPageState extends State<IdentityResultPage>
   ReportService? get _reporter =>
       Get.isRegistered<ReportService>() ? Get.find<ReportService>() : null;
 
+  /// 风控埋点的全局订单号（文档字段 `redecorates`）。
+  ///
+  /// 产品详情 `recurs.redecorates` 在打开本页之前已由 `ProductDetailLoader` 写进
+  /// 会话缓存：下一步认证由 `AppNavigator` 先拉详情再打开，认证清单入口也会在
+  /// 第一步之前补拉一次。因此这里直接读缓存即可，不会为埋点再发一次详情请求。
+  String get _reportOrderNo =>
+      _apiClient.settings.localSession.productFlowOrderNo.trim();
+
   @override
   Widget build(BuildContext context) {
+    // 设计/产品要求：证件信息确认页是单向步骤，不能再退回上传页。这里同时
+    // 去掉顶部返回键，并拦掉系统返回键与 iOS 侧滑返回。
     return PopScope<void>(
-      canPop: retentionCanPop,
-      onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) handleRetentionExit();
-      },
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {},
       child: IdentityPageScaffold(
         gradient: AppColors.identityPageGradient,
         builder: (context, metrics) => Column(
@@ -116,7 +113,7 @@ class _IdentityResultPageState extends State<IdentityResultPage>
             IdentityPageHeader(
               metrics: metrics,
               title: IdentityStrings.pageTitle,
-              onBack: handleRetentionExit,
+              showBack: false,
             ),
             IdentityHeroBanner(
               text: _heroCopy,
@@ -130,24 +127,15 @@ class _IdentityResultPageState extends State<IdentityResultPage>
               key: const Key('identity-result-card'),
               decoration: BoxDecoration(
                 color: AppColors.identityCardSurface,
-                borderRadius: BorderRadius.vertical(
-                  bottom: Radius.circular(
-                    metrics.size(IdentityDesign.cardRadius),
-                  ),
+                // 整张卡片四角同圆角：外框只画下半圈时，卡片底色会在标题层的
+                // 圆角切角处露出两块方形底色。标题层与外框用同一个半径，两者
+                // 的上圆角就完全重合。
+                borderRadius: BorderRadius.circular(
+                  metrics.size(IdentityDesign.cardRadius),
                 ),
-                border: Border(
-                  left: BorderSide(
-                    color: AppColors.identityCardBorder,
-                    width: metrics.size(1),
-                  ),
-                  right: BorderSide(
-                    color: AppColors.identityCardBorder,
-                    width: metrics.size(1),
-                  ),
-                  bottom: BorderSide(
-                    color: AppColors.identityCardBorder,
-                    width: metrics.size(1),
-                  ),
+                border: Border.all(
+                  color: AppColors.identityCardBorder,
+                  width: metrics.size(1),
                 ),
               ),
               child: Column(
@@ -262,6 +250,7 @@ class _IdentityResultPageState extends State<IdentityResultPage>
           _reporter?.reportScene(
             scene: ReportScene.identityDocument,
             productId: _productId,
+            orderNo: _reportOrderNo,
             startedAtSeconds: _sceneStartSeconds,
           ),
         );
@@ -406,10 +395,19 @@ class _ResultRow extends StatelessWidget {
         style: style,
         cursorColor: AppColors.identityTitle,
         textInputAction: TextInputAction.done,
+        // 设计稿这三行只有外框（`text-wrapper_3` 的白底 + 描边），输入框本身
+        // 没有任何边框。只写 `border: none` 不够：全局 `inputDecorationTheme`
+        // 里的 enabled/focused 描边仍会被 InputDecorator 取用，聚焦时会在行内
+        // 再画一圈主色描边，看起来像多了一个输入框。这里把各状态都显式关掉。
         decoration: const InputDecoration(
           isDense: true,
           filled: false,
           border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          disabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          errorBorder: InputBorder.none,
+          focusedErrorBorder: InputBorder.none,
           contentPadding: EdgeInsets.zero,
         ),
       );

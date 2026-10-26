@@ -13,6 +13,7 @@ import 'package:handa_peso/core/network/gateway_client.dart';
 import 'package:handa_peso/core/network/gateway_reply.dart';
 import 'package:handa_peso/core/network/gateway_settings.dart';
 import 'package:handa_peso/core/permissions/permission_coordinator.dart';
+import 'package:handa_peso/core/product/product_detail_snapshot.dart';
 import 'package:handa_peso/core/report/report_bridge.dart';
 import 'package:handa_peso/core/report/report_service.dart';
 import 'package:handa_peso/core/report/report_store.dart';
@@ -223,7 +224,7 @@ class _SpyReportService extends ReportService {
         bridge: ReportNativeBridge(available: false),
       );
 
-  final scenes = <String>[];
+  final reports = <({String scene, String orderNo})>[];
 
   @override
   Future<void> reportScene({
@@ -233,7 +234,7 @@ class _SpyReportService extends ReportService {
     required int startedAtSeconds,
     int? endedAtSeconds,
   }) async {
-    scenes.add(scene);
+    reports.add((scene: scene, orderNo: orderNo));
   }
 }
 
@@ -255,6 +256,7 @@ Future<void> _pumpPage(
   ReportService? reporter,
   BindCardCameraPermission? camera,
   BindCardLivenessStart? liveness,
+  String orderNo = 'order-1',
   String changeOrderNo = '',
 }) async {
   tester.view.physicalSize = size;
@@ -275,7 +277,7 @@ Future<void> _pumpPage(
             apiClient: client,
             reporter: reporter,
             autoContinue: false,
-            orderNo: 'order-1',
+            orderNo: orderNo,
             changeOrderNo: changeOrderNo,
             requestCameraPermission: camera,
             startLiveness: liveness,
@@ -535,7 +537,43 @@ void main() {
     expect(body['fatheadedly'], isNotEmpty);
     expect(outcome.completed, isTrue);
     expect(outcome.bindId, '5326');
-    expect(reporter.scenes, <String>['8']);
+    expect(reporter.reports, hasLength(1));
+    expect(reporter.reports.single.scene, '8');
+    expect(reporter.reports.single.orderNo, 'order-1');
+  });
+
+  testWidgets('认证清单入口没有路由订单号时，场景 8 取会话缓存的订单号', (tester) async {
+    final adapter = _StubAdapter(cardBody: _cardBody());
+    final reporter = _SpyReportService();
+    final outcome = BindCardFlowOutcome();
+    final client = _clientFor(adapter);
+    // 认证清单在打开每一步之前都会补拉产品详情，订单号落在会话缓存里。
+    await client.settings.localSession.cacheProductFlow(
+      const ProductStepCopy(),
+      orderNo: 'ORDER-CACHED',
+    );
+    await _pumpPage(
+      tester,
+      client: client,
+      reporter: reporter,
+      outcome: outcome,
+      orderNo: '',
+    );
+
+    await tester.enterText(
+      find.byKey(const Key('bind-card-input-1:cardNo')),
+      '09171234567',
+    );
+    await tester.enterText(
+      find.byKey(const Key('bind-card-input-1:confirmCardNo')),
+      '09171234567',
+    );
+    await tester.tap(find.byKey(const Key('bind-card-submit')));
+    await tester.pumpAndSettle();
+
+    expect(adapter.bindBodies, hasLength(1));
+    expect(reporter.reports, hasLength(1));
+    expect(reporter.reports.single.orderNo, 'ORDER-CACHED');
   });
 
   testWidgets('20000 时只要求 livenessId 并完成二次提交', (tester) async {
@@ -610,6 +648,6 @@ void main() {
     expect(adapter.switchBodies.single['eelworm'], 'order-old');
     expect(adapter.switchBodies.single['eyeglasses'], '5326');
     expect(adapter.switchBodies.single['guaiocums'], isNotEmpty);
-    expect(reporter.scenes, isEmpty);
+    expect(reporter.reports, isEmpty);
   });
 }

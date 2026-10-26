@@ -12,10 +12,12 @@ import 'package:handa_peso/core/analytics/analytics_service.dart';
 import 'package:handa_peso/core/network/gateway_client.dart';
 import 'package:handa_peso/core/network/gateway_settings.dart';
 import 'package:handa_peso/core/permissions/permission_coordinator.dart';
+import 'package:handa_peso/core/product/product_detail_snapshot.dart';
 import 'package:handa_peso/core/report/report_bridge.dart';
 import 'package:handa_peso/core/report/report_service.dart';
 import 'package:handa_peso/core/report/report_store.dart';
 import 'package:handa_peso/core/session/local_session.dart';
+import 'package:handa_peso/features/certification/face_recognition_page.dart';
 import 'package:handa_peso/features/certification/identity_photo_service.dart';
 import 'package:handa_peso/features/certification/identity_result_page.dart';
 import 'package:handa_peso/features/certification/identity_models.dart';
@@ -49,6 +51,20 @@ const String _uploadResultBody =
     '"gleeking":"23/11/1993",'
     '"tidewaters":"https://id-front.png",'
     '"barrens":"1993","arytenoid":"11","blather":"23"}}';
+
+/// 产品详情：证件已完成、下一步是人脸识别。
+const String _productDetailFaceBody =
+    '{"unaccepted":"0","unstably":"success","indulgences":{'
+    '"murdering":200,'
+    '"recurs":{"dependable":"1000460","dullard":"Handa Peso",'
+    '"redecorates":"ORDER-1000460","luciferins":"60000",'
+    '"splashiest":"91","curb":1},'
+    '"thurl":[{"canonic":"Informasi identitas","preaccuses":"identity",'
+    '"trollopy":0,"uppropped":1,"capaciousness":"Sertifikasi",'
+    '"demount":"public","gesticulating":1,"incomers":1},'
+    '{"canonic":"Wajah","preaccuses":"face","trollopy":0,"uppropped":0,'
+    '"capaciousness":"Sertifikasi","demount":"face","gesticulating":1,'
+    '"incomers":1}]}}';
 
 /// 接口文档「获取挽留弹窗」：弹窗类型 0（身份认证）。
 const String _retentionBody =
@@ -110,6 +126,7 @@ class _StubAdapter implements HttpClientAdapter {
     if (url.contains('sikes')) {
       return _json(uploadBody ?? _uploadResultBody);
     }
+    if (url.contains('shinning')) return _json(_productDetailFaceBody);
     return _json('{"unaccepted":"0","unstably":"success","indulgences":{}}');
   }
 
@@ -136,6 +153,7 @@ class _SpyReportService extends ReportService {
 
   final List<String> scenes = <String>[];
   final List<String> productIds = <String>[];
+  final List<String> orderNos = <String>[];
 
   @override
   Future<void> reportScene({
@@ -147,6 +165,7 @@ class _SpyReportService extends ReportService {
   }) async {
     scenes.add(scene);
     productIds.add(productId);
+    orderNos.add(orderNo);
   }
 }
 
@@ -252,6 +271,11 @@ void main() {
       dio: Dio()..httpClientAdapter = adapter,
     );
     Get.put<GatewayClient>(client, permanent: true);
+    // 产品详情流程会把 `recurs.redecorates` 写进会话缓存；场景 2/3 直接从那里取。
+    await client.settings.localSession.cacheProductFlow(
+      const ProductStepCopy(),
+      orderNo: 'ORDER-1000460',
+    );
     spy = _SpyReportService();
     Get.put<ReportService>(spy, permanent: true);
 
@@ -268,7 +292,10 @@ void main() {
     if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
   });
 
-  Future<void> pumpFlow(WidgetTester tester) async {
+  Future<void> pumpFlow(
+    WidgetTester tester, {
+    bool autoContinue = false,
+  }) async {
     tester.view.physicalSize = const Size(375, 812);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -295,7 +322,11 @@ void main() {
           ),
           GetPage<void>(
             name: AppRoutes.certificationIdentityResult,
-            page: () => const IdentityResultPage(autoContinue: false),
+            page: () => IdentityResultPage(autoContinue: autoContinue),
+          ),
+          GetPage<void>(
+            name: AppRoutes.certificationFace,
+            page: () => const FaceRecognitionPage(autoContinue: false),
           ),
         ],
       ),
@@ -328,6 +359,7 @@ void main() {
     // 场景 2 的结束时间 = 用户选中证件；随后进入上传页。
     expect(spy.scenes, <String>['2']);
     expect(spy.productIds.single, '1000460');
+    expect(spy.orderNos.single, 'ORDER-1000460');
     expect(find.text('Demonstration!'), findsOneWidget);
     // 流程还没走到保存成功，认证清单不该认为这一步完成。
     expect(outcome.completed, isFalse);
@@ -453,7 +485,7 @@ void main() {
     expect(find.byType(IdentityUploadPage), findsNothing);
   });
 
-  testWidgets('证件识别确认页返回：请求 scene=0 的挽留弹窗', (tester) async {
+  testWidgets('证件识别确认页不能返回：没有返回键，系统返回也不退出', (tester) async {
     await pumpFlow(tester);
     Get.toNamed<void>(
       AppRoutes.certificationIdentityResult,
@@ -468,52 +500,17 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('identity-back')));
-    await _pumpUntil(
-      tester,
-      () => find
-          .byKey(const Key('identity-retention-continue'))
-          .evaluate()
-          .isNotEmpty,
-    );
-    final retention = adapter.where('unchivalrous').single;
-    expect(retention.fields['ulterior'], '0');
-    expect(retention.fields['knife'], '1000460');
+    // 确认页是单向步骤：不摆返回键，也不请求挽留弹窗。
+    expect(find.byKey(const Key('identity-back')), findsNothing);
+    expect(adapter.where('unchivalrous'), isEmpty);
 
-    await tester.tap(find.byKey(const Key('identity-retention-continue')));
+    // Android 返回键 / iOS 侧滑对应的系统返回同样被拦下。
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(find.byType(IdentityResultPage), findsOneWidget);
     expect(find.text('Successfully!'), findsOneWidget);
-  });
-
-  testWidgets('证件识别确认页返回：挽留弹窗选择退出时回到入口页', (tester) async {
-    await pumpFlow(tester);
-    Get.toNamed<void>(
-      AppRoutes.certificationIdentityResult,
-      arguments: <String, dynamic>{
-        'productId': '1000460',
-        'cardType': 'SSS ID',
-        'definitively': 'NAVEEN TOM VARGHESE',
-        'optically': '623099344112',
-        'gleeking': '23/11/1993',
-        'tidewaters': 'https://id-front.png',
-      },
-    );
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const Key('identity-back')));
-    await _pumpUntil(
-      tester,
-      () => find
-          .byKey(const Key('identity-retention-exit'))
-          .evaluate()
-          .isNotEmpty,
-    );
-    await tester.tap(find.byKey(const Key('identity-retention-exit')));
-    await _pumpUntil(tester, () => find.text('home').evaluate().isNotEmpty);
-
-    expect(find.text('home'), findsOneWidget);
-    expect(find.byType(IdentityResultPage), findsNothing);
+    expect(adapter.where('unchivalrous'), isEmpty);
+    await _drainEasyLoading(tester);
   });
 
   testWidgets('上传页只压缩所选图片，上传接口仍用项目自己的证件类型字段', (tester) async {
@@ -672,12 +669,52 @@ void main() {
     // 场景 3 的结束时间 = 证件正面保存成功。
     expect(spy.scenes, <String>['3']);
     expect(spy.productIds.single, '1000460');
+    expect(spy.orderNos.single, 'ORDER-1000460');
 
     await _pumpUntil(tester, () => outcome.completed);
     expect(outcome.completed, isTrue);
     // 保存成功后流程逐层退出，回到入口页。
     await _pumpUntil(tester, () => find.text('home').evaluate().isNotEmpty);
     expect(find.text('home'), findsOneWidget);
+    await _drainEasyLoading(tester);
+  });
+
+  testWidgets('确认页保存成功后直接进入人脸识别，不会被旧页面回退到首页', (tester) async {
+    await pumpFlow(tester, autoContinue: true);
+    final outcome = IdentityFlowOutcome();
+    Get.toNamed<void>(
+      AppRoutes.certificationIdentity,
+      arguments: <String, dynamic>{
+        'productId': '1000460',
+        IdentityFlowOutcome.argumentKey: outcome,
+      },
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('SSS ID'));
+    await tester.pumpAndSettle();
+
+    // 上传页 -> 取图方式 -> 确认页。
+    await tester.tap(find.byKey(const Key('identity-upload-submit')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('identity-upload-method-submit')));
+    await _pumpUntil(
+      tester,
+      () => find.text('Successfully!').evaluate().isNotEmpty,
+    );
+    expect(find.text('Successfully!'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('identity-result-submit')));
+    await _pumpUntil(
+      tester,
+      () => find.byType(FaceRecognitionPage).evaluate().isNotEmpty,
+    );
+
+    // 保存成功后由结果页顶层切到下一项；上传页/证件类型页的收尾不能再 pop 一次，
+    // 否则会把刚打开的人脸页顶掉，最终落回首页。
+    expect(find.byType(FaceRecognitionPage), findsOneWidget);
+    expect(find.text('Document verification'), findsOneWidget);
+    expect(find.text('home'), findsNothing);
     await _drainEasyLoading(tester);
   });
 

@@ -774,14 +774,26 @@ abstract final class AppNavigator {
     return fallback;
   }
 
-  static Future<void> showLoading([String status = 'Loading...']) =>
+  /// 显示全屏 loading。
+  ///
+  /// 只负责把浮层挂出去，**不把动画完成当成业务时序**：EasyLoading 是单例，
+  /// 并发 show 时后一个会把前一个的容器换掉，前一个的 Future 就永远不完成了。
+  /// 申请/登录这些流程如果 await 它，就会卡在转圈那一步再也发不出请求。
+  static Future<void> showLoading([String status = 'Loading...']) {
+    unawaited(
       EasyLoading.show(
         status: status,
         dismissOnTap: false,
         maskType: EasyLoadingMaskType.clear,
-      );
+      ),
+    );
+    return Future<void>.value();
+  }
 
-  static Future<void> dismissLoading() => EasyLoading.dismiss();
+  static Future<void> dismissLoading() {
+    unawaited(EasyLoading.dismiss());
+    return Future<void>.value();
+  }
 
   static void showToast(String message) => EasyLoading.showToast(message);
 

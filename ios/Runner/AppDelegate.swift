@@ -80,6 +80,10 @@ import UserNotifications
 ///
 /// The method names and response keys are kept aligned with
 /// `lib/core/face/face_liveness_bridge.dart`.
+///
+/// The SDK is configured as soon as the bridge registers during app launch, so
+/// device data collection starts early; `start` configures it again as a
+/// fallback in case registration was skipped.
 private final class FaceLivenessRegistrar: NSObject {
   static let shared = FaceLivenessRegistrar()
 
@@ -110,6 +114,12 @@ private final class FaceLivenessRegistrar: NSObject {
       default:
         result(FlutterMethodNotImplemented)
       }
+    }
+
+    // 同盾初始化提前到 App 启动（隐式引擎初始化）阶段，让 SDK 尽早开始采集
+    // 设备信息；`start` 内仍会再调一次，`configured` 保证只初始化一次。
+    DispatchQueue.main.async { [weak self] in
+      self?.configureIfNeeded()
     }
   }
 

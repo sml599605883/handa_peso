@@ -86,6 +86,11 @@ class MainController extends GetxController with WidgetsBindingObserver {
   /// [didChangeAppLifecycleState]）。
   bool _ignoreLocationPromptResume = false;
 
+  /// 定位授权等待上限：超过就按「拿不到授权状态」放行。
+  ///
+  /// 原生回调丢失时不能让 `_applying` 永远为真，否则申请入口会静默失效。
+  static const Duration _locationDecisionTimeout = Duration(seconds: 15);
+
   @override
   void onInit() {
     super.onInit();
@@ -326,7 +331,9 @@ class MainController extends GetxController with WidgetsBindingObserver {
     Future<void>? loadingShown;
     final mainIsTopRoute =
         Get.currentRoute.isEmpty || Get.currentRoute == AppRoutes.main;
-    if (mainIsTopRoute) {
+    // 已有内容的后台刷新不盖全屏 loading：EasyLoading 是单例，和申请/登录的
+    // loading 抢同一次 show 会把对方的 Future 顶掉，业务就一直等在那里。
+    if (mainIsTopRoute && overviewData.value == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (requestFinished || isClosed) return;
         ownsLoading = true;
@@ -485,8 +492,13 @@ class MainController extends GetxController with WidgetsBindingObserver {
   /// 才按本地认证状态继续（未认证进认证流程，已认证进借款计算页），避免服务端
   /// 配置缺省时点击毫无反应。
   ///
-  /// 走准入之前先要一次定位权限：风控要看这一次申请发生时的位置。用户拒绝时
-  /// 中止本次申请；系统限制或定位服务关闭时说明原因，取消说明后仍可继续。
+  /// 游客点击时只负责把用户带到登录页，登录成功后**不续跑**这次申请：定位授权
+  /// 必须由用户明确点击申请来发起，不能在登录页刚关闭时紧接着弹系统定位弹窗
+  /// （参考端 kaibigan_loan 的 `applyProductWithFlow` 同样在跳登录后直接 return）。
+  /// 用户回到首页重新点击，才会依次走「定位准入 → 准入接口」。
+  ///
+  /// 走准入之前先要一次定位权限：风控要看这一次申请发生时的位置。拒绝授权、
+  /// 系统限制或定位服务关闭时说明原因，取消说明后仍可继续。
   Future<void> applyNow(
     String productId, {
     bool requestLocation = true,
@@ -502,7 +514,11 @@ class MainController extends GetxController with WidgetsBindingObserver {
       'product_id': appliedProductId,
     });
     try {
-      if (!await AppNavigator.requireSession(redirect: appliedProductId)) {
+      // 登录门禁只负责跳转，不等登录结果：登录页关闭后这次点击就结束。
+      // 否则登录成功的瞬间会紧跟一个系统定位弹窗，用户会以为定位权限是登录
+      // 流程的一部分；也与「点击申请才要定位」的产品时机不符。
+      if (!await _hasSession()) {
+        await _promptLogin();
         return;
       }
       if (requestLocation && !await _ensureLocationAccess()) return;
@@ -569,10 +585,11 @@ class MainController extends GetxController with WidgetsBindingObserver {
 
   /// 申请前的定位准入：拿到授权就继续，拿不到权限也不硬拦。
   ///
-  /// 用户拒绝时中止本次申请；系统限制或定位服务关闭时给出一次去设置的说明，
-  /// 用户选择取消就照常申请，选择「Settings」则由系统设置页接管本次流程。
-  /// 等待弹窗期间被切到后台时本次申请直接作废（用户再点一次即可），不能把
-  /// 入口挂在一个不再返回的原生回调上。
+  /// 拒绝授权、系统受限或定位服务关闭时，都给出一次去设置的说明——与
+  /// peso_shield 一致，即使用户刚在系统弹窗里点了「不允许」也说明一次，不能
+  /// 让申请入口看起来没反应。取消说明就照常申请，选择「Settings」则由系统
+  /// 设置页接管本次流程。等待弹窗期间被切到后台时本次申请直接作废（用户再点
+  /// 一次即可），不能把入口挂在一个不再返回的原生回调上。
   Future<bool> _ensureLocationAccess() async {
     final decision = await _awaitLocationDecision();
     switch (decision) {
@@ -582,7 +599,6 @@ class MainController extends GetxController with WidgetsBindingObserver {
       case LocationAccessDecision.unavailable:
         return true;
       case LocationAccessDecision.denied:
-        return false;
       case LocationAccessDecision.restricted:
       case LocationAccessDecision.serviceDisabled:
         break;
@@ -597,6 +613,10 @@ class MainController extends GetxController with WidgetsBindingObserver {
   }
 
   /// 等一次定位授权弹窗的结果；被切到后台时返回 `null`（本次申请作废）。
+  ///
+  /// 原生回调在极少数情况下会丢（系统弹窗被系统自己收掉、宿主切前台时结果
+  /// 没回传）：没有超时的话 `_applying` 会一直为真，用户再点大卡就毫无反应。
+  /// 超时按「拿不到授权状态」放行——定位只补全风控数据，不能反过来锁死入口。
   Future<LocationAccessDecision?> _awaitLocationDecision() async {
     final interrupted = Completer<void>();
     _locationPromptInterrupt = interrupted;
@@ -606,6 +626,11 @@ class MainController extends GetxController with WidgetsBindingObserver {
           permissionCoordinator.requestLocationAccess(),
           interrupted.future.then<LocationAccessDecision?>((_) => null),
         ],
+      ).timeout(
+        _locationDecisionTimeout,
+        onTimeout: () {
+          return LocationAccessDecision.unavailable;
+        },
       );
     } finally {
       _locationPromptInterrupt = null;

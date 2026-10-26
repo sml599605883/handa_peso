@@ -78,6 +78,14 @@ class _IdentityTypePageState extends State<IdentityTypePage>
   ReportService? get _reporter =>
       Get.isRegistered<ReportService>() ? Get.find<ReportService>() : null;
 
+  /// 风控埋点的全局订单号（文档字段 `redecorates`）。
+  ///
+  /// 产品详情 `recurs.redecorates` 在打开本页之前已由 `ProductDetailLoader` 写进
+  /// 会话缓存：下一步认证由 `AppNavigator` 先拉详情再打开，认证清单入口也会在
+  /// 第一步之前补拉一次。因此这里直接读缓存即可，不会为埋点再发一次详情请求。
+  String get _reportOrderNo =>
+      _apiClient.settings.localSession.productFlowOrderNo.trim();
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -114,6 +122,7 @@ class _IdentityTypePageState extends State<IdentityTypePage>
       _reporter?.reportScene(
         scene: ReportScene.certificationChoice,
         productId: _productId,
+        orderNo: _reportOrderNo,
         startedAtSeconds: _sceneStartSeconds,
       ),
     );
@@ -131,7 +140,10 @@ class _IdentityTypePageState extends State<IdentityTypePage>
         },
       );
       // 证件信息保存成功时由上传成功页打勾；这里负责把整条流程退出到认证清单。
+      // 与上传页同理：保存成功后结果页可能已切到下一项并把本页移除，不能再
+      // 多退一层去顶掉刚打开的人脸页。
       if (!mounted || _outcome?.completed != true) return;
+      if (ModalRoute.of(context)?.isCurrent != true) return;
       leaveRetentionGuardedPage();
     } finally {
       _opening = false;

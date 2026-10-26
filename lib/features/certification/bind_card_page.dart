@@ -471,11 +471,19 @@ class _BindCardPageState extends State<BindCardPage> {
         false;
   }
 
-  Future<String> _resolveOrderNo() async {
+  /// 场景 8 埋点用的订单号（文档字段 `redecorates`）。
+  ///
+  /// 路由参数最权威：产品详情流程把它随 `orderNo` 带进来。认证清单入口不透传
+  /// 订单号，但它打开本页之前已经请求过产品详情，缓存里就是当前这笔申贷的单号。
+  String get _reportOrderNo {
     final explicit = _orderNo.trim();
     if (explicit.isNotEmpty) return explicit;
-    final cached = _apiClient.settings.localSession.productFlowOrderNo.trim();
-    if (cached.isNotEmpty) return cached;
+    return _apiClient.settings.localSession.productFlowOrderNo.trim();
+  }
+
+  Future<String> _resolveOrderNo() async {
+    final known = _reportOrderNo;
+    if (known.isNotEmpty) return known;
     try {
       await ProductDetailLoader.load(_apiClient, productId: _productId);
     } catch (error) {
@@ -530,6 +538,7 @@ class _BindCardPageState extends State<BindCardPage> {
       _reporter?.reportScene(
         scene: ReportScene.bankCard,
         productId: _productId,
+        orderNo: _reportOrderNo,
         startedAtSeconds: _sceneStartedAt,
       ),
     );

@@ -1049,4 +1049,19 @@ void main() {
     expect(find.text('9179998888'), findsOneWidget);
     expect(Get.find<LoginController>().phoneDigits.value, '9179998888');
   });
+
+  testWidgets('退出登录后再打开登录页，仍回填上次登录的手机号', (tester) async {
+    await store.writeSessionId('session-123');
+    await store.writePhone('9179998888');
+
+    // 退出登录 / 会话失效共用 resetSession：登录态清掉，但手机号要留作回填。
+    await store.resetSession();
+    expect(await store.readSessionId(), isEmpty);
+    expect(await store.readPhone(), '9179998888');
+
+    await pumpLogin(tester);
+
+    expect(find.text('9179998888'), findsOneWidget);
+    expect(Get.find<LoginController>().phoneDigits.value, '9179998888');
+  });
 }
