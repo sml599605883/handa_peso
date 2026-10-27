@@ -58,9 +58,12 @@ Future<void> startHandaPeso({
       },
       runAdmission: (productId) async {
         if (!Get.isRegistered<MainController>()) return;
+        // 授信完成后由轮询器自动续跑准入：这是同一次申请的后续步骤，不是新的
+        // 用户点击，不能再记一次「点击申请」埋点。
         await Get.find<MainController>().applyNow(
           productId,
           requestLocation: false,
+          reportApplyTap: false,
         );
       },
     ),

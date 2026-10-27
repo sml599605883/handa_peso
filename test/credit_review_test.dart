@@ -117,6 +117,10 @@ void main() {
     final illustration = find.byKey(const Key('credit-review-illustration'));
     final progress = find.byKey(const Key('credit-review-progress'));
     final message = find.byKey(const Key('credit-review-message'));
+    final back = find.byKey(const Key('design-back'));
+    expect(back, findsOneWidget);
+    expect(tester.getTopLeft(back), const Offset(14, 56));
+    expect(tester.getSize(back), const Size(24, 24));
     expect(tester.getTopLeft(illustration), const Offset(90.5, 195));
     expect(tester.getSize(illustration), const Size(194, 194));
     expect(tester.getTopLeft(progress), const Offset(36, 409));
@@ -132,5 +136,42 @@ void main() {
       findsOneWidget,
     );
     poller.stop();
+  });
+
+  testWidgets('等待授信页左上角返回键回到来源页', (tester) async {
+    tester.view.physicalSize = const Size(375, 812);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      GetMaterialApp(
+        initialRoute: '/home',
+        getPages: <GetPage<dynamic>>[
+          GetPage<void>(
+            name: '/home',
+            page: () => const Scaffold(body: Text('home')),
+          ),
+          GetPage<void>(
+            name: AppRoutes.creditReview,
+            page: () => const CreditReviewPage(),
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+    unawaited(
+      Get.toNamed<void>(
+        AppRoutes.creditReview,
+        arguments: <String, dynamic>{'productId': '1000460'},
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('credit-review-illustration')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('design-back')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('home'), findsOneWidget);
+    expect(Get.currentRoute, '/home');
   });
 }

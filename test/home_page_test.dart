@@ -11,6 +11,7 @@ import 'package:get/get.dart';
 import 'package:handa_peso/app/navigation/app_route_observer.dart';
 import 'package:handa_peso/app/routes/app_routes.dart';
 import 'package:handa_peso/app/theme/app_colors.dart';
+import 'package:handa_peso/core/analytics/analytics_service.dart';
 import 'package:handa_peso/core/network/gateway_client.dart';
 import 'package:handa_peso/core/network/gateway_settings.dart';
 import 'package:handa_peso/core/permissions/permission_coordinator.dart';
@@ -431,6 +432,25 @@ Future<void> _pumpShell(
   } else {
     await tester.pump();
   }
+}
+
+/// 只记录事件名的出口，用于验证申请点击埋点的上报次数。
+class _RecordingSink implements TelemetrySink {
+  final List<String> events = <String>[];
+
+  @override
+  void logEvent(String name, [Map<String, Object?> parameters = const {}]) {
+    events.add(name);
+  }
+
+  @override
+  void recordError(Object error, StackTrace stackTrace, {bool fatal = false}) {}
+
+  @override
+  void setUserProperty(String name, String? value) {}
+
+  @override
+  void setUserId(String? userId) {}
 }
 
 void main() {
@@ -1089,6 +1109,42 @@ void main() {
       unawaited(controller.applyNow('main'));
       await tester.pumpAndSettle();
       expect(adapter.applyCalls, 2);
+    });
+
+    testWidgets('重新授信续跑准入不重复上报点击埋点', (tester) async {
+      final adapter = _adapterWithApply(
+        _applyBody(code: 505, message: 'Not eligible for this product'),
+      );
+      await _pumpLoggedIn(tester, adapter);
+      final sink = _RecordingSink();
+      AnalyticsService.configure(sink);
+      addTearDown(() => AnalyticsService.configure(DebugTelemetrySink()));
+
+      final controller = Get.find<MainController>();
+      // 轮询器在授信完成后自动续跑准入：这是同一次申请的后续步骤，不算新点击。
+      unawaited(
+        controller.applyNow(
+          'main',
+          requestLocation: false,
+          reportApplyTap: false,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(adapter.applyCalls, 1);
+      expect(sink.events, isNot(contains(AppEvents.applyNowTapped)));
+
+      // 用户真正点击时仍要记一次。
+      await tester.tapAt(const Offset(180, 200));
+      await tester.pumpAndSettle();
+      expect(adapter.applyCalls, 2);
+      expect(
+        sink.events.where((name) => name == AppEvents.applyNowTapped),
+        hasLength(1),
+      );
+
+      // 等失败提示的自动消失计时器跑完，避免测试结束时留下未完成的定时器。
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pumpAndSettle();
     });
 
     testWidgets('准入失败且没有跳转地址时提示服务端文案', (tester) async {

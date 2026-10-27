@@ -105,6 +105,7 @@ class _RecordingMainController extends MainController {
     String productId, {
     bool requestLocation = true,
     int source = 0,
+    bool reportApplyTap = true,
   }) async {
     appliedProductIds.add(productId);
     appliedSources.add(source);

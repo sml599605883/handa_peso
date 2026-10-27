@@ -88,7 +88,7 @@ void main() {
     expect(find.text('bind-card'), findsNothing);
   });
 
-  testWidgets('gold 重新授信地址进入等待授信页并携带产品 ID', (tester) async {
+  testWidgets('ph 重新授信深链进入等待授信页并携带产品 ID', (tester) async {
     await tester.pumpWidget(
       GetMaterialApp(
         initialRoute: '/home',
@@ -113,8 +113,7 @@ void main() {
 
     unawaited(
       AppNavigator.openTarget(
-        'gold://pocket/recredit',
-        fallbackProductId: '1000460',
+        'ph://handa-peso/ios/Herbivory?cotype=1000460',
       ),
     );
     await tester.pumpAndSettle();
@@ -229,7 +228,7 @@ void main() {
 
     unawaited(
       AppNavigator.openTarget(
-        'gold://pocket/recredit',
+        'ph://handa-peso/ios/Herbivory',
         fallbackProductId: '1000460',
         cleanWorkflowForWeb: true,
       ),

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../app/theme/app_colors.dart';
+import '../../app/widgets/design_back_button.dart';
 import 'credit_review_poller.dart';
 
 String creditReviewProductId(Object? arguments) {
@@ -47,6 +48,9 @@ class _CreditReviewPageState extends State<CreditReviewPage> {
   static const _progressWidth = 303.0;
   static const _progressHeight = 12.0;
   static const _messageWidth = 311.0;
+  static const _backLeft = 14.0;
+  static const _backTop = 56.0;
+  static const _backSize = 24.0;
 
   static const _illustrationAsset = 'assets/credit_review_illustration.png';
 
@@ -103,8 +107,13 @@ class _CreditReviewPageState extends State<CreditReviewPage> {
         builder: (context, constraints) {
           final scale = constraints.maxWidth / _designWidth;
           double px(num value) => value * scale;
+          // 返回键与其它二级页面一致：设计坐标 (14, 56)，刘海屏按安全区下移。
+          final safeTop = scale == 0
+              ? 0.0
+              : MediaQuery.paddingOf(context).top / scale;
+          final backTop = _backTop + max(0.0, safeTop - _backTop + 8);
 
-          return SingleChildScrollView(
+          final content = SingleChildScrollView(
             child: Padding(
               padding: EdgeInsets.fromLTRB(px(32), px(195), px(32), px(32)),
               child: Column(
@@ -183,6 +192,19 @@ class _CreditReviewPageState extends State<CreditReviewPage> {
                 ],
               ),
             ),
+          );
+
+          return Stack(
+            children: [
+              content,
+              Positioned(
+                left: px(_backLeft),
+                top: px(backTop),
+                width: px(_backSize),
+                height: px(_backSize),
+                child: const DesignBackButton(),
+              ),
+            ],
           );
         },
       ),

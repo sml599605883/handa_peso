@@ -499,10 +499,14 @@ class MainController extends GetxController with WidgetsBindingObserver {
   ///
   /// 走准入之前先要一次定位权限：风控要看这一次申请发生时的位置。拒绝授权、
   /// 系统限制或定位服务关闭时说明原因，取消说明后仍可继续。
+  ///
+  /// [reportApplyTap] 为假时不记「点击申请」埋点：重新授信轮询器在授信完成后
+  /// 自动续跑准入，这不是一次新的用户点击，不能把同一次申请算成两次点击。
   Future<void> applyNow(
     String productId, {
     bool requestLocation = true,
     int source = 0,
+    bool reportApplyTap = true,
   }) async {
     final appliedProductId = productId.trim().isEmpty
         ? _homeApplyProductId
@@ -510,9 +514,11 @@ class MainController extends GetxController with WidgetsBindingObserver {
     // 连点只走一次：准入会在服务端留痕，重复请求既脏数据也会叠出多个落地页。
     if (_applying) return;
     _applying = true;
-    AnalyticsService.logEvent(AppEvents.applyNowTapped, {
-      'product_id': appliedProductId,
-    });
+    if (reportApplyTap) {
+      AnalyticsService.logEvent(AppEvents.applyNowTapped, {
+        'product_id': appliedProductId,
+      });
+    }
     try {
       // 登录门禁只负责跳转，不等登录结果：登录页关闭后这次点击就结束。
       // 否则登录成功的瞬间会紧跟一个系统定位弹窗，用户会以为定位权限是登录

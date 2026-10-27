@@ -443,22 +443,6 @@ abstract final class AppNavigator {
     }
 
     final segments = uri?.pathSegments ?? const <String>[];
-    if (scheme == 'gold' &&
-        uri != null &&
-        uri.host == 'pocket' &&
-        segments.isNotEmpty &&
-        segments.last == 'recredit') {
-      final productId = _productIdOf(uri, fallbackProductId);
-      if (productId.isEmpty) {
-        showError(_unopenableLink);
-        return;
-      }
-      await toCreditReview(
-        productId: productId,
-        clearWebViews: cleanWorkflowForWeb,
-      );
-      return;
-    }
     final isCurrentScheme = scheme == 'ph' && uri?.host == _schemeHost;
     if (isCurrentScheme &&
         uri != null &&
