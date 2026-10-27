@@ -89,7 +89,24 @@ abstract final class AppNavigator {
     });
   }
 
-  static Future<void>? toMain() => Get.offAllNamed<void>(AppRoutes.main);
+  /// 返回到外壳首页（H5 的 `goHome`、二级页面无栈可退时的兜底都走这里）。
+  ///
+  /// 外壳还在栈里时逐级 pop 回去，不重建：保留 Tab 与页面状态，首页的刷新由
+  /// `RouteObserver.didPopNext` 负责（与 dali_cash/laya_credit/fund_nexus 的
+  /// 「返回首页」一致）。只有外壳真的不在栈里（例如登录页作为根页面）时才用
+  /// `offAllNamed` 新建一个。
+  static Future<void>? toMain() {
+    final navigator = Get.key.currentState;
+    if (navigator == null) return null;
+    if (navigator.canPop()) {
+      navigator.popUntil((candidate) {
+        final name = candidate.settings.name;
+        return name == AppRoutes.main || candidate.isFirst;
+      });
+    }
+    if (Get.currentRoute == AppRoutes.main) return null;
+    return Get.offAllNamed<void>(AppRoutes.main);
+  }
 
   static void switchMainTab(int index) => mainTabSelector?.call(index);
 

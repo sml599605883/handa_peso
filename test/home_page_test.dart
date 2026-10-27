@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:get/get.dart';
+import 'package:handa_peso/app/navigation/app_navigator.dart';
 import 'package:handa_peso/app/navigation/app_route_observer.dart';
 import 'package:handa_peso/app/routes/app_routes.dart';
 import 'package:handa_peso/app/theme/app_colors.dart';
@@ -964,6 +965,63 @@ void main() {
 
       Get.back<void>();
       await tester.pumpAndSettle();
+      expect(adapter.homeCalls, 2);
+    });
+
+    testWidgets('从 WebView 返回首页会刷新', (tester) async {
+      final adapter = _StubAdapter(
+        (options) async =>
+            ResponseBody.fromString(_plainBody(), 200, headers: _jsonHeaders),
+      );
+      await _pumpShell(tester, _client(_config(), adapter));
+      expect(adapter.homeCalls, 1);
+
+      unawaited(Get.toNamed<void>(AppRoutes.webView));
+      await tester.pumpAndSettle();
+
+      Get.back<void>();
+      await tester.pumpAndSettle();
+      expect(adapter.homeCalls, 2);
+    });
+
+    testWidgets('H5 的「返回首页」弹回已有外壳，不重建并刷新', (tester) async {
+      final adapter = _StubAdapter(
+        (options) async =>
+            ResponseBody.fromString(_plainBody(), 200, headers: _jsonHeaders),
+      );
+      await _pumpShell(tester, _client(_config(), adapter));
+      expect(adapter.homeCalls, 1);
+      final shell = tester.element(find.byType(MainShellPage));
+
+      unawaited(Get.toNamed<void>(AppRoutes.webView));
+      await tester.pumpAndSettle();
+
+      unawaited(AppNavigator.toMain());
+      await tester.pumpAndSettle();
+
+      expect(Get.currentRoute, AppRoutes.main);
+      expect(tester.element(find.byType(MainShellPage)), same(shell));
+      expect(adapter.homeCalls, 2);
+    });
+
+    testWidgets('外壳不在栈里时「返回首页」会重建外壳并刷新', (tester) async {
+      final adapter = _StubAdapter(
+        (options) async =>
+            ResponseBody.fromString(_plainBody(), 200, headers: _jsonHeaders),
+      );
+      await _pumpShell(tester, _client(_config(), adapter));
+      expect(adapter.homeCalls, 1);
+
+      // 登录页作为根页面：外壳已经被移出导航栈。
+      unawaited(Get.offAllNamed<void>(_stubRoute));
+      await tester.pumpAndSettle();
+      expect(find.byType(MainShellPage), findsNothing);
+
+      unawaited(AppNavigator.toMain());
+      await tester.pumpAndSettle();
+
+      expect(Get.currentRoute, AppRoutes.main);
+      expect(find.byType(MainShellPage), findsOneWidget);
       expect(adapter.homeCalls, 2);
     });
 

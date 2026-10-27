@@ -118,6 +118,20 @@ class MainController extends GetxController with WidgetsBindingObserver {
     return _refreshVisibleTab();
   }
 
+  /// 外壳被重新推入栈顶时同步当前 Tab 的数据。
+  ///
+  /// [AppNavigator.toMain] 只在外壳不在栈里时（登录页作为根页面等）才重建
+  /// 外壳；重建不是 pop，`didPopNext` 不会触发，而外壳控制器由启动阶段的
+  /// `MainBinding` 常驻，重建外壳也不会再走一次 `onInit`。两边都不刷新时
+  /// 首页会一直停在旧数据上。
+  ///
+  /// 首次启动时 `onInit` 已经在拉数据，[loadOverview] 的请求中守卫会挡掉这次
+  /// 重复请求。
+  Future<void> onShellShown() {
+    homeOnScreen.value = activeTab.value == _guestTabIndex;
+    return _refreshVisibleTab();
+  }
+
   /// 二级页面覆盖首页时暂停首页上的一切定时行为。
   void onRouteLeft() => homeOnScreen.value = false;
 
@@ -376,8 +390,9 @@ class MainController extends GetxController with WidgetsBindingObserver {
   /// 在任意页面登录成功后重新同步游客状态。
   ///
   /// 只有外壳正露在登录页下面时才在这里拉数据；其余情况交给外壳自己：
-  /// 登录页关闭会触发 `didPopNext` 刷新，登录页作为根页面时则由重新创建的外壳
-  /// 在 `onInit` 里拉一次。两边都拉会让首页+弹窗接口连着请求两次。
+  /// 登录页关闭会触发 `didPopNext` 刷新，登录页作为根页面时则由重建的外壳走
+  /// [onShellShown] 拉一次（控制器常驻，重建外壳不会再走 `onInit`）。
+  /// 两边都拉会让首页+弹窗接口连着请求两次。
   Future<void> onSessionStarted(String phone) async {
     sessionPhone.value = phone;
     _loadedOnce = false;

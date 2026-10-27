@@ -148,7 +148,10 @@ abstract final class ReportPayload {
         _deviceAdvertisingId: snapshot.advertisingId,
         _deviceMac: snapshot.macAddress,
         _nowMillis: nowMillis,
-        _uptimeMillis: snapshot.uptimeMillis,
+        // 文档示例把设备运行时间给成字符串（"74553635"），参考端
+        // SalmonReport.hosieries 也是 "\(毫秒数)"；字段类型照文档对齐，
+        // 不要因为底层是 Int 就传 number。
+        _uptimeMillis: '${snapshot.uptimeMillis}',
         _usingProxy: snapshot.isUsingProxy,
         _usingVpn: snapshot.isUsingVpn,
         _jailbroken: snapshot.isJailbroken,

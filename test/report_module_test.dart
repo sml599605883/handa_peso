@@ -150,6 +150,16 @@ class _NativeScript {
         );
   }
 
+  /// 模拟原生侧主动发事件（`push_token` / `tracking_status_changed`）。
+  Future<void> emit(Map<String, Object?> event) {
+    return TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+          _events.name,
+          const StandardMethodCodec().encodeSuccessEnvelope(event),
+          (_) {},
+        );
+  }
+
   void remove() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_channel, null);
@@ -179,6 +189,8 @@ const _snapshot = <String, Object?>{
   'totalStorage': '2000',
   'totalMemory': '3000',
   'availableMemory': '4000',
+  'uptimeMillis': 74553635,
+  'bootMillis': 1700000000000,
 };
 
 const _location = <String, Object?>{
@@ -230,6 +242,11 @@ void main() {
       expect(device['tunesmith'], 'IDFV-1');
       expect(device['colickiest'], 'IDFA-1');
       expect(device['marathoners'], 1700000001000);
+      // 文档示例把设备运行时间写成字符串（"74553635"），参考端也是 String，
+      // 这里不能退化成 number。
+      expect(device['effloresced'], '74553635');
+      // 设备启动毫秒数在文档示例里是 number。
+      expect(device['disrelished'], 1700000000000);
       expect(device['counterblockade'], 'WIFI');
       // 传感器清单没有采集能力时按空数组上报，不用占位数据冒充。
       expect(device['overhard'], isEmpty);
@@ -297,22 +314,47 @@ void main() {
       },
     );
 
-    test('uploads whatever push token the device has, empty or not', () async {
-      await service.reportPushToken();
+    test('does not upload an empty token, the push_token event fills it in', () async {
+      // 冷启动时原生侧还没拿到 APNs token：此时一个空串都不能发，否则服务端
+      // 已登记的 token 会被覆盖，推送静默失效（线上抓包里的 `bettered=`）。
+      await service.start();
+      expect(harness.hasCall('/dropcloth/calipash'), isFalse);
 
-      // 本机还没拿到 token 就直接报空串，不做客户端拦截。
-      expect(harness.callTo('/dropcloth/calipash').body['bettered'], '');
-
+      // 原生侧拿到 token 后先更新缓存再发事件；重复事件不应再发第二条请求。
       native.pushToken = 'abc123';
-      await service.reportPushToken();
-      await service.reportPushToken();
+      final event = <String, Object?>{'type': 'push_token', 'token': 'abc123'};
+      await native.emit(event);
+      await native.emit(event);
+      await pumpEventQueue();
 
       final uploads = harness.calls
           .where((call) => call.path == '/dropcloth/calipash')
           .toList();
-      // 不去重：每次触发都上报，覆盖交给服务端。
-      expect(uploads.length, 3);
-      expect(uploads.last.body['bettered'], 'abc123');
+      expect(uploads.length, 1);
+      expect(uploads.single.body['bettered'], 'abc123');
+    });
+
+    test('uploads a given token once, but re-uploads after login', () async {
+      native.pushToken = 'abc123';
+      await service.reportPushToken();
+      // 启动路径、回前台、事件回调都会调到这里，同一个 token 不能重复发。
+      await service.reportPushToken();
+      await service.reportPushToken();
+
+      List<_Call> uploads() => harness.calls
+          .where((call) => call.path == '/dropcloth/calipash')
+          .toList();
+      expect(uploads().length, 1);
+
+      // 登录成功强制重报：换账号后服务端要按当前用户重新绑定 token。
+      await service.reportPushToken(force: true);
+      expect(uploads().length, 2);
+
+      // 系统换了新 token 仍然会重新上报。
+      native.pushToken = 'def456';
+      await service.reportPushToken();
+      expect(uploads().length, 3);
+      expect(uploads().last.body['bettered'], 'def456');
     });
 
     test('skips location and device upload without a session', () async {

@@ -21,7 +21,8 @@ import 'report_store.dart';
 /// - 位置与设备详情都要求登录态，没有会话时直接跳过；
 /// - 未授权的定位不上报，只有经纬度齐全的快照才算有效；
 /// - 设备详情必须加密后放在信封锁载荷字段里，不加密会直接被服务端丢弃；
-/// - 推送 token 原样上报（本机还没有就直接报空串），缓存与去重交给服务端；
+/// - 推送 token 只在拿到非空值后上报，同一个 token 本次进程只成功上报一次
+///   （登录成功例外：换账号要让服务端重新绑定）；空串绝不上报；
 /// - 定位缓存只活在本次进程里，不落盘；
 /// - 所有上报都是尽力而为：任何失败都不得影响用户流程。
 class ReportService {
@@ -60,6 +61,13 @@ class ReportService {
   bool _started = false;
   bool _starting = false;
   bool _reportingInstallSource = false;
+
+  /// 已经成功上报过的推送 token：同一个 token 不再发第二条请求。
+  final Set<String> _reportedPushTokens = <String>{};
+
+  /// 正在上报中的推送 token：启动路径与原生 `push_token` 事件可能同一刻触发，
+  /// 用它在途去重，避免同一个 token 并发发两次。
+  final Set<String> _reportingPushTokens = <String>{};
   bool _awaitingTracking = false;
   bool _requestingTracking = false;
   Future<ReportLocation?>? _pendingLocation;
@@ -95,6 +103,9 @@ class ReportService {
   }
 
   /// 回到前台：补一次渠道归因与推送 token。
+  ///
+  /// 推送 token 这里是非强制上报：只在还没成功上报过（上次失败、或系统换了
+  /// 新 token）时才真正发请求，避免每次切前台都重发同一条。
   Future<void> resumed() async {
     if (!_started) return;
     unawaited(reportInstallSource());
@@ -171,7 +182,8 @@ class ReportService {
     );
     unawaited(reportInstallSource());
     unawaited(reportLocationAndDevice());
-    unawaited(reportPushToken());
+    // 登录成功强制重报一次：换账号后服务端要按当前用户重新绑定这个 token。
+    unawaited(reportPushToken(force: true));
   }
 
   /// 上报风控埋点。
@@ -232,12 +244,26 @@ class ReportService {
 
   /// 上报 Apple 推送 token。
   ///
-  /// 与参考端一致：把本机当前的 token 原样发出去，本机还没拿到就直接报空串，
-  /// 不做判空、不去重、也不落盘。设备换 token 时客户端记住旧值反而会漏报，
-  /// 重复的由服务端按设备覆盖。
-  Future<void> reportPushToken() async {
+  /// 与参考端（dali_cash / peso_shield / fund_nexus 的同名实现）对齐：
+  /// - 本机还没拿到 token 时**不上报**。空串打到服务端只会把已登记的 token
+  ///   覆盖掉，推送就此静默失效；真正的 token 由原生的 `push_token` 事件补发
+  ///   （[start] 里已经订阅，原生 `onListen` 也会补发当前值）。
+  /// - 同一个 token 只成功上报一次。启动路径、回前台、事件回调会从多处触发，
+  ///   不拦就是同一 token 连发多条；失败不记账，之后还能重试。
+  /// - [force] 只给登录成功用：换账号后要让服务端把 token 重新绑到当前用户。
+  Future<void> reportPushToken({bool force = false}) async {
+    String? token;
     try {
-      await gatewayClient.reportPushToken(token: await bridge.pushToken());
+      token = (await bridge.pushToken()).trim();
+      if (token.isEmpty) return;
+      if (!force && _reportedPushTokens.contains(token)) return;
+      if (!_reportingPushTokens.add(token)) return;
+      try {
+        await gatewayClient.reportPushToken(token: token);
+        _reportedPushTokens.add(token);
+      } finally {
+        _reportingPushTokens.remove(token);
+      }
     } catch (error) {
       _log(error);
     }
@@ -306,6 +332,10 @@ class ReportService {
   }
 
   /// 授权流程结束后的收尾：渠道归因、APNs 注册、推送 token。
+  ///
+  /// `registerForRemoteNotifications` 只是登记，token 要等系统回调才会回到原生
+  /// 侧；这里紧接着读一次通常还是空串，[reportPushToken] 会直接跳过，真正的
+  /// 上报由原生 `push_token` 事件触发。
   Future<void> _afterPermissions() async {
     _awaitingTracking = false;
     await reportInstallSource();

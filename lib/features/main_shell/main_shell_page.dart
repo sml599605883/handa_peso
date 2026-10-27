@@ -133,6 +133,20 @@ class _RouteReturnListenerState extends State<_RouteReturnListener>
     unawaited(Get.find<MainController>().onRouteReturned());
   }
 
+  /// 外壳被重新推入栈顶：`toMain` 在外壳不在栈里时会用 `offAllNamed` 重建，
+  /// 而重建不会触发 `didPopNext`，需要在这里补一次刷新。
+  ///
+  /// 首次启动时这里也会收到一次推送，控制器 `onInit` 的数据请求还在进行中，
+  /// 由 `loadOverview` 的请求中守卫忽略。`subscribe` 是在首帧构建过程中回调的，
+  /// 直接改响应式状态会触发「build 期间 markNeedsBuild」，所以推迟到帧后。
+  @override
+  void didPush() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(Get.find<MainController>().onShellShown());
+    });
+  }
+
   @override
   void didPushNext() {
     Get.find<MainController>().onRouteLeft();

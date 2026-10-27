@@ -5,6 +5,7 @@ import CoreLocation
 import CoreTelephony
 import Darwin
 import Flutter
+import NetworkExtension
 import SystemConfiguration
 import SystemConfiguration.CaptiveNetwork
 import UIKit
@@ -52,7 +53,7 @@ final class ReportBridgeRegistrar: NSObject, FlutterStreamHandler, CLLocationMan
       }
       switch call.method {
       case "getDeviceSnapshot":
-        result(self.deviceSnapshot())
+        self.deviceSnapshot { result($0) }
       case "getLocation":
         self.collectLocation(result)
       case "requestLocationPermission":
@@ -309,12 +310,25 @@ final class ReportBridgeRegistrar: NSObject, FlutterStreamHandler, CLLocationMan
 
   // MARK: - 设备快照
 
-  private func deviceSnapshot() -> [String: Any] {
+  private func deviceSnapshot(completion: @escaping ([String: Any]) -> Void) {
+    // SSID/BSSID 在 iOS 上只能异步取（`NEHotspotNetwork` 是回调式），因此整份
+    // 快照改成回调式：Dart 侧的方法调用结果等 Wi-Fi 结果回来再回传。
+    currentWifi { [weak self] wifi in
+      guard let self else {
+        completion([:])
+        return
+      }
+      completion(self.buildSnapshot(wifi: wifi))
+    }
+  }
+
+  private func buildSnapshot(
+    wifi: (ssid: String, bssid: String, count: Int)
+  ) -> [String: Any] {
     UIDevice.current.isBatteryMonitoringEnabled = true
     let screen = UIScreen.main
     let bounds = screen.bounds
     let network = networkInfo()
-    let wifi = currentWifi()
     let memory = memoryStats()
     let storage = storageStats()
     let interfaces = ipv4Interfaces()
@@ -331,7 +345,7 @@ final class ReportBridgeRegistrar: NSObject, FlutterStreamHandler, CLLocationMan
       "innerIp": interfaces.first { $0.0 == "en0" }?.1 ?? interfaces.first?.1 ?? "",
       "wifiName": wifi.ssid,
       "wifiBssid": wifi.bssid,
-      "wifiCount": 0,
+      "wifiCount": wifi.count,
       "isUsingProxy": isUsingProxy() ? 1 : 0,
       "isUsingVpn": isUsingVpn(interfaces: interfaces) ? 1 : 0,
       "isJailbroken": isJailbroken() ? 1 : 0,
@@ -418,9 +432,56 @@ final class ReportBridgeRegistrar: NSObject, FlutterStreamHandler, CLLocationMan
     return String(format: "%.1f", diagonalPoints * scale / 163.0)
   }
 
-  private func currentWifi() -> (ssid: String, bssid: String) {
+  /// 当前 Wi-Fi 的 SSID / BSSID，以及当前连着的网络数（对应接口文档 `mannose`）。
+  ///
+  /// iOS 13 起系统要求同时满足三条才会返回热点信息，缺任何一条都只能拿到 nil：
+  /// 1. App 具备 `com.apple.developer.networking.wifi-info` 能力（见
+  ///    `Runner.entitlements`，且描述文件里也要打开 Access Wi-Fi Information）；
+  /// 2. 用户已授予「使用 App 期间」定位权限；
+  /// 3. 设备确实连着 Wi-Fi（模拟器永远拿不到）。
+  ///
+  /// 这里先用 `CNCopyCurrentNetworkInfo`；iOS 14 起再用
+  /// `NEHotspotNetwork.fetchCurrent` 兜底——参考端 Salmon Loan 在 iOS 26 上
+  /// 就是直接走这个接口，说明 CNCopy 系列在新系统上已经不可靠。
+  private func currentWifi(
+    completion: @escaping ((ssid: String, bssid: String, count: Int)) -> Void
+  ) {
+    let legacy = legacyWifi()
+    guard legacy.ssid.isEmpty && legacy.bssid.isEmpty else {
+      completion(legacy)
+      return
+    }
+    guard #available(iOS 14.0, *) else {
+      completion(legacy)
+      return
+    }
+
+    // 回调和超时都落在主队列，`finished` 只可能被主队列读写；
+    // fetchCurrent 在系统内部异常时不保证一定回调，超时就按“取不到”返回，
+    // 不能让 Dart 侧一直等这份快照。
+    var finished = false
+    let finish: ((ssid: String, bssid: String, count: Int)) -> Void = { wifi in
+      guard !finished else { return }
+      finished = true
+      completion(wifi)
+    }
+
+    NEHotspotNetwork.fetchCurrent { network in
+      let ssid = network?.ssid ?? ""
+      let bssid = network?.bssid ?? ""
+      DispatchQueue.main.async {
+        finish((ssid, bssid, ssid.isEmpty && bssid.isEmpty ? 0 : 1))
+      }
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+      finish(legacy)
+    }
+  }
+
+  /// 老接口：仅 iOS 13+ 且能力、定位权限都具备时才拿得到值。
+  private func legacyWifi() -> (ssid: String, bssid: String, count: Int) {
     guard let interfaces = CNCopySupportedInterfaces() as? [String] else {
-      return ("", "")
+      return ("", "", 0)
     }
     for name in interfaces {
       guard let info = CNCopyCurrentNetworkInfo(name as CFString) as? [String: Any] else {
@@ -429,11 +490,11 @@ final class ReportBridgeRegistrar: NSObject, FlutterStreamHandler, CLLocationMan
       let ssid = info[kCNNetworkInfoKeySSID as String] as? String ?? ""
       let bssid = info[kCNNetworkInfoKeyBSSID as String] as? String ?? ""
       if !ssid.isEmpty || !bssid.isEmpty {
-        return (ssid, bssid)
+        return (ssid, bssid, 1)
       }
     }
-    // 未申请 wifi-info 权限时系统不返回热点信息，如实留空。
-    return ("", "")
+    // 能力/定位权限缺失，或当前没连 Wi-Fi：如实留空，不用占位数据。
+    return ("", "", 0)
   }
 
   private func ipv4Interfaces() -> [(String, String)] {
