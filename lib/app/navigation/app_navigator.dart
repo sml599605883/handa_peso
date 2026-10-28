@@ -822,11 +822,11 @@ abstract final class AppNavigator {
 
   /// 定位受系统限制或服务关闭时的说明，返回用户是否选择去系统设置。
   ///
-  /// 这里承接用户仍可继续申请的分支：选择「Not Now」时调用方照常继续，
-  /// 选择去设置则由系统设置页接管本次流程。
+  /// 这里承接用户仍可继续申请的分支：选择左侧按钮（权限被拒时 Back、定位服务
+  /// 关闭时 Close）调用方照常继续，选择去设置则由系统设置页接管本次流程。
   ///
-  /// 文案按本应用自己的口径写，不要从别的工程整段搬运——用户可见的长文案是
-  /// 跨应用比对时最直接的特征。
+  /// 文案按产品给的口径原样落地，不要自行润色——用户可见的长文案是跨应用比对
+  /// 时最直接的特征。
   static Future<bool> showLocationPermissionPrompt({
     required bool serviceDisabled,
   }) async {
@@ -836,15 +836,15 @@ abstract final class AppNavigator {
     return showIosPermissionPrompt(
       context,
       title: serviceDisabled
-          ? 'Location Services Are Off'
+          ? 'Location Is Unavailable'
           : 'Location Access Is Off',
       message: serviceDisabled
-          ? 'Location Services is switched off on this device. Turn it on '
-                'in Settings to finish the location check, or continue '
-                'without it.'
-          : 'Your location is collected once during review to confirm '
-                'your address and protect your account. Allow it in '
-                'Settings, or continue without it.',
+          ? 'Please turn on your device location service to make location '
+                'information available for this step.'
+          : 'Your location is not available for this step. Turn on access to '
+                'provide the information needed for the review.',
+      cancelLabel: serviceDisabled ? 'Close' : 'Back',
+      confirmLabel: serviceDisabled ? 'Open Settings' : 'Enable Now',
     );
   }
 

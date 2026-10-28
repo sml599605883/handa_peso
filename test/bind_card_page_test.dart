@@ -131,10 +131,15 @@ String _cardBody({int groupCount = 3}) {
 }
 
 class _StubAdapter implements HttpClientAdapter {
-  _StubAdapter({required this.cardBody, this.requireLiveness = false});
+  _StubAdapter({
+    required this.cardBody,
+    this.requireLiveness = false,
+    this.needsIdentityUpload = false,
+  });
 
   final String cardBody;
   final bool requireLiveness;
+  final bool needsIdentityUpload;
   final List<Map<String, String>> bindBodies = <Map<String, String>>[];
   final List<Map<String, String>> switchBodies = <Map<String, String>>[];
   final List<String> paths = <String>[];
@@ -164,6 +169,11 @@ class _StubAdapter implements HttpClientAdapter {
       );
     }
     if (path.endsWith('/postforming')) {
+      if (needsIdentityUpload) {
+        return _json(
+          '{"unaccepted":"0","unstably":"success","indulgences":{"beet":400}}',
+        );
+      }
       return _json(
         '{"unaccepted":"0","unstably":"success","indulgences":'
         '{"beet":200,"districts":"","obsoletely":"license-1",'
@@ -574,6 +584,54 @@ void main() {
     expect(adapter.bindBodies, hasLength(1));
     expect(reporter.reports, hasLength(1));
     expect(reporter.reports.single.orderNo, 'ORDER-CACHED');
+  });
+
+  testWidgets('token 返回 400 时弹重传证件弹窗，不拉起活体也不完成绑卡', (tester) async {
+    final adapter = _StubAdapter(
+      cardBody: _cardBody(),
+      requireLiveness: true,
+      needsIdentityUpload: true,
+    );
+    final outcome = BindCardFlowOutcome();
+    var livenessStarted = false;
+    await _pumpPage(
+      tester,
+      client: _clientFor(adapter),
+      outcome: outcome,
+      camera: () async => PermissionDecision.granted,
+      liveness: (license) async {
+        livenessStarted = true;
+        return const FaceLivenessResult(
+          success: true,
+          code: 200,
+          message: '',
+          image: '',
+          livenessId: 'live-1',
+          requestId: 'request-1',
+          rawJson: '{}',
+        );
+      },
+    );
+
+    await tester.enterText(
+      find.byKey(const Key('bind-card-input-1:cardNo')),
+      '09171234567',
+    );
+    await tester.enterText(
+      find.byKey(const Key('bind-card-input-1:confirmCardNo')),
+      '09171234567',
+    );
+    await tester.tap(find.byKey(const Key('bind-card-submit')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('ID Photo Not Accepted'), findsOneWidget);
+    expect(livenessStarted, isFalse);
+    expect(outcome.completed, isFalse);
+    expect(adapter.bindBodies, hasLength(1));
+
+    await tester.tap(find.text('Maybe Later'));
+    await tester.pumpAndSettle();
+    expect(find.text('ID Photo Not Accepted'), findsNothing);
   });
 
   testWidgets('20000 时只要求 livenessId 并完成二次提交', (tester) async {

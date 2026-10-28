@@ -428,10 +428,10 @@ abstract final class IdentityStrings {
   static const String uploadFailed = 'Upload failed';
   static const String saveFailed = 'Unable to save your ID information.';
   static const String photoFailed = 'Unable to read the selected photo.';
-  static const String cameraPermissionTitle = 'Allow Camera Access';
+  static const String cameraPermissionTitle = 'Camera Permission Off';
   static const String cameraPermissionBody =
-      'Camera access is required to capture your ID photo. You can turn it on '
-      'in Settings.';
+      'Camera access is disabled. Please allow access before taking your ID '
+      'photo and facial image.';
 }
 
 /// 左上角返回键：与其它二级页面同款切片，没有可返回的页面时回到外壳。

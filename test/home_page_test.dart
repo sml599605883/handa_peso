@@ -1357,7 +1357,7 @@ void main() {
 
       // 刚在系统弹窗里点「不允许」也要说明一次，不能看起来没反应。
       expect(find.text('Location Access Is Off'), findsOneWidget);
-      await tester.tap(find.text('Not Now'));
+      await tester.tap(find.text('Back'));
       await tester.pumpAndSettle();
 
       expect(permissions.settingsOpened, isFalse);
@@ -1374,7 +1374,7 @@ void main() {
 
       await tester.tapAt(const Offset(180, 200));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Open Settings'));
+      await tester.tap(find.text('Enable Now'));
       await tester.pumpAndSettle();
 
       expect(permissions.settingsOpened, isTrue);
@@ -1396,7 +1396,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Location Access Is Off'), findsOneWidget);
-      await tester.tap(find.text('Not Now'));
+      await tester.tap(find.text('Back'));
       await tester.pumpAndSettle();
 
       expect(adapter.applyCalls, 1);
@@ -1426,7 +1426,7 @@ void main() {
     testWidgets('定位弹窗关闭触发的首页刷新不会把申请转圈顶掉', (tester) async {
       // 首页刷新比申请慢：弹窗关闭后首页会重新拉一次 overview，如果这次刷新
       // 也去抢 EasyLoading 单例，申请那边的 showLoading Future 会被顶掉、
-      // 永远不返回，表现为点 Not Now 后没有后续。
+      // 永远不返回，表现为点 Back 后没有后续。
       final adapter = _StubAdapter((options) async {
         final url = options.uri.toString();
         if (url.contains('indulgences')) {
@@ -1444,7 +1444,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Location Access Is Off'), findsOneWidget);
 
-      await tester.tap(find.text('Not Now'));
+      await tester.tap(find.text('Back'));
       await tester.pumpAndSettle();
 
       expect(adapter.applyCalls, 1);
@@ -1463,15 +1463,15 @@ void main() {
 
       expect(find.text('Location Access Is Off'), findsOneWidget);
       final cancel = tester.widget<CupertinoDialogAction>(
-        find.widgetWithText(CupertinoDialogAction, 'Not Now'),
+        find.widgetWithText(CupertinoDialogAction, 'Back'),
       );
       final openSettings = tester.widget<CupertinoDialogAction>(
-        find.widgetWithText(CupertinoDialogAction, 'Open Settings'),
+        find.widgetWithText(CupertinoDialogAction, 'Enable Now'),
       );
       expect(cancel.textStyle?.color, AppColors.textMuted);
       expect(openSettings.textStyle?.color, AppColors.identityTitle);
 
-      await tester.tap(find.text('Not Now'));
+      await tester.tap(find.text('Back'));
       await tester.pumpAndSettle();
 
       expect(permissions.settingsOpened, isFalse);
@@ -1488,7 +1488,7 @@ void main() {
 
       await tester.tapAt(const Offset(180, 200));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Open Settings'));
+      await tester.tap(find.text('Enable Now'));
       await tester.pumpAndSettle();
 
       expect(permissions.settingsOpened, isTrue);
@@ -1508,9 +1508,9 @@ void main() {
       await tester.tapAt(const Offset(180, 200));
       await tester.pumpAndSettle();
 
-      expect(find.text('Location Services Are Off'), findsOneWidget);
+      expect(find.text('Location Is Unavailable'), findsOneWidget);
 
-      await tester.tap(find.text('Not Now'));
+      await tester.tap(find.text('Close'));
       await tester.pumpAndSettle();
 
       expect(adapter.applyCalls, 1);

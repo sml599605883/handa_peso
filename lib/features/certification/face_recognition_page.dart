@@ -21,6 +21,7 @@ import '../../core/report/report_service.dart';
 import '../main_shell/main_controller.dart';
 import 'face_models.dart';
 import 'identity_design.dart';
+import 'widgets/identity_reupload_dialog.dart';
 import 'widgets/identity_retention_guard.dart';
 
 typedef FaceImageWriter = Future<String> Function(String imageBase64);
@@ -211,6 +212,8 @@ class _FaceRecognitionPageState extends State<FaceRecognitionPage>
           context,
           title: FaceStrings.cameraPermissionTitle,
           message: FaceStrings.cameraPermissionBody,
+          cancelLabel: 'Skip',
+          confirmLabel: 'Turn On',
         );
         if (openSettings && mounted) _permissions.openSettings();
         return;
@@ -219,12 +222,11 @@ class _FaceRecognitionPageState extends State<FaceRecognitionPage>
       final orderNo = await _resolveOrderNo();
       if (!mounted || orderNo.isEmpty) return;
 
+      // 证件类型只用于最终上传的 `scarriest` 字段，不作为「是否已传证件」的
+      // 判断依据：本地缓存可能被清掉，但服务端已有记录。是否重传由 token 接口
+      // 的 resultCode 决定。
       final cardType = await _resolveCardType();
       if (!mounted) return;
-      if (cardType.isEmpty) {
-        await _showIdentityUploadDialog();
-        return;
-      }
 
       await AppNavigator.showLoading();
       final tokenReply = await _apiClient.fetchLivenessToken(
@@ -234,7 +236,9 @@ class _FaceRecognitionPageState extends State<FaceRecognitionPage>
       final token = FaceTokenResult.fromReply(tokenReply);
       if (token.needsIdentityUpload) {
         await AppNavigator.dismissLoading();
-        if (mounted) await _showIdentityUploadDialog();
+        if (mounted) {
+          await showIdentityReuploadDialog(context, productId: _productId);
+        }
         return;
       }
       tokenReply.orThrow();
@@ -357,30 +361,6 @@ class _FaceRecognitionPageState extends State<FaceRecognitionPage>
     }
   }
 
-  Future<void> _showIdentityUploadDialog() async {
-    if (!mounted) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text(FaceStrings.identityRequiredTitle),
-        content: const Text(FaceStrings.identityRequiredBody),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Confirm'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-    await AppNavigator.toIdentityVerification(productId: _productId);
-  }
-
   static Future<String> _writeFaceImage(String imageBase64) async {
     final normalized = imageBase64.contains(',')
         ? imageBase64.split(',').last
@@ -401,10 +381,8 @@ abstract final class FaceStrings {
   static const livenessFailed = 'Face verification was not completed.';
   static const verificationFailed =
       'Face verification failed. Please try again.';
-  static const identityRequiredTitle = 'Upload Your ID Again';
-  static const identityRequiredBody =
-      'Please select your ID type and upload your ID again to continue face verification.';
-  static const cameraPermissionTitle = 'Allow Camera Access';
+  static const cameraPermissionTitle = 'Camera Permission Off';
   static const cameraPermissionBody =
-      'Camera access is required for face verification. You can turn it on in Settings.';
+      'Camera access is disabled. Please allow access before taking your ID '
+      'photo and facial image.';
 }

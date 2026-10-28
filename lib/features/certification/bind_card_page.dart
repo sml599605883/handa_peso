@@ -24,6 +24,7 @@ import 'face_models.dart';
 import 'identity_design.dart';
 import 'personal_information_models.dart';
 import 'widgets/certification_progress_bar.dart';
+import 'widgets/identity_reupload_dialog.dart';
 import 'widgets/personal_information_selectors.dart';
 
 typedef BindCardCameraPermission = Future<PermissionDecision> Function();
@@ -389,10 +390,12 @@ class _BindCardPageState extends State<BindCardPage> {
     if (permission != PermissionDecision.granted) {
       final openSettings = await showIosPermissionPrompt(
         context,
-        title: 'Allow Camera Access',
+        title: 'Camera Permission Off',
         message:
-            'Camera access is required to verify your identity before '
-            'binding this payout account.',
+            'Camera access is disabled. Please allow access before taking your '
+            'ID photo and facial image.',
+        cancelLabel: 'Skip',
+        confirmLabel: 'Turn On',
       );
       if (openSettings) await _permissions.openSettings();
       return null;
@@ -408,8 +411,17 @@ class _BindCardPageState extends State<BindCardPage> {
         orderNo: orderNo,
         livenessType: '1',
       );
-      tokenReply.orThrow();
+      // 与认证人脸同一个接口：resultCode=400 表示证件不合格、需要重传，这里
+      // 也要把用户引到证件流程，而不是只抛一句「无法开始人脸核身」。
       final token = FaceTokenResult.fromReply(tokenReply);
+      if (token.needsIdentityUpload) {
+        await AppNavigator.dismissLoading();
+        if (mounted) {
+          await showIdentityReuploadDialog(context, productId: _productId);
+        }
+        return null;
+      }
+      tokenReply.orThrow();
       if (!token.isReady) {
         throw GatewayFailure(
           token.error.isEmpty

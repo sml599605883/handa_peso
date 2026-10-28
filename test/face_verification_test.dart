@@ -186,18 +186,67 @@ void main() {
 
       expect(find.byType(CupertinoAlertDialog), findsOneWidget);
       final cancel = tester.widget<CupertinoDialogAction>(
-        find.widgetWithText(CupertinoDialogAction, 'Not Now'),
+        find.widgetWithText(CupertinoDialogAction, 'Skip'),
       );
       final openSettings = tester.widget<CupertinoDialogAction>(
-        find.widgetWithText(CupertinoDialogAction, 'Open Settings'),
+        find.widgetWithText(CupertinoDialogAction, 'Turn On'),
       );
       expect(cancel.textStyle?.color, AppColors.textMuted);
       expect(openSettings.textStyle?.color, AppColors.identityTitle);
 
-      await tester.tap(find.text('Not Now'));
+      await tester.tap(find.text('Skip'));
       await tester.pumpAndSettle();
       expect(find.byType(CupertinoAlertDialog), findsNothing);
       expect(outcome.completed, isFalse);
+    });
+
+    testWidgets('token 返回 400 时弹重传证件弹窗，不拉起活体', (tester) async {
+      adapter.tokenBody =
+          '{"unaccepted":"00","unstably":"success","indulgences":{"beet":400}}';
+      final outcome = FaceVerificationOutcome();
+      await _pumpFacePage(
+        tester,
+        adapter: adapter,
+        reporter: reporter,
+        outcome: outcome,
+      );
+
+      await tester.tap(find.byKey(const Key('face-recognition-submit')));
+      await _pumpUntil(
+        tester,
+        () => find.text('ID Photo Not Accepted').evaluate().isNotEmpty,
+      );
+
+      expect(find.text('ID Photo Not Accepted'), findsOneWidget);
+      expect(find.text('Maybe Later'), findsOneWidget);
+      expect(find.text('Take Photo'), findsOneWidget);
+      expect(outcome.completed, isFalse);
+      expect(adapter.where('sikes'), isEmpty);
+
+      await tester.tap(find.text('Maybe Later'));
+      await tester.pumpAndSettle();
+      expect(find.text('ID Photo Not Accepted'), findsNothing);
+      expect(find.byType(FaceRecognitionPage), findsOneWidget);
+      await _drainEasyLoading(tester);
+    });
+
+    testWidgets('本地没有证件类型时不再提前弹窗，是否重传只看 token', (tester) async {
+      final outcome = FaceVerificationOutcome();
+      await _pumpFacePage(
+        tester,
+        adapter: adapter,
+        reporter: reporter,
+        outcome: outcome,
+        cardType: '',
+      );
+
+      await tester.tap(find.byKey(const Key('face-recognition-submit')));
+      await _pumpUntil(tester, () => adapter.where('postforming').isNotEmpty);
+
+      // 没有提前拦截：token 请求照常发出，弹窗与否由服务端 resultCode 决定。
+      expect(find.text('ID Photo Not Accepted'), findsNothing);
+      expect(adapter.where('postforming'), hasLength(1));
+      await _drainEasyLoading(tester);
     });
 
     testWidgets('人脸页返回：请求 scene=1 的挽留弹窗，继续时留在当前页', (tester) async {
@@ -276,7 +325,11 @@ class _RecordedRequest {
 
 class _FaceAdapter implements HttpClientAdapter {
   String uploadBody =
-      '{"unaccepted":"0","unstably":"成功","indulgences":{"waded":99}}';
+      '{"unaccepted":"0","unstably":"success","indulgences":{"waded":99}}';
+  String tokenBody =
+      '{"unaccepted":"00","unstably":"success","indulgences":{'
+      '"beet":"200","districts":"","obsoletely":"license-1",'
+      '"genomes":"","esplanades":7}}';
   final requests = <_RecordedRequest>[];
 
   List<_RecordedRequest> where(String fragment) => requests
@@ -304,13 +357,7 @@ class _FaceAdapter implements HttpClientAdapter {
 
     final url = options.uri.toString();
     if (url.contains('unchivalrous')) return _json(_retentionBody);
-    if (url.contains('postforming')) {
-      return _json(
-        '{"unaccepted":"00","unstably":"成功","indulgences":{'
-        '"beet":"200","districts":"","obsoletely":"license-1",'
-        '"genomes":"","esplanades":7}}',
-      );
-    }
+    if (url.contains('postforming')) return _json(tokenBody);
     if (url.contains('sikes')) return _json(uploadBody);
     return _json('{"unaccepted":"0","unstably":"success","indulgences":{}}');
   }
@@ -397,6 +444,7 @@ Future<void> _pumpFacePage(
   required _FaceSpyReportService reporter,
   required FaceVerificationOutcome outcome,
   PermissionCoordinator? permissions,
+  String cardType = 'SSS ID',
 }) async {
   tester.view.physicalSize = const Size(375, 812);
   tester.view.devicePixelRatio = 1;
@@ -446,7 +494,7 @@ Future<void> _pumpFacePage(
     arguments: <String, dynamic>{
       'productId': '1000460',
       'orderNo': 'ORDER-1',
-      'cardType': 'SSS ID',
+      'cardType': cardType,
       FaceVerificationOutcome.argumentKey: outcome,
     },
   );

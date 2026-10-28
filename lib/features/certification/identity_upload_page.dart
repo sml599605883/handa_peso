@@ -211,6 +211,8 @@ class _IdentityUploadPageState extends State<IdentityUploadPage>
           context,
           title: IdentityStrings.cameraPermissionTitle,
           message: IdentityStrings.cameraPermissionBody,
+          cancelLabel: 'Skip',
+          confirmLabel: 'Turn On',
         );
         if (openSettings && mounted) _permissions.openSettings();
         return;
