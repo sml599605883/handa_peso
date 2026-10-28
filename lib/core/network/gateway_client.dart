@@ -436,10 +436,13 @@ class GatewayClient extends GatewayTransport {
   }
 
   /// 用历史订单重新下单。
+  ///
+  /// 订单号字段按接口文档《原卡重试确认订单》取 `redecorates`——订单列表、
+  /// 换卡、H5 桥读取订单号用的也是这个字段，`chattinesses` 在文档里不存在。
   Future<GatewayReply> reorderExistingLoan({required String orderNo}) {
     return write(
       GatewayRoutes.userReloan,
-      body: <String, dynamic>{'chattinesses': orderNo},
+      body: <String, dynamic>{'redecorates': orderNo},
     );
   }
 

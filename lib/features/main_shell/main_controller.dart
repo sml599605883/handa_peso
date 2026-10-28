@@ -258,7 +258,7 @@ class MainController extends GetxController with WidgetsBindingObserver {
             orderNo: item.orderNo,
           );
           if (result.changed && result.redirectUrl.isNotEmpty) {
-            await AppNavigator.openTarget(
+            await _openTargetWithLoading(
               result.redirectUrl,
               title: _loanDetailTitle,
               cleanWorkflowForWeb: true,
@@ -289,7 +289,7 @@ class MainController extends GetxController with WidgetsBindingObserver {
         } finally {
           await AppNavigator.dismissLoading();
         }
-        await AppNavigator.openTarget(
+        await _openTargetWithLoading(
           target,
           title: _loanDetailTitle,
           cleanWorkflowForWeb: true,
@@ -298,7 +298,7 @@ class MainController extends GetxController with WidgetsBindingObserver {
       }
       final target = action.route.trim();
       if (target.isNotEmpty) {
-        await AppNavigator.openTarget(target, title: _repaymentTitle);
+        await _openTargetWithLoading(target, title: _repaymentTitle);
         return;
       }
       await _openLoanProgressTarget(item);
@@ -308,12 +308,42 @@ class MainController extends GetxController with WidgetsBindingObserver {
   Future<void> _openLoanProgressTarget(LoanProgressItem item) async {
     final target = item.detailRoute.trim();
     if (target.isNotEmpty) {
-      await AppNavigator.openTarget(target, title: _loanDetailTitle);
+      await _openTargetWithLoading(target, title: _loanDetailTitle);
       return;
     }
-    final productId = item.productId.trim();
-    if (productId.isEmpty) return;
-    await applyNow(productId);
+    // 没有详情地址就回到准入接口：服务端可能既没下发地址也没下发产品 ID，
+    // 这次点击该不该放行由它判断。产品 ID 为空时按服务端要求原样发空串，
+    // 不套用主卡片入口的 `home_card` 兜底。
+    await applyNow(item.productId, fallbackProductId: '');
+  }
+
+  /// 打开目标页，转圈一直挂到目标页首屏出来。
+  ///
+  /// 内置 WebView 由 `AppWebViewPage` 在首屏加载完成（或失败）时收起；原生页面
+  /// 没有加载回调，压栈那一帧就收掉。[AppNavigator.openTarget] 的 Future 要等
+  /// 目标页关闭才完成，不能拿它当"页面已就绪"的信号。
+  Future<void> _openTargetWithLoading(
+    String target, {
+    required String title,
+    bool cleanWorkflowForWeb = false,
+  }) async {
+    await AppNavigator.showNavigationLoading();
+    try {
+      final opening = AppNavigator.openTarget(
+        target,
+        title: title,
+        cleanWorkflowForWeb: cleanWorkflowForWeb,
+      );
+      await WidgetsBinding.instance.endOfFrame;
+      // 原生页面没有首屏回调：压栈完成即可收起，只有内置 WebView 继续等。
+      if (Get.currentRoute != AppRoutes.webView) {
+        unawaited(AppNavigator.dismissNavigationLoading());
+      }
+      await opening;
+    } finally {
+      // 从目标页返回、或跳转中途出错时兜底收掉，别把转圈留在壳上。
+      unawaited(AppNavigator.dismissNavigationLoading());
+    }
   }
 
   /// 进度卡片只允许一次跳转在途，避免连点叠出多个落地页。
@@ -517,15 +547,20 @@ class MainController extends GetxController with WidgetsBindingObserver {
   ///
   /// [reportApplyTap] 为假时不记「点击申请」埋点：重新授信轮询器在授信完成后
   /// 自动续跑准入，这不是一次新的用户点击，不能把同一次申请算成两次点击。
+  ///
+  /// [fallbackProductId] 是产品 ID 为空时下发的值。主卡片入口没有产品 ID，用
+  /// `home_card` 作为会话标签；进度卡片按服务端要求原样透传空串。
   Future<void> applyNow(
     String productId, {
     bool requestLocation = true,
     int source = 0,
     bool reportApplyTap = true,
+    String fallbackProductId = _homeApplyProductId,
   }) async {
-    final appliedProductId = productId.trim().isEmpty
-        ? _homeApplyProductId
-        : productId.trim();
+    final trimmedProductId = productId.trim();
+    final appliedProductId = trimmedProductId.isEmpty
+        ? fallbackProductId
+        : trimmedProductId;
     // 连点只走一次：准入会在服务端留痕，重复请求既脏数据也会叠出多个落地页。
     if (_applying) return;
     _applying = true;

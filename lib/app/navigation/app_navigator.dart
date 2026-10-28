@@ -796,6 +796,43 @@ abstract final class AppNavigator {
     return Future<void>.value();
   }
 
+  /// 打开二级页面前的转圈是否还挂着。
+  ///
+  /// 与 [showLoading] 的区别是收尾方不同：普通 loading 由发起的流程自己收，
+  /// 这个由目标页在首屏就绪后收（H5 的 `onLoadStop` / 原生页压栈那一帧），
+  /// 因此要记住"当前这个转圈是跳转挂的"，别把别的流程的转圈误收掉。
+  static bool _navigationLoading = false;
+
+  /// 跳转转圈的兜底定时器：目标页不回报时也要收，见 [showNavigationLoading]。
+  static Timer? _navigationLoadingTimer;
+
+  /// 打开二级页面前的转圈：一直挂到目标页首屏加载出来。
+  ///
+  /// [timeout] 是兜底：断网或页面卡住时 H5 不会回调 `onLoadStop`，全屏遮罩
+  /// 不能一直盖在壳上，否则所有入口都被锁死。
+  static Future<void> showNavigationLoading({
+    Duration timeout = const Duration(seconds: 8),
+  }) {
+    _navigationLoading = true;
+    _navigationLoadingTimer?.cancel();
+    _navigationLoadingTimer = Timer(timeout, () {
+      unawaited(dismissNavigationLoading());
+    });
+    return showLoading();
+  }
+
+  /// 目标页首屏就绪（或加载失败）后收起跳转转圈。
+  ///
+  /// 没有跳转转圈在挂时什么都不做：进 H5 之后的站内跳转同样会触发
+  /// `onLoadStop`，不能让它把申请、重试这些流程自己的转圈收掉。
+  static Future<void> dismissNavigationLoading() {
+    _navigationLoadingTimer?.cancel();
+    _navigationLoadingTimer = null;
+    if (!_navigationLoading) return Future<void>.value();
+    _navigationLoading = false;
+    return dismissLoading();
+  }
+
   static void showToast(String message) => EasyLoading.showToast(message);
 
   /// 屏幕正中的提示浮层（设计稿 01-02 - 登录 的提示样式）。

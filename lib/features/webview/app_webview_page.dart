@@ -453,6 +453,9 @@ class _AppWebViewPageState extends State<AppWebViewPage> {
                       if (!mounted || !identical(controller, _controller)) {
                         return;
                       }
+                      // 跳转转圈一直挂到首屏出来：加载完成才收，站内跳转重复
+                      // 触发时是空操作（见 `dismissNavigationLoading`）。
+                      unawaited(AppNavigator.dismissNavigationLoading());
                       final pageTitle = await controller.getTitle();
                       if (!mounted) return;
                       setState(() {
@@ -478,6 +481,9 @@ class _AppWebViewPageState extends State<AppWebViewPage> {
                           request.isForMainFrame != true) {
                         return;
                       }
+                      // 首屏打不开时不能再等加载完成，转圈立刻收掉，让用户看到
+                      // 页面自己的失败提示与重试。
+                      unawaited(AppNavigator.dismissNavigationLoading());
                       setState(() {
                         _loading = false;
                         _failed = true;

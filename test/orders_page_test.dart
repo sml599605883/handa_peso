@@ -106,6 +106,7 @@ class _RecordingMainController extends MainController {
     bool requestLocation = true,
     int source = 0,
     bool reportApplyTap = true,
+    String fallbackProductId = 'home_card',
   }) async {
     appliedProductIds.add(productId);
     appliedSources.add(source);

@@ -172,20 +172,36 @@ class _ProgressBody extends StatelessWidget {
 
     final message = error;
     if (message != null) {
-      return AppEmptyState(
-        icon: Icons.cloud_off_rounded,
-        title: 'We could not load your loans',
-        description: message,
-        action: FilledButton(
-          key: const Key('loan-progress-retry'),
-          onPressed: () => onRefresh(),
-          child: const Text('Try again'),
+      // 失败态同样要能下拉刷新：RefreshIndicator 必须包住一个可滚动的子节点，
+      // 因此把错误面板放进撑满视口的滚动区域，否则下拉手势不会触发。
+      return RefreshIndicator(
+        onRefresh: onRefresh,
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: AppEmptyState(
+                icon: Icons.cloud_off_rounded,
+                title: 'We could not load your loans',
+                description: message,
+                action: FilledButton(
+                  key: const Key('loan-progress-retry'),
+                  onPressed: () => onRefresh(),
+                  child: const Text('Try again'),
+                ),
+              ),
+            ),
+          ),
         ),
       );
     }
 
     if (items.isEmpty) {
-      return _EmptyProgress(scale: scale, listTop: listTop, onApply: onApply);
+      return RefreshIndicator(
+        onRefresh: onRefresh,
+        child: _EmptyProgress(scale: scale, listTop: listTop, onApply: onApply),
+      );
     }
 
     final gap = LoanProgressPage._cardGap * scale;

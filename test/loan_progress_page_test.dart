@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:get/get.dart';
+import 'package:handa_peso/app/navigation/app_navigator.dart';
 import 'package:handa_peso/app/navigation/app_route_observer.dart';
 import 'package:handa_peso/app/routes/app_routes.dart';
 import 'package:handa_peso/app/widgets/app_empty_state.dart';
@@ -63,14 +64,35 @@ class _StubAdapter implements HttpClientAdapter {
 }
 
 /// 内置 WebView 的替身：把拿到的地址渲染出来，便于断言跳转目标。
-class _WebViewStub extends StatelessWidget {
+///
+/// 和真实页面一样，首帧之后就回调一次「首屏加载完成」（真实页面是
+/// `onLoadStop`），让跳转转圈收掉；地址里带 `never-loads` 的用例用它模拟
+/// 首屏迟迟不返回的情况。
+class _WebViewStub extends StatefulWidget {
   const _WebViewStub();
 
   @override
-  Widget build(BuildContext context) {
+  State<_WebViewStub> createState() => _WebViewStubState();
+}
+
+class _WebViewStubState extends State<_WebViewStub> {
+  @override
+  void initState() {
+    super.initState();
+    if (_url.contains('never-loads')) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(AppNavigator.dismissNavigationLoading());
+    });
+  }
+
+  String get _url {
     final arguments = Get.arguments;
-    final url = arguments is Map ? '${arguments['url']}' : '';
-    return Scaffold(body: Center(child: Text('webview:$url')));
+    return arguments is Map ? '${arguments['url']}' : '';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(body: Center(child: Text('webview:$_url')));
   }
 }
 
@@ -80,6 +102,9 @@ Map<String, dynamic> _progressCard({
   required int status,
   required String statusLabel,
   String productName = 'Handa Peso',
+
+  /// 产品 ID（`cotype`）；传空串可以模拟服务端不下发产品 ID。
+  Object productId = 2,
   String amount = '₱60,000',
   String amountLabel = 'Loan Amount',
   String date = '09-10-2026',
@@ -89,7 +114,7 @@ Map<String, dynamic> _progressCard({
 }) {
   return <String, dynamic>{
     'eelworm': orderNo,
-    'cotype': 2,
+    'cotype': productId,
     'facetiae': productName,
     'pottiest': '',
     'canonic': '',
@@ -542,6 +567,42 @@ void main() {
       );
     });
 
+    testWidgets('卡片没下发详情地址和产品 ID 时仍然走准入接口', (tester) async {
+      final config = _config();
+      await config.localSession.writeSessionId('session-1');
+      final cards = <Map<String, dynamic>>[
+        _progressCard(
+          orderNo: 'C1',
+          status: 1,
+          statusLabel: 'In Review',
+          productId: '',
+        ),
+      ];
+      final adapter = _StubAdapter((options) async {
+        if (options.uri.toString().contains('legongs')) {
+          // 服务端要的是空串：不能套主卡片入口的 `home_card` 兜底标签。
+          expect(options.data['cotype'], '');
+        }
+        return ResponseBody.fromString(
+          _body(cards),
+          200,
+          headers: _jsonHeaders,
+        );
+      });
+      await _pumpLoanTab(tester, _client(config, adapter));
+
+      await tester.tapAt(tester.getCenter(_card('C1')));
+      await tester.pumpAndSettle();
+
+      // 空值不拦：这次点击直接过准入，放不放行由服务端决定（这个替身服务端
+      // 没放行，所以只断言接口被调用）。
+      expect(adapter.applyCalls, 1);
+
+      // 准入失败会弹 2 秒的 toast，等它自己收起再结束，别把定时器留到测试外。
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('右上角客服入口进入客服 WebView', (tester) async {
       final config = _config();
       await config.localSession.writeSessionId('session-1');
@@ -593,7 +654,8 @@ void main() {
       await config.localSession.writeSessionId('session-1');
       final adapter = _StubAdapter((options) async {
         if (options.uri.path.endsWith('/cotype')) {
-          expect(options.data['chattinesses'], 'A2');
+          // 文档《原卡重试确认订单》：订单号字段是 `redecorates`。
+          expect(options.data['redecorates'], 'A2');
           return ResponseBody.fromString(
             _retryBody('/#/FiggingJuncture?orderId=2&retried=1'),
             200,
@@ -724,7 +786,7 @@ void main() {
       await config.localSession.writeSessionId('session-1');
       final adapter = _StubAdapter((options) async {
         if (options.uri.path.endsWith('/cotype')) {
-          expect(options.data['chattinesses'], 'B1');
+          expect(options.data['redecorates'], 'B1');
           return ResponseBody.fromString(
             _retryBody('http://example.test/retried-order'),
             200,
@@ -885,6 +947,143 @@ void main() {
 
       expect(find.byType(CircularProgressIndicator), findsNothing);
       expect(find.byType(LoanProgressCard), findsNWidgets(6));
+    });
+  });
+
+  group('刷新与点击反馈', () {
+    testWidgets('无订单时空态也能下拉刷新', (tester) async {
+      final config = _config();
+      await config.localSession.writeSessionId('session-1');
+      var homeCalls = 0;
+      final adapter = _StubAdapter((options) async {
+        // 只把首页信息流算进刷新次数：场景弹窗等其它接口不占用。
+        final isHome = options.uri.toString().contains('indulgences');
+        if (isHome) homeCalls += 1;
+        // 首次进入首页、切到 Loan Tab 各一次都返回空，下拉刷新那次才给回卡片。
+        final cards = homeCalls >= 3
+            ? _designCards()
+            : const <Map<String, dynamic>>[];
+        return ResponseBody.fromString(
+          _body(cards),
+          200,
+          headers: _jsonHeaders,
+        );
+      });
+      await _pumpLoanTab(tester, _client(config, adapter));
+
+      expect(find.byKey(const Key('loan-progress-apply')), findsOneWidget);
+      expect(find.byType(LoanProgressCard), findsNothing);
+
+      await tester.fling(
+        find.byType(SingleChildScrollView),
+        const Offset(0, 320),
+        1000,
+      );
+      await tester.pumpAndSettle();
+
+      expect(adapter.homeCalls, 3);
+      expect(find.byType(LoanProgressCard), findsNWidgets(6));
+    });
+
+    testWidgets('请求失败后错误态也能下拉重试', (tester) async {
+      final config = _config();
+      await config.localSession.writeSessionId('session-1');
+      var homeCalls = 0;
+      final adapter = _StubAdapter((options) async {
+        final isHome = options.uri.toString().contains('indulgences');
+        if (isHome) homeCalls += 1;
+        // 切到 Loan Tab 的那次失败，下拉重试才成功。
+        if (isHome && homeCalls == 2) {
+          return ResponseBody.fromString('boom', 500);
+        }
+        final cards = homeCalls >= 3
+            ? _designCards()
+            : const <Map<String, dynamic>>[];
+        return ResponseBody.fromString(
+          _body(cards),
+          200,
+          headers: _jsonHeaders,
+        );
+      });
+
+      // 失败请求会走崩溃上报，先吞掉它；吞完立刻还原，后面再出错就是真错。
+      final reported = <FlutterErrorDetails>[];
+      final previous = FlutterError.onError;
+      FlutterError.onError = reported.add;
+      try {
+        await _pumpLoanTab(tester, _client(config, adapter));
+      } finally {
+        FlutterError.onError = previous;
+      }
+
+      expect(reported, isNotEmpty);
+      expect(find.byKey(const Key('loan-progress-retry')), findsOneWidget);
+
+      // 失败时会把 toast 压在页面中央，等它自己收起再下拉，否则手势落在弹层上。
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pumpAndSettle();
+
+      await tester.fling(
+        find.byType(SingleChildScrollView),
+        const Offset(0, 320),
+        1000,
+      );
+      await tester.pumpAndSettle();
+
+      expect(adapter.homeCalls, 3);
+      expect(find.byType(LoanProgressCard), findsNWidgets(6));
+    });
+
+    testWidgets('点击卡片后转圈一直挂到 H5 首屏出来', (tester) async {
+      final config = _config();
+      await config.localSession.writeSessionId('session-1');
+      final adapter = _StubAdapter(
+        (options) async => ResponseBody.fromString(
+          _body(_designCards()),
+          200,
+          headers: _jsonHeaders,
+        ),
+      );
+      await _pumpLoanTab(tester, _client(config, adapter));
+
+      await tester.tap(_card('A3'));
+      // 压栈前先挂出转圈；替身 WebView 首帧后模拟 onLoadStop 才收。
+      expect(EasyLoading.isShow, isTrue);
+
+      await tester.pumpAndSettle();
+      expect(EasyLoading.isShow, isFalse);
+      expect(Get.currentRoute, AppRoutes.webView);
+    });
+
+    testWidgets('H5 首屏迟迟不返回时转圈保持，超时兜底收起', (tester) async {
+      final config = _config();
+      await config.localSession.writeSessionId('session-1');
+      final cards = <Map<String, dynamic>>[
+        _progressCard(
+          orderNo: 'S1',
+          status: 1,
+          statusLabel: 'In Review',
+          detailRoute: '/never-loads/order-detail',
+        ),
+      ];
+      final adapter = _StubAdapter(
+        (options) async =>
+            ResponseBody.fromString(_body(cards), 200, headers: _jsonHeaders),
+      );
+      await _pumpLoanTab(tester, _client(config, adapter));
+
+      await tester.tap(_card('S1'));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 2));
+
+      // 首屏没回来：页面已经压栈，转圈还在，用户看不出"没反应"。
+      expect(Get.currentRoute, AppRoutes.webView);
+      expect(EasyLoading.isShow, isTrue);
+
+      // 8 秒兜底：页面一直不回报也不能把全屏遮罩留在入口上。
+      await tester.pump(const Duration(seconds: 7));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(EasyLoading.isShow, isFalse);
     });
   });
 
