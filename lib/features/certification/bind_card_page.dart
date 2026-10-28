@@ -14,6 +14,7 @@ import '../../core/json/json_utils.dart';
 import '../../core/network/gateway_client.dart';
 import '../../core/network/gateway_failure.dart';
 import '../../core/network/gateway_reply.dart';
+import '../../core/order/order_redirect.dart';
 import '../../core/permissions/permission_coordinator.dart';
 import '../../core/product/product_detail_loader.dart';
 import '../../core/report/report_scene.dart';
@@ -533,13 +534,16 @@ class _BindCardPageState extends State<BindCardPage> {
         cardId: bindId,
       );
       changed.orThrow();
-      final redirectUrl = changed.payload.stringValue('proclises').trim();
-      _outcome
-        ?..changed = true
-        ..redirectUrl = redirectUrl;
+      // 换绑响应可能把地址放在多个历史字段里，取值规则与账户列表页共用
+      // 同一份实现（A.1.1：取首个非空），否则两条换绑路径会各自成败。
+      final redirectUrl = payoutRedirectUrlFrom(changed);
       if (redirectUrl.isEmpty) {
         throw const GatewayFailure('Unable to open the updated order');
       }
+      // 失败时不能把 changed 置真：调用方按这个结果决定是否替换来源页。
+      _outcome
+        ?..changed = true
+        ..redirectUrl = redirectUrl;
       await AppNavigator.dismissLoading();
       if (mounted) Get.back<void>();
       return;

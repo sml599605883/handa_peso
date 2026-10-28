@@ -5,6 +5,7 @@ import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
 import 'package:handa_peso/app/routes/app_routes.dart';
+import 'package:handa_peso/core/network/gateway_failure.dart';
 import 'package:handa_peso/features/certification/bind_card_models.dart';
 import 'package:handa_peso/features/webview/payout_account_models.dart';
 import 'package:handa_peso/features/webview/payout_accounts_page.dart';
@@ -24,6 +25,8 @@ const _catalog = PayoutAccountCatalog(<PayoutAccountGroup>[
             'The bank is under maintenance. Loans may be delayed. '
             'Please wait or choose another option',
         isPrimary: true,
+        // 维护中：只有 uppropped=0 才展示提示（可用账户就算有文案也不展示）。
+        available: false,
         holderFirstName: 'Ana',
         holderMiddleName: 'Cruz',
         holderLastName: 'Santos',
@@ -38,7 +41,7 @@ const _catalog = PayoutAccountCatalog(<PayoutAccountGroup>[
         id: 'wallet-1',
         bankName: 'GCash',
         accountNumber: '09171234567',
-        logoUrl: '',
+        logoUrl: 'https://example.test/gcash.png',
         holderName: 'Ana Cruz Santos',
         maintenanceNote: '',
         isPrimary: false,
@@ -72,7 +75,12 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() => Get.testMode = true);
-  tearDown(Get.reset);
+  tearDown(() {
+    // EasyLoading 是单例：上一条用例留下的提示浮层会盖在下一张页面上，
+    // 让后续用例的点击落空。
+    unawaited(EasyLoading.dismiss());
+    Get.reset();
+  });
 
   testWidgets('放款账户页按设计稿尺寸和选中态渲染', (tester) async {
     tester.view.physicalSize = const Size(375, 939);
@@ -123,6 +131,15 @@ void main() {
     expect(find.text('First Name'), findsOneWidget);
     expect(find.text('Middle Name'), findsOneWidget);
     expect(find.text('Last Name'), findsOneWidget);
+
+    // headway（logo 图）为空时不渲染 logo 组件：银行/取现卡片只有文字，
+    // 电子钱包下发了图才显示。
+    expect(find.byKey(const Key('payout-account-logo-bank-1')), findsNothing);
+    expect(find.byKey(const Key('payout-account-logo-cash-1')), findsNothing);
+    expect(
+      find.byKey(const Key('payout-account-logo-wallet-1')),
+      findsOneWidget,
+    );
 
     final assetImages = tester
         .widgetList<Image>(find.byType(Image))
@@ -304,6 +321,224 @@ void main() {
     expect(switchCalls, 0);
     expect(find.text('Please select a payout account'), findsOneWidget);
   });
+
+  testWidgets('维护中的账户展示兜底文案，仍可选中并提交', (tester) async {
+    tester.view.physicalSize = const Size(375, 939);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    // 不可用且服务端没下发文案：页面用通用兜底文案，卡片按带提示的高度渲染。
+    final catalog = PayoutAccountCatalog(const <PayoutAccountGroup>[
+      PayoutAccountGroup(
+        title: 'Bank',
+        type: '2',
+        accounts: <PayoutAccount>[
+          PayoutAccount(
+            id: 'bank-1',
+            bankName: 'BDO',
+            accountNumber: '5490123232341238',
+            logoUrl: '',
+            holderName: 'Ana Cruz Santos',
+            maintenanceNote: '',
+            isPrimary: false,
+            available: false,
+          ),
+        ],
+      ),
+    ]);
+    final outcome = PayoutAccountFlowOutcome();
+    String? selectedCardId;
+
+    await tester.pumpWidget(_appWithSource(
+      switchAccount: ({required orderNo, required cardId}) async {
+        selectedCardId = cardId;
+        return 'https://example.test/updated-order';
+      },
+    ));
+    await tester.pumpAndSettle();
+    await _openPayoutPage(tester: tester, outcome: outcome, catalog: catalog);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('under maintenance'), findsOneWidget);
+    expect(
+      tester.getRect(find.byKey(const Key('payout-account-card-bank-1'))).height,
+      202,
+    );
+    // 维护中不预选（非主卡），点一下就能选中：维护状态只提示、不禁止（R-F17-3）。
+    expect(
+      find.byKey(const Key('payout-account-unselected-bank-1')),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key('payout-account-card-bank-1')));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('payout-account-selected-bank-1')),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const Key('payout-account-submit')));
+    await tester.pumpAndSettle();
+
+    expect(selectedCardId, 'bank-1');
+    expect(outcome.changed, isTrue);
+    expect(find.byKey(const Key('payout-account-page')), findsNothing);
+  });
+
+  testWidgets('可用账户即使带文案也不展示维护提示', (tester) async {
+    tester.view.physicalSize = const Size(375, 939);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    // uppropped=1（可用）但服务端仍下发了文案：按状态判断，不展示。
+    final catalog = PayoutAccountCatalog(const <PayoutAccountGroup>[
+      PayoutAccountGroup(
+        title: 'Bank',
+        type: '2',
+        accounts: <PayoutAccount>[
+          PayoutAccount(
+            id: 'bank-1',
+            bankName: 'BDO',
+            accountNumber: '5490123232341238',
+            logoUrl: '',
+            holderName: 'Ana Cruz Santos',
+            maintenanceNote: 'Scheduled maintenance tonight',
+            isPrimary: true,
+          ),
+        ],
+      ),
+    ]);
+
+    await tester.pumpWidget(
+      GetMaterialApp(
+        builder: EasyLoading.init(),
+        home: PayoutAccountsPage(
+          catalog: catalog,
+          productId: 'p1',
+          orderNo: 'o1',
+          switchAccount: ({required orderNo, required cardId}) async =>
+              'https://example.test/updated-order',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Scheduled maintenance tonight'), findsNothing);
+    expect(
+      tester.getRect(find.byKey(const Key('payout-account-card-bank-1'))).height,
+      150,
+    );
+  });
+
+  testWidgets('换绑失败时停留在列表页，重试可以成功', (tester) async {
+    tester.view.physicalSize = const Size(375, 939);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final outcome = PayoutAccountFlowOutcome();
+    var attempts = 0;
+
+    await tester.pumpWidget(_appWithSource(
+      switchAccount: ({required orderNo, required cardId}) async {
+        attempts += 1;
+        if (attempts == 1) {
+          throw const GatewayFailure('This account is under maintenance');
+        }
+        return 'https://example.test/updated-order';
+      },
+    ));
+    await tester.pumpAndSettle();
+    await _openPayoutPage(tester: tester, outcome: outcome, catalog: _catalog);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('payout-account-submit')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // 失败被交给崩溃上报出口（debug 下即 FlutterError.reportError），测试里
+    // 取走这条异常，确认它没有掀掉页面。
+    expect(tester.takeException(), isA<GatewayFailure>());
+    expect(attempts, 1);
+    // 失败不替换来源页、不带走列表页：用户停在原页可以重试。
+    expect(outcome.changed, isFalse);
+    expect(find.byKey(const Key('payout-account-page')), findsOneWidget);
+    expect(find.byKey(const Key('source-web')), findsNothing);
+
+    await tester.tap(find.byKey(const Key('payout-account-submit')));
+    await tester.pumpAndSettle();
+
+    expect(attempts, 2);
+    expect(outcome.changed, isTrue);
+    expect(outcome.redirectUrl, 'https://example.test/updated-order');
+    expect(find.byKey(const Key('payout-account-page')), findsNothing);
+    expect(find.byKey(const Key('source-web')), findsOneWidget);
+  });
+
+  testWidgets('缺订单号时点提交只提示参数缺失，不发换绑请求', (tester) async {
+    tester.view.physicalSize = const Size(375, 939);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    var switchCalls = 0;
+
+    await tester.pumpWidget(
+      GetMaterialApp(
+        builder: EasyLoading.init(),
+        home: PayoutAccountsPage(
+          catalog: _catalog,
+          productId: 'p1',
+          orderNo: '',
+          switchAccount: ({required orderNo, required cardId}) async {
+            switchCalls += 1;
+            return 'https://example.test/updated-order';
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('payout-account-submit')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(switchCalls, 0);
+    expect(find.text('Missing account information'), findsOneWidget);
+    expect(find.byKey(const Key('payout-account-page')), findsOneWidget);
+  });
+}
+
+/// 来源页在底、放款账户页由用例自己压上去的导航栈。
+Widget _appWithSource({required PayoutAccountSwitcher switchAccount}) {
+  return GetMaterialApp(
+    builder: EasyLoading.init(),
+    initialRoute: '/home',
+    getPages: <GetPage<dynamic>>[
+      GetPage<void>(
+        name: '/home',
+        page: () => const Scaffold(
+          body: Text('source-web', key: Key('source-web')),
+        ),
+      ),
+      GetPage<void>(
+        name: AppRoutes.payoutAccounts,
+        page: () => PayoutAccountsPage(switchAccount: switchAccount),
+      ),
+    ],
+  );
+}
+
+Future<void> _openPayoutPage({
+  required WidgetTester tester,
+  required PayoutAccountFlowOutcome outcome,
+  required PayoutAccountCatalog catalog,
+}) async {
+  unawaited(
+    Get.toNamed<void>(
+      AppRoutes.payoutAccounts,
+      arguments: <String, dynamic>{
+        'catalog': catalog,
+        'productId': 'p1',
+        'orderNo': 'o1',
+        PayoutAccountFlowOutcome.argumentKey: outcome,
+      },
+    ),
+  );
+  await tester.pumpAndSettle();
 }
 
 class _BindCardProbe extends StatefulWidget {

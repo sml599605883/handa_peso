@@ -54,7 +54,10 @@ class PayoutAccount {
           fallback: json.intValue('status', fallback: 1),
         ) !=
         0;
-    final note = _firstText(json, const <String>['argala', 'lookalike']);
+    // 维护提示文案：实抓 `/dropcloth/dullard` 里账户对象带的是 `jellies`
+    // （MyTools 字段映射 text→jellies），维护中的账户才会填内容，可用时为空串。
+    // `argala`(noteText) / `azurites`(note) 是同族接口出现过的历史文案键。
+    final note = _firstText(json, const <String>['jellies', 'argala', 'azurites']);
     return PayoutAccount(
       id: _firstText(json, const <String>['eyeglasses', 'retraction']),
       bankName: _firstText(json, const <String>['crankles', 'photoduplicated']),
@@ -83,12 +86,18 @@ class PayoutAccount {
   final String bankName;
   final String accountNumber;
   final String logoUrl;
+
+  /// 户名。C-21 出参会带，但设计稿 04-01 的银行/电子钱包卡片只展示
+  /// 「Receipt Account + 卡号」两行，现金取款才是三姓名分列，所以这里只解析
+  /// 不渲染；要展示需先有设计位。
   final String holderName;
   final String maintenanceNote;
   final bool isPrimary;
   final String holderFirstName;
   final String holderMiddleName;
   final String holderLastName;
+
+  /// 服务端判定的可用性。维护中只影响提示文案，不禁止选择（R-F17-3）。
   final bool available;
 }
 
@@ -143,21 +152,6 @@ class PayoutAccountCatalog {
       groups.expand((group) => group.accounts).toList(growable: false);
 
   bool get isEmpty => accounts.isEmpty;
-}
-
-/// 换卡接口复用多个历史字段名，按页面跳转约定依次读取第一个非空地址。
-String payoutRedirectUrlFrom(GatewayReply reply) {
-  for (final key in const <String>[
-    'url',
-    'flowerpot',
-    'proclises',
-    'antineoplastic',
-    'redirectUrl',
-  ]) {
-    final value = reply.payload.stringValue(key).trim();
-    if (value.isNotEmpty) return value;
-  }
-  return '';
 }
 
 String _firstText(Map<String, dynamic> json, List<String> keys) {

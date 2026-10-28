@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:handa_peso/core/network/gateway_reply.dart';
+import 'package:handa_peso/core/order/order_redirect.dart';
 import 'package:handa_peso/features/webview/app_webview_page.dart';
 import 'package:handa_peso/features/webview/h5_bridge.dart';
 import 'package:handa_peso/features/webview/payout_account_models.dart';
@@ -322,7 +323,7 @@ void main() {
     expect(catalog.accounts.single.holderLastName, 'Santos');
   });
 
-  test('维护中的账户仍可解析并带默认维护提示', () {
+  test('维护中的账户没有文案时用通用兜底', () {
     final reply = GatewayReply.parse(<String, dynamic>{
       'unaccepted': 0,
       'unstably': 'ok',
@@ -350,6 +351,91 @@ void main() {
     expect(account.available, isFalse);
     expect(account.maintenanceNote, PayoutAccount.defaultMaintenanceNote);
     expect(account.isPrimary, isFalse);
+  });
+
+  test('维护中的账户带入参文案（jellies）时直接展示服务端文案', () {
+    final reply = GatewayReply.parse(<String, dynamic>{
+      'unaccepted': 0,
+      'unstably': 'ok',
+      'indulgences': <String, dynamic>{
+        'latchstrings': <Map<String, dynamic>>[
+          <String, dynamic>{
+            'scarriest': 1,
+            'axmen': 'E-wallet',
+            'ranulas': <Map<String, dynamic>>[
+              <String, dynamic>{
+                'eyeglasses': 556,
+                'crankles': 'GCash',
+                'calipash': '09171234567',
+                'uppropped': 0,
+                'assureds': 0,
+                'unworked': <String, dynamic>{},
+                'jellies': 'GCash is temporarily unavailable. '
+                    'Please choose another option.',
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    final account = PayoutAccountCatalog.fromReply(reply).accounts.single;
+    expect(account.available, isFalse);
+    expect(
+      account.maintenanceNote,
+      'GCash is temporarily unavailable. Please choose another option.',
+    );
+  });
+
+  test('换绑账户按实抓 /dropcloth/dullard 响应解析', () {
+    // 2026-10-28 Proxyman 实抓（http://8.220.176.2/deliv/dropcloth/dullard）。
+    // 注意：账户 id 是数字，可用性看 uppropped，维护提示看 jellies（text）。
+    final reply = GatewayReply.parse(<String, dynamic>{
+      'unaccepted': 0,
+      'unstably': 'success',
+      'indulgences': <String, dynamic>{
+        'GA1Eb': 'QP2HCB',
+        '3S1dUkgEf': null,
+        'latchstrings': <Map<String, dynamic>>[
+          <String, dynamic>{
+            'scarriest': 2,
+            'incapacitate':
+                'https://pera-agad-ios-files-prod.oss-ap-southeast-6.'
+                'aliyuncs.com/other/icon_card_bank.png',
+            'axmen': 'Bank',
+            'ranulas': <Map<String, dynamic>>[
+              <String, dynamic>{
+                'eyeglasses': 3,
+                'calipash': '1102',
+                'assureds': 1,
+                'unworked': <String, dynamic>{
+                  'advisements': 'ROLANDO',
+                  'chyme': 'MAESTRE',
+                  'recusant': 'SIMBAJON JR',
+                },
+                'headway': '',
+                'crankles': 'Bank Of Commerce',
+                'trollopy': 'BOC',
+                'uppropped': 1,
+                'jellies': '',
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    final catalog = PayoutAccountCatalog.fromReply(reply);
+    final account = catalog.accounts.single;
+    expect(catalog.groups.single.title, 'Bank');
+    expect(catalog.groups.single.type, '2');
+    expect(account.id, '3');
+    expect(account.bankName, 'Bank Of Commerce');
+    expect(account.accountNumber, '1102');
+    expect(account.holderName, 'ROLANDO MAESTRE SIMBAJON JR');
+    expect(account.available, isTrue);
+    expect(account.isPrimary, isTrue);
+    expect(account.maintenanceNote, isEmpty);
   });
 
   test('换卡响应兼容历史跳转字段并返回首个非空地址', () {

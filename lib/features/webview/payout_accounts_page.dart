@@ -6,6 +6,7 @@ import '../../app/theme/app_colors.dart';
 import '../../core/analytics/analytics_service.dart';
 import '../../core/network/gateway_client.dart';
 import '../../core/network/gateway_failure.dart';
+import '../../core/order/order_redirect.dart';
 import '../certification/bind_card_models.dart';
 import '../certification/identity_design.dart';
 import 'payout_account_design.dart';
@@ -46,6 +47,11 @@ class PayoutAccountsPage extends StatefulWidget {
 class _PayoutAccountsPageState extends State<PayoutAccountsPage> {
   /// 没有任何账户被勾选时点提交的提示。
   static const String _selectAccountHint = 'Please select a payout account';
+
+  /// 入口层已经校验过参数；直接构造页面（深链、测试）时仍要给提示，不能
+  /// 变成"点了没反应"。
+  static const String _missingOrderHint = 'Missing account information';
+  static const String _missingProductHint = 'Missing product information';
 
   late final PayoutAccountCatalog _catalog;
   late final PayoutAccountFlowOutcome? _outcome;
@@ -96,7 +102,10 @@ class _PayoutAccountsPageState extends State<PayoutAccountsPage> {
       AppNavigator.showToast(_selectAccountHint);
       return;
     }
-    if (_orderNo.isEmpty) return;
+    if (_orderNo.isEmpty) {
+      AppNavigator.showToast(_missingOrderHint);
+      return;
+    }
     setState(() => _switching = true);
     await AppNavigator.showLoading();
     // 转圈与提示共用同一个浮层：收起转圈必须发生在提示之前，否则 finally 里的
@@ -114,6 +123,9 @@ class _PayoutAccountsPageState extends State<PayoutAccountsPage> {
         throw const GatewayFailure('Updated order link is unavailable');
       }
       await closeLoading();
+      // 请求在途时用户可以返回（loading 遮罩是 clear 类型，不拦点击）。页面
+      // 已经销毁时结果无人接收，交给 _finish 的 mounted 判断收口。
+      if (!mounted) return;
       AnalyticsService.logEvent(AppEvents.certificationStepCompleted, {
         'step': 'Payout account',
         'action': 'selected_existing',
@@ -151,7 +163,11 @@ class _PayoutAccountsPageState extends State<PayoutAccountsPage> {
   }
 
   Future<void> _addAccount() async {
-    if (_addingAccount || _switching || _productId.isEmpty) return;
+    if (_addingAccount || _switching) return;
+    if (_productId.isEmpty) {
+      AppNavigator.showToast(_missingProductHint);
+      return;
+    }
     setState(() => _addingAccount = true);
     try {
       final result =
@@ -180,6 +196,9 @@ class _PayoutAccountsPageState extends State<PayoutAccountsPage> {
     _outcome
       ?..changed = true
       ..redirectUrl = redirectUrl;
+    // 页面已不在栈上时不能回退：此时栈顶已经是来源页（WebView/首页），
+    // Get.back() 会把来源页弹掉。
+    if (!mounted) return;
     if (Get.key.currentState?.canPop() ?? false) {
       Get.back<void>();
     }
@@ -332,7 +351,13 @@ class _PayoutAccountCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasNote = account.maintenanceNote.isNotEmpty;
+    // 维护提示只挂在「展示账号」的卡片上，且只看服务端状态 `uppropped`
+    // （0=维护中）：现金取款卡片展示的是三列姓名，设计稿没有提示位，不做加高
+    // 也不塞文案；可用账户即便带了文案也不展示。文案缺失时用通用兜底。
+    final hasNote = !_isCashPickup && !account.available;
+    final note = account.maintenanceNote.isNotEmpty
+        ? account.maintenanceNote
+        : PayoutAccount.defaultMaintenanceNote;
     final bodyHeight = hasNote
         ? PayoutAccountDesign.cardBodyWithNoteHeight
         : PayoutAccountDesign.cardBodyHeight;
@@ -371,6 +396,7 @@ class _PayoutAccountCard extends StatelessWidget {
                                   account: account,
                                   metrics: metrics,
                                   hasNote: hasNote,
+                                  note: note,
                                 ),
                         ),
                       ],
@@ -424,8 +450,12 @@ class _CardHeader extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: <Widget>[
-                _BankLogo(account: account, metrics: metrics),
-                SizedBox(width: metrics.size(7)),
+                // 只有服务端下发了 logo 图（`headway`）才摆这个组件：
+                // 没有图就别留一个空框，银行名自己占满居中。
+                if (account.logoUrl.isNotEmpty) ...<Widget>[
+                  _BankLogo(account: account, metrics: metrics),
+                  SizedBox(width: metrics.size(7)),
+                ],
                 Flexible(
                   child: Text(
                     account.bankName,
@@ -475,8 +505,8 @@ class _BankLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fallback = _initials(account.bankName);
     return Container(
+      key: Key('payout-account-logo-${account.id}'),
       width: metrics.size(PayoutAccountDesign.logoBoxSize),
       height: metrics.size(PayoutAccountDesign.logoBoxSize),
       alignment: Alignment.center,
@@ -487,54 +517,13 @@ class _BankLogo extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(metrics.size(4)),
-        child: account.logoUrl.isEmpty
-            ? _LogoFallback(text: fallback, metrics: metrics)
-            : Image.network(
-                account.logoUrl,
-                width: metrics.size(PayoutAccountDesign.logoSize),
-                height: metrics.size(PayoutAccountDesign.logoSize),
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) =>
-                    _LogoFallback(text: fallback, metrics: metrics),
-              ),
-      ),
-    );
-  }
-
-  String _initials(String name) {
-    final words = name
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((word) => word.isNotEmpty);
-    final result = words.map((word) => word[0]).take(3).join().toUpperCase();
-    return result.isEmpty ? 'B' : result;
-  }
-}
-
-class _LogoFallback extends StatelessWidget {
-  const _LogoFallback({required this.text, required this.metrics});
-
-  final String text;
-  final IdentityMetrics metrics;
-
-  @override
-  Widget build(BuildContext context) {
-    return ColoredBox(
-      color: AppColors.payoutLogoSurface,
-      child: Center(
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: metrics.size(2)),
-            child: Text(
-              text,
-              style: TextStyle(
-                color: AppColors.loginAccentText,
-                fontSize: metrics.size(10),
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
+        // 图加载失败就留空底色：不编造缩写，也不回退到银行名首字母。
+        child: Image.network(
+          account.logoUrl,
+          width: metrics.size(PayoutAccountDesign.logoSize),
+          height: metrics.size(PayoutAccountDesign.logoSize),
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => const SizedBox.shrink(),
         ),
       ),
     );
@@ -546,11 +535,13 @@ class _AccountDetails extends StatelessWidget {
     required this.account,
     required this.metrics,
     required this.hasNote,
+    required this.note,
   });
 
   final PayoutAccount account;
   final IdentityMetrics metrics;
   final bool hasNote;
+  final String note;
 
   @override
   Widget build(BuildContext context) {
@@ -628,7 +619,7 @@ class _AccountDetails extends StatelessWidget {
               child: SizedBox(
                 height: metrics.size(PayoutAccountDesign.noteHeight),
                 child: Text(
-                  account.maintenanceNote,
+                  note,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
