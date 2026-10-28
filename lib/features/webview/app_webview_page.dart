@@ -19,6 +19,7 @@ import '../../core/report/report_scene.dart';
 import '../../core/report/report_service.dart';
 import '../certification/identity_models.dart';
 import '../certification/widgets/identity_retention_dialog.dart';
+import 'h5_back_handler.dart';
 import 'h5_bridge.dart';
 
 bool _isInlineScheme(String scheme) => switch (scheme.toLowerCase()) {
@@ -93,6 +94,7 @@ class _AppWebViewPageState extends State<AppWebViewPage> {
   late final GatewayClient _gateway;
   late final PlatformBridge _platform;
   late final H5ActionDispatcher _dispatcher;
+  late final H5BackHandler _back;
 
   InAppWebViewController? _controller;
   String _title = 'Details';
@@ -126,6 +128,7 @@ class _AppWebViewPageState extends State<AppWebViewPage> {
     _gateway = Get.find<GatewayClient>();
     _platform = PlatformBridge();
     _dispatcher = _createDispatcher();
+    _back = H5BackHandler(closePage: _closePage);
     AnalyticsService.logEvent('webview_open', <String, Object?>{
       'host': _initialUri?.host ?? '',
     });
@@ -159,9 +162,7 @@ class _AppWebViewPageState extends State<AppWebViewPage> {
       },
       openInternal: _openInternal,
       openExternalApp: _launchExternal,
-      closePage: () async {
-        if (Navigator.of(context).canPop()) Navigator.of(context).pop();
-      },
+      closePage: _closePage,
       goHome: () async {
         await AppNavigator.toMain();
       },
@@ -264,25 +265,25 @@ class _AppWebViewPageState extends State<AppWebViewPage> {
     return result.toJson();
   }
 
+  /// 关闭 H5：栈里还有来源页时退回上一页，根页面交给宿主（不硬 pop）。
+  Future<void> _closePage() async {
+    if (!mounted) return;
+    if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+  }
+
+  /// 返回键的完整决策：先过挽留弹窗，再交给 H5 返回桥。
+  ///
+  /// 能不能退由 H5 的 `history.state.idx` 决定，不用 `canGoBack()`：iOS 27
+  /// 会把「无用户手势创建的 entry」从原生视图里过滤掉，见
+  /// [H5BackHandler] 与《H5 原生返回桥接入说明》。
   Future<void> _goBack() async {
     if (_backInFlight) return;
     _backInFlight = true;
     try {
       final controller = _controller;
-      var hasHistory = false;
-      if (controller != null && identical(controller, _controller)) {
-        hasHistory = await controller.canGoBack();
-      }
-
       if (await _shouldStayForRetention(controller)) return;
-
-      if (hasHistory && controller != null && mounted) {
-        await _goBackInPage(controller);
-        return;
-      }
-      if (mounted && Navigator.of(context).canPop()) {
-        Navigator.of(context).pop();
-      }
+      if (!mounted) return;
+      await _back.handleBack(controller);
     } finally {
       _backInFlight = false;
     }
@@ -327,25 +328,6 @@ class _AppWebViewPageState extends State<AppWebViewPage> {
     } finally {
       _checkingRetention = false;
     }
-  }
-
-  Future<void> _goBackInPage(InAppWebViewController controller) async {
-    final history = await controller.getCopyBackForwardList();
-    final index = history?.currentIndex ?? -1;
-    final items = history?.list ?? const <WebHistoryItem>[];
-    if (index > 0 && index < items.length) {
-      final current = Uri.tryParse(items[index].url?.toString() ?? '');
-      final previous = Uri.tryParse(items[index - 1].url?.toString() ?? '');
-      if (current != null &&
-          previous != null &&
-          current.fragment.isNotEmpty &&
-          previous.fragment.isNotEmpty &&
-          current.removeFragment() == previous.removeFragment()) {
-        await controller.evaluateJavascript(source: 'window.history.go(-1);');
-        return;
-      }
-    }
-    await controller.goBack();
   }
 
   Future<NavigationActionPolicy> _handleNavigation(
@@ -425,6 +407,10 @@ class _AppWebViewPageState extends State<AppWebViewPage> {
                       isInspectable: kDebugMode,
                       supportZoom: false,
                       allowsLinkPreview: false,
+                      // 侧滑返回会绕过 H5 返回桥，直接走 iOS 自己的 history 视图：
+                      // 正是 iOS 27 会漏掉 entry 的那条路。返回统一由页面按钮 /
+                      // 物理键触发，见 [_goBack]。
+                      allowsBackForwardNavigationGestures: false,
                       mediaPlaybackRequiresUserGesture: true,
                       mixedContentMode:
                           MixedContentMode.MIXED_CONTENT_COMPATIBILITY_MODE,

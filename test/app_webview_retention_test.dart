@@ -14,6 +14,8 @@ import 'package:handa_peso/core/network/gateway_settings.dart';
 import 'package:handa_peso/core/session/local_session.dart';
 import 'package:handa_peso/features/webview/app_webview_page.dart';
 
+import 'support/fake_inappwebview_platform.dart';
+
 const String _confirmationUrl = 'http://host/#/BanefullyHorse?drippier=1000460';
 
 /// 服务端当前实际下发的确认用款地址：产品 ID 在 `knife`，`drippier` 不再出现。
@@ -37,13 +39,17 @@ final ImageProvider<Object> _retentionImage = MemoryImage(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  final platform = _TestInAppWebViewPlatform();
+  final platform = FakeInAppWebViewPlatform(
+    FakePlatformController(_confirmationUrl),
+  );
   InAppWebViewPlatform.instance = platform;
 
   setUp(() {
     Get.testMode = true;
     AnalyticsService.configure(_SilentTelemetrySink());
-    platform.controller = _FakePlatformController(_confirmationUrl);
+    // 已接入返回桥的 H5：能不能退只问 __canGoBack()。
+    platform.controller = FakePlatformController(_confirmationUrl)
+      ..bridgeCanGoBack = true;
   });
 
   tearDown(() async {
@@ -67,18 +73,19 @@ void main() {
     final retention = adapter.where('unchivalrous').single;
     expect(retention.fields['ulterior'], '5');
     expect(retention.fields['knife'], '1000460');
-    expect(platform.controller.goBackCalls, 0);
+    expect(platform.controller.historyBackCalls, 0);
 
     await tester.tap(find.byKey(const Key('identity-retention-continue')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.byType(AppWebViewPage), findsOneWidget);
-    expect(platform.controller.goBackCalls, 0);
+    expect(platform.controller.historyBackCalls, 0);
   });
 
   testWidgets('确认用款地址改用 knife 下发产品 ID 时也触发 scene=5 挽留', (tester) async {
-    platform.controller = _FakePlatformController(_knifeConfirmationUrl);
+    platform.controller = FakePlatformController(_knifeConfirmationUrl)
+      ..bridgeCanGoBack = true;
     final adapter = _StubAdapter();
     await _pumpPage(tester, adapter, url: _knifeConfirmationUrl);
 
@@ -94,7 +101,7 @@ void main() {
     final retention = adapter.where('unchivalrous').single;
     expect(retention.fields['ulterior'], '5');
     expect(retention.fields['knife'], '1');
-    expect(platform.controller.goBackCalls, 0);
+    expect(platform.controller.historyBackCalls, 0);
   });
 
   testWidgets('确认用款 H5 返回时选择退出后继续执行网页返回', (tester) async {
@@ -110,10 +117,12 @@ void main() {
           .isNotEmpty,
     );
     await tester.tap(find.byKey(const Key('identity-retention-exit')));
-    await _pumpUntil(tester, () => platform.controller.goBackCalls == 1);
+    await _pumpUntil(tester, () => platform.controller.historyBackCalls == 1);
 
     expect(adapter.where('unchivalrous'), hasLength(1));
-    expect(platform.controller.goBackCalls, 1);
+    expect(platform.controller.historyBackCalls, 1);
+    // 回退只走 history.back()：iOS 27 的原生 goBack() 会漏计无手势 entry。
+    expect(platform.controller.goBackCalls, 0);
     expect(find.byType(AppWebViewPage), findsOneWidget);
   });
 }
@@ -210,96 +219,4 @@ class _SilentTelemetrySink implements TelemetrySink {
 
   @override
   void setUserProperty(String name, String? value) {}
-}
-
-class _TestInAppWebViewPlatform extends InAppWebViewPlatform {
-  late _FakePlatformController controller;
-
-  @override
-  PlatformInAppWebViewWidget createPlatformInAppWebViewWidget(
-    PlatformInAppWebViewWidgetCreationParams params,
-  ) {
-    return _FakeWebViewWidget(params, controller);
-  }
-
-  @override
-  PlatformInAppWebViewController createPlatformInAppWebViewController(
-    PlatformInAppWebViewControllerCreationParams params,
-  ) {
-    return controller;
-  }
-
-  @override
-  PlatformInAppWebViewController createPlatformInAppWebViewControllerStatic() {
-    return controller;
-  }
-}
-
-class _FakeWebViewWidget extends PlatformInAppWebViewWidget {
-  _FakeWebViewWidget(super.params, this.controller) : super.implementation();
-
-  final _FakePlatformController controller;
-  bool _created = false;
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_created) {
-      _created = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final widgetController = params.controllerFromPlatform!(controller);
-        params.onWebViewCreated?.call(widgetController);
-        params.onLoadStop?.call(
-          widgetController,
-          WebUri(controller.currentUrl),
-        );
-      });
-    }
-    return const ColoredBox(color: Colors.white);
-  }
-
-  @override
-  T controllerFromPlatform<T>(PlatformInAppWebViewController controller) {
-    return params.controllerFromPlatform!(controller) as T;
-  }
-
-  @override
-  void dispose() {}
-}
-
-class _FakePlatformController extends PlatformInAppWebViewController {
-  _FakePlatformController(this.currentUrl)
-    : super.implementation(
-        PlatformInAppWebViewControllerCreationParams(id: 'test-webview'),
-      );
-
-  final String currentUrl;
-  int goBackCalls = 0;
-
-  @override
-  Future<WebUri?> getUrl() async => WebUri(currentUrl);
-
-  @override
-  Future<String?> getTitle() async => 'Confirmation';
-
-  @override
-  Future<bool> canGoBack() async => true;
-
-  @override
-  Future<void> goBack() async {
-    goBackCalls++;
-  }
-
-  @override
-  Future<WebHistory?> getCopyBackForwardList() async {
-    return WebHistory(currentIndex: 0, list: const <WebHistoryItem>[]);
-  }
-
-  @override
-  void addJavaScriptHandler({
-    required String handlerName,
-    required JavaScriptHandlerCallback callback,
-  }) {}
-
-  @override
-  void dispose({bool isKeepAlive = false}) {}
 }
