@@ -284,6 +284,13 @@ class _AppWebViewPageState extends State<AppWebViewPage> {
     }
   }
 
+  /// 换卡成功后的落点：塌回根页面 + 一个新 H5，不留账户列表/绑卡页。
+  ///
+  /// 这里刻意不用 [AppNavigator.toWebView] 的 `replaceCurrent`：它的谓词只
+  /// 排除 WebView，遍历到账户列表（普通页面）就停了，账户列表和它下面的旧
+  /// H5 都会留在栈里。peso 的换卡走的是 `toWebViewResettingFlow`
+  /// （peso_shield `lib/core/navigation/app_navigator.dart:370`），只保留根
+  /// 页面，见 [AppNavigator.toWebViewResettingFlow]。
   Future<void> _replaceWithPage(String target) async {
     final uri = Uri.tryParse(target.trim());
     if (uri == null ||
@@ -291,10 +298,9 @@ class _AppWebViewPageState extends State<AppWebViewPage> {
         uri.host.isEmpty) {
       throw StateError('Invalid result URL');
     }
-    await AppNavigator.toWebView(
+    await AppNavigator.toWebViewResettingFlow(
       url: uri.toString(),
       title: 'Details',
-      replaceCurrent: true,
     );
   }
 
@@ -319,8 +325,10 @@ class _AppWebViewPageState extends State<AppWebViewPage> {
 
   /// 关闭 H5：栈里还有来源页时退回上一页，根页面交给宿主（不硬 pop）。
   ///
-  /// 退到顶以后必须有个落点：H5 是栈底（例如被深链直接打开、或换卡后来源页
-  /// 已经被替换掉）时调 `toMain` 回外壳首页，别让返回键变成死键。
+  /// 退到顶以后必须有个落点：H5 是栈底（例如被深链直接打开、被 `offAllNamed`
+  /// 换进来）时调 `toMain` 回外壳首页，别让返回键变成死键。换卡成功后 H5 压在
+  /// 根页面之上（见 [AppNavigator.toWebViewResettingFlow]），走的是 pop 分支，
+  /// 一次返回就回首页。
   Future<void> _closePage() async {
     if (!mounted) return;
     final navigator = Navigator.of(context);

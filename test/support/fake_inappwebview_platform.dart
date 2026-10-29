@@ -51,21 +51,6 @@ class FakePlatformController extends PlatformInAppWebViewController {
   /// 内联兜底脚本的返回值。`null` 表示求值失败（白屏 / 脚本被禁）。
   Object? inlineCanGoBack;
 
-  /// 回退前后位置探针的返回值（地址 + 栈深 + 条目数）。`null` 表示拿不到答案。
-  ///
-  /// 只在 `history.back()` 真的换了页时才该变；返回同一个字符串就是「原地打转」。
-  Object? historyPosition;
-
-  /// 执行 `history.back()` 之后位置探针的新值。`null` 表示回退不改变位置。
-  Object? historyPositionAfterBack;
-
-  /// 按顺序返回的位置探针值（回退前一次 + 回退后两次），用来模拟
-  /// 「先退开、又被 H5 重定向回原页面」。为空时退回 [historyPosition]。
-  List<Object?>? historyPositionSequence;
-
-  /// 位置探针被求值的次数。
-  int positionProbes = 0;
-
   /// 原生 `canGoBack()` 的返回值，决策链的最后一道。
   bool nativeCanGoBack = true;
 
@@ -159,19 +144,7 @@ class FakePlatformController extends PlatformInAppWebViewController {
     final gate = holdEval;
     if (gate != null) await gate.future;
     if (source.contains('__canGoBack')) return bridgeCanGoBack;
-    if (source.contains('handa-history-position')) {
-      final sequence = historyPositionSequence;
-      if (sequence != null && positionProbes < sequence.length) {
-        return sequence[positionProbes++];
-      }
-      positionProbes++;
-      return historyPosition;
-    }
-    if (source.contains('history.back()')) {
-      final moved = historyPositionAfterBack;
-      if (moved != null) historyPosition = moved;
-      return null;
-    }
+    if (source.contains('history.back()')) return null;
     if (source.contains('history.state')) return inlineCanGoBack;
     return null;
   }

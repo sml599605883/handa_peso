@@ -6,6 +6,7 @@ import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart' hide FormData;
+import 'package:handa_peso/app/navigation/app_navigator.dart';
 import 'package:handa_peso/app/routes/app_routes.dart';
 import 'package:handa_peso/core/analytics/analytics_service.dart';
 import 'package:handa_peso/core/network/gateway_client.dart';
@@ -79,23 +80,40 @@ void main() {
     expect(find.byType(AppWebViewPage), findsOneWidget);
   });
 
-  testWidgets('H5 回退原地打转时返回退出到上一级，不再死循环', (tester) async {
-    // 换卡成功后的确定用款页：H5 说「还有上一页」，但 history.back() 之后又
-    // 重定向回同一个页面。返回键必须落到上一级原生页（reczz28Sjm17GWSd）。
-    platform.controller
-      ..bridgeCanGoBack = true
-      ..historyPosition = '["http://host/#/loan-confirmation",2,4]';
-    await _pumpPage(tester);
+  testWidgets('换卡塌回根后点返回：一次就退出到首页，不回退到账户列表', (tester) async {
+    // reczz28Sjm17GWSd：换卡成功后栈里还留着账户列表和旧 H5 时，返回会在
+    // 「确定用款页 ↔ Loan details」之间打转。换成「只留根」的替换后，新 H5
+    // 之上没有任何原生中间页，返回一次就该落回首页。
+    platform.controller.bridgeCanGoBack = false;
+    await _pumpPage(tester, withPayoutAccounts: true);
+    // 账户列表压在来源 H5 下面，屏上不可见但确实在栈里（skipOffstage: false）。
+    expect(find.text('payout-accounts', skipOffstage: false), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('webview-back')));
-    // 回退后要等位置探针窗口（默认 400ms 试两次）过去才判定「没动」。
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.pump(const Duration(milliseconds: 400));
+    // 新 H5 是一个新页面：让测试替身再走一次首屏完成，避免加载动画把
+    // pumpAndSettle 拖住。
+    platform.controller.created = false;
+    // 这个 Future 要等新 H5 被关掉才完成，不能在用例里 await。
+    unawaited(
+      AppNavigator.toWebViewResettingFlow(url: _orderUrl, title: 'Details'),
+    );
+    await _pumpUntil(
+      tester,
+      () => find.byKey(const Key('webview-back')).evaluate().isNotEmpty,
+    );
     await tester.pumpAndSettle();
 
-    expect(platform.controller.historyBackCalls, 1);
+    expect(find.byType(AppWebViewPage), findsOneWidget);
+    // 中间页被替换链路带走，不留残骸（skipOffstage: false：还留在栈里的
+    // 路由只是不在屏上，默认断言会假通过）。
+    expect(find.text('payout-accounts', skipOffstage: false), findsNothing);
+
+    await tester.tap(find.byKey(const Key('webview-back')));
+    await tester.pumpAndSettle();
+
     expect(find.byType(AppWebViewPage), findsNothing);
     expect(find.text('home'), findsOneWidget);
+    expect(find.text('payout-accounts', skipOffstage: false), findsNothing);
+    expect(platform.controller.historyBackCalls, 0);
   });
 
   testWidgets('系统返回（Android 物理键 / iOS 侧滑）走同一条决策链', (tester) async {
@@ -110,7 +128,11 @@ void main() {
   });
 }
 
-Future<void> _pumpPage(WidgetTester tester, {String url = _orderUrl}) async {
+Future<void> _pumpPage(
+  WidgetTester tester, {
+  String url = _orderUrl,
+  bool withPayoutAccounts = false,
+}) async {
   tester.view.physicalSize = const Size(375, 812);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
@@ -137,10 +159,23 @@ Future<void> _pumpPage(WidgetTester tester, {String url = _orderUrl}) async {
           name: AppRoutes.webView,
           page: () => const AppWebViewPage(),
         ),
+        GetPage<void>(
+          name: AppRoutes.payoutAccounts,
+          page: () => const Scaffold(body: Text('payout-accounts')),
+        ),
+        GetPage<void>(
+          name: AppRoutes.bindCard,
+          page: () => const Scaffold(body: Text('bind-card')),
+        ),
       ],
     ),
   );
   await tester.pumpAndSettle();
+  if (withPayoutAccounts) {
+    // 换卡链路：来源 H5 → 账户列表 → （替换）新 H5。
+    Get.toNamed<void>(AppRoutes.payoutAccounts);
+    await tester.pumpAndSettle();
+  }
   Get.toNamed<void>(
     AppRoutes.webView,
     arguments: <String, dynamic>{'url': url, 'title': 'Details'},

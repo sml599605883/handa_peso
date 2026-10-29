@@ -9,6 +9,10 @@ import 'support/fake_inappwebview_platform.dart';
 /// 文档 v1 §7 只要求「有桥 → 原生 → 关闭」，`H5BackHandler` 按需要多留了
 /// 内联兜底一层（理由与删除条件见类注释），所以这里也把它当契约覆盖。
 /// 每个分支都单测一遍，避免 iOS 27 的 entry 过滤再悄悄回到主路径上。
+///
+/// 换卡返回打转（reczz28Sjm17GWSd）的根因在原生栈（替换谓词停在账户列表
+/// 上），已由 `AppNavigator.toWebViewResettingFlow` 修掉，这里不再断言
+/// 「回退前后比对位置」那层兜底；见 `webview_navigation_test.dart` 的栈深用例。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -119,84 +123,6 @@ void main() {
 
     expect(closed, 1);
     expect(platform.historyBackCalls, 0);
-  });
-
-  test('history.back() 被页面弹回原地时关闭 H5：确定用款页返回不再死循环', () async {
-    // 换卡成功后 H5 在 history.back() 之后立刻重定向回同一个页面：位置探针
-    // 前后完全一致。这种情况继续「退一页」永远不会离开当前页面（reczz28Sjm17GWSd）。
-    platform.bridgeCanGoBack = true;
-    platform.historyPosition = '["http://host/#/loan-confirmation",2,4]';
-
-    await H5BackHandler(
-      closePage: () async => closed++,
-      verifyDelay: Duration.zero,
-    ).handleBack(controller);
-
-    expect(platform.historyBackCalls, 1);
-    expect(closed, 1, reason: '位置没变就按「已经退到底」关闭 H5，退回原生页');
-  });
-
-  test('history.back() 真的换了页时只退一页，不关 H5', () async {
-    platform.bridgeCanGoBack = true;
-    platform.historyPosition = '["http://host/#/loan-confirmation",2,4]';
-    platform.historyPositionAfterBack = '["http://host/#/loan-details",1,4]';
-
-    await H5BackHandler(
-      closePage: () async => closed++,
-      verifyDelay: Duration.zero,
-    ).handleBack(controller);
-
-    expect(platform.historyBackCalls, 1);
-    expect(closed, 0);
-    // 回退仍然只走 history.back()，不回落到 iOS 27 会漏 entry 的原生 goBack()。
-    expect(platform.goBackCalls, 0);
-  });
-
-  test('回退先退开又被弹回原页面时按「没退走」处理：关闭 H5', () async {
-    // 换卡后的确认页会先真的退回换卡前的 entry，再被 H5 重定向回确认页。
-    // 只看第一次采样会误判成「退成功了」，所以在时间窗末尾再采一次。
-    platform.bridgeCanGoBack = true;
-    platform.historyPositionSequence = <Object?>[
-      '["http://host/#/loan-confirmation",2,4]',
-      '["http://host/#/loan-details",1,4]',
-      '["http://host/#/loan-confirmation",2,4]',
-    ];
-
-    await H5BackHandler(
-      closePage: () async => closed++,
-      verifyDelay: Duration.zero,
-    ).handleBack(controller);
-
-    expect(platform.historyBackCalls, 1);
-    expect(platform.positionProbes, 3);
-    expect(closed, 1);
-  });
-
-  test('没有桥时同样校验回退是否生效：内联兜底原地打转也关闭 H5', () async {
-    platform.bridgeCanGoBack = null;
-    platform.inlineCanGoBack = true;
-    platform.historyPosition = '["http://host/#/pay",0,2]';
-
-    await H5BackHandler(
-      closePage: () async => closed++,
-      verifyDelay: Duration.zero,
-    ).handleBack(controller);
-
-    expect(platform.historyBackCalls, 1);
-    expect(closed, 1);
-  });
-
-  test('拿不到位置快照时不猜：白屏 / 文档正在替换时按 H5 的结果收尾', () async {
-    // historyPosition 为 null = 求值失败。此时不能把正在换文档的页面误关掉。
-    platform.bridgeCanGoBack = true;
-
-    await H5BackHandler(
-      closePage: () async => closed++,
-      verifyDelay: Duration.zero,
-    ).handleBack(controller);
-
-    expect(platform.historyBackCalls, 1);
-    expect(closed, 0);
   });
 
   test('没有控制器（页面已销毁）：直接关闭', () async {

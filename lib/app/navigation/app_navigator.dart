@@ -398,6 +398,34 @@ abstract final class AppNavigator {
     }, arguments: arguments);
   }
 
+  /// 换卡成功后只留「根页面 + 一个新 H5」，中间页全部出栈。
+  ///
+  /// 对齐 peso_shield 的 `AppNavigator.toWebViewResettingFlow`
+  /// （peso_shield `lib/core/navigation/app_navigator.dart:370`）：
+  /// `pushNamedAndRemoveUntil(webView, (route) => route.isFirst)`。peso 的换卡
+  /// 成功时账户列表还压在栈顶、由这次替换连带移除；handa 的账户列表/绑卡页
+  /// 会自己 pop 把新地址回传给调用方，但**不能指望它们一定退干净**。
+  ///
+  /// [toWebView] 的谓词是 `name != webView`，对任何普通页面都成立——遍历到
+  /// 账户列表就停了，它和它下面的旧 H5 都会留下。缺陷 reczz28Sjm17GWSd 的
+  /// 返回打转正是这种栈：确认用款页 → 账户列表 → 旧确认页 → 账户列表……
+  /// 截图视频里每次返回都在「Loan details」和「Loan Confirmation」之间来回。
+  ///
+  /// 所以换卡这条链路单独走「只留根」的语义；登录失效、深链、H5 站内跳转
+  /// 等其它调用方仍用 [toWebView] 的原语义，不受影响。
+  static Future<void>? toWebViewResettingFlow({
+    required String url,
+    required String title,
+  }) {
+    final navigator = Get.key.currentState;
+    if (navigator == null) return null;
+    return navigator.pushNamedAndRemoveUntil<void>(
+      AppRoutes.webView,
+      (route) => route.isFirst,
+      arguments: <String, dynamic>{'url': url, 'title': title},
+    );
+  }
+
   /// 打开服务端下发的跳转地址：Banner 落地页、进度卡片按钮与订单详情都用它。
   ///
   /// 链接形态见接口文档「值映射 -> Scheme」：
