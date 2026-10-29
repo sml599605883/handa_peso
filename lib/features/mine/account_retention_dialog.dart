@@ -29,7 +29,35 @@ Future<bool?> showAccountRetentionDialog({
   );
 }
 
-/// 弹窗里的固定文案（设计稿逐字照搬）。
+// ---------------------------------------------------------------------------
+// 弹窗按钮文案（四个常量，集中在这里，方便一行互换）
+//
+// 来源：需求文档 M20-3「退出 / 注销挽留弹窗」的按钮列，对应测试缺陷
+// `reczz28SlNC3NUCI`（模块：退出/注销，问题：弹窗按钮文案）。
+// 文案表要求：退出 = `Keep Rates` / `Log Out`，注销 = `Keep Offers` / `Delete`。
+//
+// 已定口径：按钮颜色语义不变——右侧暖橙 = 保留键（留在 App），左侧灰色 =
+// 破坏性动作键（真的退出 / 注销）。所以保留词放右橙，动作词放左灰。
+//
+// 待确认：文案表把两个词按「保留 | 动作」的顺序书写（`Keep Rates | Log Out`），
+// 与设计稿左灰（动作）右橙（保留）的视觉顺序相反，且截图里第二个词被列宽截断
+// （注销那一格只看到 `Delete` 的前半段，此处参考同族 `peso_shield` 用 `Delete`）。
+// 若产品复议为「左保留满、右动作」，只需把下面四行里 keep/action 两组词互换。
+// ---------------------------------------------------------------------------
+
+/// 退出弹窗 · 右侧暖橙按钮（保留键）：留在 App，维持当前利率。
+const String kAccountRetentionLogoutKeepLabel = 'Keep Rates';
+
+/// 退出弹窗 · 左侧灰色按钮（动作键）：真的退出登录。
+const String kAccountRetentionLogoutActionLabel = 'Log Out';
+
+/// 注销弹窗 · 右侧暖橙按钮（保留键）：留在 App，保住专属额度。
+const String kAccountRetentionDeleteKeepLabel = 'Keep Offers';
+
+/// 注销弹窗 · 左侧灰色按钮（动作键）：真的注销账号。
+const String kAccountRetentionDeleteActionLabel = 'Delete';
+
+/// 弹窗里的固定文案。
 class _RetentionCopy {
   const _RetentionCopy({
     required this.asset,
@@ -47,18 +75,18 @@ class _RetentionCopy {
   final String keepLabel;
 }
 
-/// 注销挽留弹窗（设计稿 `Before you continue`）。
+/// 注销挽留弹窗（设计稿 `Before you continue` / 文案表 `Consider this`）。
 const _deleteAccountCopy = _RetentionCopy(
   asset: 'assets/account_delete_retention_card.png',
-  confirmLabel: 'Delete Account',
-  keepLabel: 'Get Funds',
+  confirmLabel: kAccountRetentionDeleteActionLabel,
+  keepLabel: kAccountRetentionDeleteKeepLabel,
 );
 
-/// 退出挽留弹窗（设计稿 `Leaving already?`）。
+/// 退出挽留弹窗（设计稿 `Leaving already?` / 文案表 `One more thing`）。
 const _logoutCopy = _RetentionCopy(
   asset: 'assets/account_logout_retention_card.png',
-  confirmLabel: 'Exit',
-  keepLabel: 'Stay',
+  confirmLabel: kAccountRetentionLogoutActionLabel,
+  keepLabel: kAccountRetentionLogoutKeepLabel,
 );
 
 class _AccountRetentionDialog extends StatelessWidget {
@@ -179,15 +207,21 @@ class _RetentionButton extends StatelessWidget {
             _AccountRetentionDialog._buttonRadius * scale,
           ),
         ),
-        child: Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: AppColors.textOnPrimary,
-            fontSize: _AccountRetentionDialog._buttonLabelSize * scale,
-            fontWeight: FontWeight.w600,
-            height: 25 / _AccountRetentionDialog._buttonLabelSize,
+        // 按钮宽高是设计稿固定值（142.5 x 52），而文案改长后（`Keep Offers` /
+        // `Keep Rates`）在大字号辅助设置下可能超宽：这里用 `FittedBox` 等比缩小
+        // 而不是省略号裁断，既不溢出也不丢字，设计尺寸不作任何改动。
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            label,
+            maxLines: 1,
+            softWrap: false,
+            style: TextStyle(
+              color: AppColors.textOnPrimary,
+              fontSize: _AccountRetentionDialog._buttonLabelSize * scale,
+              fontWeight: FontWeight.w600,
+              height: 25 / _AccountRetentionDialog._buttonLabelSize,
+            ),
           ),
         ),
       ),

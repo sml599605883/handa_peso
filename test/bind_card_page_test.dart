@@ -21,6 +21,7 @@ import 'package:handa_peso/core/session/local_session.dart';
 import 'package:handa_peso/features/certification/bind_card_design.dart';
 import 'package:handa_peso/features/certification/bind_card_models.dart';
 import 'package:handa_peso/features/certification/bind_card_page.dart';
+import 'package:handa_peso/features/webview/payout_account_models.dart';
 
 const _jsonHeaders = <String, List<String>>{
   Headers.contentTypeHeader: <String>[Headers.jsonContentType],
@@ -60,7 +61,30 @@ Map<String, dynamic> _group(
   };
 }
 
-String _cardBody({int groupCount = 3}) {
+/// Bank 渠道下拉：BDO 可用；BanKo 维护中（uppropped=0）且服务端没下发提示
+/// 文案（缺陷 reczz28SjW1oFIPp 的真实响应：headway=null、jellies 缺失）。
+List<Map<String, dynamic>> _bankOptions({
+  String? maintenanceNote,
+  int banKoStatus = 0,
+}) {
+  return <Map<String, dynamic>>[
+    <String, dynamic>{
+      'trollopy': 'BDO',
+      'definitively': 'Banco de Oro',
+      'headway': '',
+      'uppropped': 1,
+    },
+    <String, dynamic>{
+      'trollopy': 'BGB',
+      'definitively': 'BanKo, a Subsidiary of BPO',
+      'headway': null,
+      'uppropped': banKoStatus,
+      'lookalike': ?maintenanceNote,
+    },
+  ];
+}
+
+String _cardBody({int groupCount = 3, List<Map<String, dynamic>>? bankOptions}) {
   final groups = <Map<String, dynamic>>[
     _group('E-wallet', '1', <Map<String, dynamic>>[
       _field(
@@ -96,6 +120,7 @@ String _cardBody({int groupCount = 3}) {
         'channelCode',
         control: 'enum',
         placeholder: 'Please select',
+        options: bankOptions ?? _bankOptions(),
       ),
       _field('Bank Account', 'cardNo'),
       _field('Repeat Bank Account', 'confirmCardNo'),
@@ -493,6 +518,103 @@ void main() {
       ),
       findsNothing,
     );
+  });
+
+  /// 选中 Bank 分组里的指定渠道（走真实的单选弹窗）。
+  Future<void> pickBankChannel(WidgetTester tester, String label) async {
+    await tester.tap(find.byKey(const Key('bind-card-type-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('bind-card-select-2:channelCode')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(label));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('certification-single-select-submit')),
+    );
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('维护中的银行未下发文案时展示通用兜底提示，仍可选中', (tester) async {
+    // 缺陷 reczz28SjW1oFIPp：BanKo 维护中（uppropped=0），响应里没有 note
+    // 字段（jellies / lookalike 都缺失），绑卡页原来什么都不提示。
+    final adapter = _StubAdapter(cardBody: _cardBody());
+    final outcome = BindCardFlowOutcome();
+    await _pumpPage(tester, client: _clientFor(adapter), outcome: outcome);
+
+    await tester.tap(find.byKey(const Key('bind-card-type-1')));
+    await tester.pumpAndSettle();
+
+    // 提示挂在具体渠道上：没选之前不出现。
+    expect(find.byKey(const Key('bind-card-maintenance-hint')), findsNothing);
+    final plainHeight = tester
+        .getSize(find.byKey(const Key('bind-card-form')))
+        .height;
+
+    await tester.tap(find.byKey(const Key('bind-card-select-2:channelCode')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('BanKo, a Subsidiary of BPO'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('certification-single-select-submit')),
+    );
+    await tester.pumpAndSettle();
+
+    final hint = find.byKey(const Key('bind-card-maintenance-hint'));
+    expect(hint, findsOneWidget);
+    // 服务端没下发文案时用放款账户页同一句通用兜底，不另写产品文案。
+    expect(
+      tester.widget<Text>(hint).data,
+      PayoutAccount.defaultMaintenanceNote,
+    );
+    // 注意：测试环境用的等宽测试字体比真机 Helvetica 宽，这里不做「是否换行
+    // 溢出」的断言；真机上这句 88 字符的文案在 375 宽的提示位里正好两行。
+    // 提示占用设计稿的提示位：表单按提示高度撑高。
+    expect(
+      tester.getSize(find.byKey(const Key('bind-card-form'))).height,
+      moreOrLessEquals(plainHeight + 34, epsilon: 0.5),
+    );
+    // 维护中不拦提交：接口文档写明 uppropped=0 仍可绑定这张卡。
+    expect(find.byKey(const Key('bind-card-submit')), findsOneWidget);
+    expect(outcome.completed, isFalse);
+  });
+
+  testWidgets('服务端下发了渠道维护文案时原样展示', (tester) async {
+    final adapter = _StubAdapter(
+      cardBody: _cardBody(
+        bankOptions: _bankOptions(
+          maintenanceNote: 'BanKo is under maintenance until 6 PM.',
+        ),
+      ),
+    );
+    final outcome = BindCardFlowOutcome();
+    await _pumpPage(tester, client: _clientFor(adapter), outcome: outcome);
+
+    await pickBankChannel(tester, 'BanKo, a Subsidiary of BPO');
+
+    expect(
+      tester
+          .widget<Text>(find.byKey(const Key('bind-card-maintenance-hint')))
+          .data,
+      'BanKo is under maintenance until 6 PM.',
+    );
+  });
+
+  testWidgets('可用渠道即使带文案也不展示维护提示', (tester) async {
+    final adapter = _StubAdapter(
+      cardBody: _cardBody(
+        bankOptions: _bankOptions(
+          banKoStatus: 1,
+          maintenanceNote: 'BanKo is under maintenance until 6 PM.',
+        ),
+      ),
+    );
+    final outcome = BindCardFlowOutcome();
+    await _pumpPage(tester, client: _clientFor(adapter), outcome: outcome);
+
+    await pickBankChannel(tester, 'BanKo, a Subsidiary of BPO');
+
+    expect(find.byKey(const Key('bind-card-maintenance-hint')), findsNothing);
+    expect(find.textContaining('under maintenance'), findsNothing);
   });
 
   testWidgets('两次账号输入不一致时不提交', (tester) async {

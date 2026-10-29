@@ -318,9 +318,17 @@ class _AppWebViewPageState extends State<AppWebViewPage> {
   }
 
   /// 关闭 H5：栈里还有来源页时退回上一页，根页面交给宿主（不硬 pop）。
+  ///
+  /// 退到顶以后必须有个落点：H5 是栈底（例如被深链直接打开、或换卡后来源页
+  /// 已经被替换掉）时调 `toMain` 回外壳首页，别让返回键变成死键。
   Future<void> _closePage() async {
     if (!mounted) return;
-    if (Navigator.of(context).canPop()) Navigator.of(context).pop();
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.pop();
+      return;
+    }
+    await AppNavigator.toMain();
   }
 
   /// 返回键的完整决策：先过挽留弹窗，再交给 H5 返回桥。

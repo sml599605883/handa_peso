@@ -881,6 +881,51 @@ void main() {
       expect(adapter.homeCalls, 2);
     });
 
+    testWidgets('刷新在途时 Banner 保留旧内容，图片元素不重建', (tester) async {
+      // 刷新期间网关还没回包：Banner 必须继续画原来那一张，不能先空一下。
+      final gate = Completer<void>();
+      var calls = 0;
+      final adapter = _StubAdapter((options) async {
+        calls += 1;
+        if (calls > 1) await gate.future;
+        return ResponseBody.fromString(
+          _bannerBody(<Map<String, dynamic>>[_bannerItem(7)]),
+          200,
+          headers: _jsonHeaders,
+        );
+      });
+      await _pumpShell(tester, _client(_config(), adapter));
+      expect(adapter.homeCalls, 1);
+
+      Finder bannerImage() => find.descendant(
+        of: find.byKey(const ValueKey('home-banner-7')),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is Image && widget.image is NetworkImage,
+        ),
+      );
+      final state = tester.state(bannerImage());
+      final provider = tester.widget<Image>(bannerImage()).image;
+
+      unawaited(Get.find<MainController>().refreshOverview());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(adapter.homeCalls, 2);
+      expect(find.byKey(const ValueKey('home-banner-7')), findsOneWidget);
+      expect(identical(tester.state(bannerImage()), state), isTrue);
+      expect(tester.widget<Image>(bannerImage()).image, equals(provider));
+
+      // 新数据回来（同一张图）：继续用同一个 Image 元素，不重新拉图。
+      gate.complete();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byKey(const ValueKey('home-banner-7')), findsOneWidget);
+      expect(identical(tester.state(bannerImage()), state), isTrue);
+      expect(tester.widget<Image>(bannerImage()).image, equals(provider));
+    });
+
     testWidgets('切回首页 Tab 会刷新', (tester) async {
       final config = _config();
       await config.localSession.writeSessionId('session-1');

@@ -185,7 +185,7 @@ void main() {
       );
     });
 
-    testWidgets('注销：先弹挽留弹窗，选 Get Funds 不发请求', (tester) async {
+    testWidgets('注销：先弹挽留弹窗，选 Keep Offers 不发请求', (tester) async {
       final config = _config();
       await config.localSession.writeSessionId('session-1');
       await config.localSession.writePhone('9621231210');
@@ -204,7 +204,21 @@ void main() {
         findsOneWidget,
       );
       expect(find.byKey(const Key('account-retention-keep')), findsOneWidget);
-      expect(find.text('Get Funds'), findsOneWidget);
+      // 文案表：右橙保留 = Keep Offers，左灰动作 = Delete。
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('account-retention-keep')),
+          matching: find.text('Keep Offers'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('account-retention-confirm')),
+          matching: find.text('Delete'),
+        ),
+        findsOneWidget,
+      );
 
       await tester.tap(find.byKey(const Key('account-retention-keep')));
       await tester.pumpAndSettle();
@@ -234,7 +248,7 @@ void main() {
       await _drainEasyLoading(tester);
     });
 
-    testWidgets('退出登录：Stay 留在原地，Exit 才真的退出', (tester) async {
+    testWidgets('退出登录：Keep Rates 留在原地，Log Out 才真的退出', (tester) async {
       final config = _config();
       await config.localSession.writeSessionId('session-1');
       await config.localSession.writePhone('9621231210');
@@ -248,8 +262,21 @@ void main() {
         _retentionArtwork('assets/account_logout_retention_card.png'),
         findsOneWidget,
       );
-      expect(find.text('Stay'), findsOneWidget);
-      expect(find.text('Exit'), findsOneWidget);
+      // 文案表：右橙保留 = Keep Rates，左灰动作 = Log Out。
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('account-retention-keep')),
+          matching: find.text('Keep Rates'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('account-retention-confirm')),
+          matching: find.text('Log Out'),
+        ),
+        findsOneWidget,
+      );
 
       await tester.tap(find.byKey(const Key('account-retention-keep')));
       await tester.pumpAndSettle();

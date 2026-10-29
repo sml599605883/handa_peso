@@ -19,6 +19,7 @@ import '../../core/permissions/permission_coordinator.dart';
 import '../../core/product/product_detail_loader.dart';
 import '../../core/report/report_scene.dart';
 import '../../core/report/report_service.dart';
+import '../webview/payout_account_models.dart';
 import 'bind_card_design.dart';
 import 'bind_card_models.dart';
 import 'face_models.dart';
@@ -573,7 +574,11 @@ class _BindCardPageState extends State<BindCardPage> {
   @override
   Widget build(BuildContext context) {
     final group = _group;
-    final showsHint = group != null && _groupHint(group).isNotEmpty;
+    final hint = group == null ? '' : _hintCopy(group);
+    final hintKey =
+        group != null && _maintenanceOption(group) != null
+        ? const Key('bind-card-maintenance-hint')
+        : const Key('bind-card-group-hint');
 
     return IdentityPageScaffold(
       gradient: AppColors.facePageGradient,
@@ -605,7 +610,7 @@ class _BindCardPageState extends State<BindCardPage> {
             ),
             SizedBox(height: metrics.size(14)),
           ],
-          _formCard(metrics, group, showsHint),
+          _formCard(metrics, group, hint, hintKey),
           SizedBox(height: metrics.size(BindCardDesign.alertTopGap)),
           _alert(metrics),
           SizedBox(height: metrics.size(BindCardDesign.submitTopGap)),
@@ -713,7 +718,8 @@ class _BindCardPageState extends State<BindCardPage> {
   Widget _formCard(
     IdentityMetrics metrics,
     BindCardGroup? group,
-    bool showsHint,
+    String hint,
+    Key hintKey,
   ) {
     return Container(
       key: const Key('bind-card-form'),
@@ -738,14 +744,15 @@ class _BindCardPageState extends State<BindCardPage> {
           width: metrics.size(1),
         ),
       ),
-      child: _formContent(metrics, group, showsHint),
+      child: _formContent(metrics, group, hint, hintKey),
     );
   }
 
   Widget _formContent(
     IdentityMetrics metrics,
     BindCardGroup? group,
-    bool showsHint,
+    String hint,
+    Key hintKey,
   ) {
     if (_loadState == _BindCardLoadState.loading) {
       return const Center(child: CircularProgressIndicator());
@@ -782,6 +789,7 @@ class _BindCardPageState extends State<BindCardPage> {
         ),
       ),
     ];
+    final hintAnchor = _hintAnchor(group);
     for (var index = 0; index < group.fields.length; index++) {
       final field = group.fields[index];
       children
@@ -793,16 +801,17 @@ class _BindCardPageState extends State<BindCardPage> {
           ),
         )
         ..add(_fieldTile(metrics, group, field, showLabel: index != 0));
-      if (index == 0 && showsHint) {
+      if (index == hintAnchor && hint.isNotEmpty) {
         children
           ..add(SizedBox(height: metrics.size(BindCardDesign.groupHintTopGap)))
           ..add(
             SizedBox(
               height: metrics.size(BindCardDesign.groupHintHeight),
               child: Text(
-                _groupHint(group),
-                key: const Key('bind-card-group-hint'),
+                hint,
+                key: hintKey,
                 maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: AppColors.bindCardSelectedText,
                   fontFamily: 'Helvetica',
@@ -823,6 +832,57 @@ class _BindCardPageState extends State<BindCardPage> {
   String _groupHint(BindCardGroup group) {
     if (group.hint.isNotEmpty) return group.hint;
     return group.type == '3' ? BindCardDesign.cashHintCopy : '';
+  }
+
+  /// 渠道下拉里当前选中的那一项（银行 / 电子钱包 / 取现）。
+  ///
+  /// 维护中的渠道只加提示、不禁用：接口文档「获取绑卡信息（第五项）」
+  /// 写明 `uppropped` 为 0 时用户依然可以选择并绑定这张卡。
+  ({BindCardField field, BindCardOption option})? _selectedChannel(
+    BindCardGroup group,
+  ) {
+    for (final field in group.fields) {
+      if (field.control != BindCardFieldControl.selection) continue;
+      final selected = (_values[_fieldKey(group, field)] ?? '').trim();
+      if (selected.isEmpty) continue;
+      for (final option in field.options) {
+        if (option.value == selected) return (field: field, option: option);
+      }
+    }
+    return null;
+  }
+
+  /// 当前选中的渠道维护中（`uppropped`=0）时返回它；可用渠道即便带了文案
+  /// 也不提示。
+  BindCardOption? _maintenanceOption(BindCardGroup group) {
+    final channel = _selectedChannel(group);
+    if (channel == null || channel.option.available) return null;
+    return channel.option;
+  }
+
+  /// 表单第一行下面那条提示位（设计稿 03-05）要显示什么。
+  ///
+  /// 优先级：渠道维护中 → 服务端分组提示 → 现金取款固定文案。维护中的渠道
+  /// 服务端没下发文案时用放款账户页同一句通用兜底，不另写产品文案
+  /// （缺陷 reczz28SjW1oFIPp：BanKo 维护中时页面什么都不显示）。
+  String _hintCopy(BindCardGroup group) {
+    final option = _maintenanceOption(group);
+    if (option != null) {
+      final sent = option.hint.trim();
+      return sent.isEmpty ? PayoutAccount.defaultMaintenanceNote : sent;
+    }
+    return _groupHint(group);
+  }
+
+  /// 提示位跟在哪个字段后面：维护提示跟在被选中的渠道字段后面，其余情况
+  /// 沿用设计稿的第一行。
+  int _hintAnchor(BindCardGroup group) {
+    final channel = _selectedChannel(group);
+    if (channel == null || channel.option.available) return 0;
+    for (var index = 0; index < group.fields.length; index++) {
+      if (group.fields[index] == channel.field) return index;
+    }
+    return 0;
   }
 
   Widget _fieldTile(

@@ -79,6 +79,25 @@ void main() {
     expect(find.byType(AppWebViewPage), findsOneWidget);
   });
 
+  testWidgets('H5 回退原地打转时返回退出到上一级，不再死循环', (tester) async {
+    // 换卡成功后的确定用款页：H5 说「还有上一页」，但 history.back() 之后又
+    // 重定向回同一个页面。返回键必须落到上一级原生页（reczz28Sjm17GWSd）。
+    platform.controller
+      ..bridgeCanGoBack = true
+      ..historyPosition = '["http://host/#/loan-confirmation",2,4]';
+    await _pumpPage(tester);
+
+    await tester.tap(find.byKey(const Key('webview-back')));
+    // 回退后要等位置探针窗口（默认 400ms 试两次）过去才判定「没动」。
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+
+    expect(platform.controller.historyBackCalls, 1);
+    expect(find.byType(AppWebViewPage), findsNothing);
+    expect(find.text('home'), findsOneWidget);
+  });
+
   testWidgets('系统返回（Android 物理键 / iOS 侧滑）走同一条决策链', (tester) async {
     platform.controller.bridgeCanGoBack = true;
     await _pumpPage(tester);

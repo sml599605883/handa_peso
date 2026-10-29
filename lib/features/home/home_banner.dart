@@ -10,6 +10,15 @@ import 'home_data.dart';
 /// 手动滑动；只有一张时不套 `PageView`，避免出现没有意义的翻页手势。模块缺失
 /// 或条目都不带图片时，退回设计稿内置的宣传条，保证这个位置不会出现空洞。
 ///
+/// 刷新首页时这个位置不允许闪，因此这里只换数据、不重建图片：
+/// * 同一张图（URL 不变）沿用原来的 `Image` 元素，不会重新解析一遍
+///   （`ImageProvider` 相等即不再拉图）；
+/// * 换图时用 `gaplessPlayback`，新图解码好之前继续画旧的一帧，不出现空框；
+/// * 内置宣传条是这一格的常驻底色，加载中 / 加载失败只是把底色露出来，
+///   不会先塌成空白再弹回来；
+/// * 刷新在途（[isRefreshing]）时拿到空列表不算数，继续展示上一次的 Banner，
+///   等刷新结束、确认服务端确实没下发 Banner 才退回内置宣传条。
+///
 /// 自动翻页只在首页可见（[isActive]）且应用位于前台时进行：被二级页面覆盖、
 /// 切到其它 Tab 或退到后台都会停下来。
 class HomeBanner extends StatefulWidget {
@@ -19,6 +28,7 @@ class HomeBanner extends StatefulWidget {
     required this.onTap,
     required this.scale,
     this.isActive = true,
+    this.isRefreshing = false,
   });
 
   /// 设计稿尺寸（02-01 默认态与 08-04 Banner）。
@@ -40,6 +50,12 @@ class HomeBanner extends StatefulWidget {
   /// 首页是否可见；不可见时暂停自动翻页。
   final bool isActive;
 
+  /// 首页是否正在刷新（下拉刷新 / 切回 Tab / 回到前台）。
+  ///
+  /// 刷新在途时列表可能短暂为空，这个标记让组件沿用上一次的 Banner，
+  /// 而不是先把这一格换成内置宣传条、等新数据回来再换回去。
+  final bool isRefreshing;
+
   @override
   State<HomeBanner> createState() => _HomeBannerState();
 }
@@ -55,7 +71,14 @@ class _HomeBannerState extends State<HomeBanner> with WidgetsBindingObserver {
   static int _startPage(int count) =>
       count <= 0 ? _pageBase : _pageBase - (_pageBase % count);
 
-  late int _page = _startPage(widget.banners.length);
+  /// 真正渲染出来的列表：刷新在途时可能是上一次下发的那一份。
+  ///
+  /// 单独存一份状态而不是直接用 `widget.banners`，是为了让「刷新期间列表短暂
+  /// 为空」不会把已经展示的 Banner 拔掉；也顺带保证了同一批数据下子树的
+  /// 位置稳定，不会因为父级重建而换掉 `Image` 元素。
+  late List<HomeBannerData> _banners = widget.banners;
+
+  late int _page = _startPage(_banners.length);
   late final PageController _controller = PageController(initialPage: _page);
   Timer? _timer;
   bool _foreground = true;
@@ -72,8 +95,12 @@ class _HomeBannerState extends State<HomeBanner> with WidgetsBindingObserver {
   @override
   void didUpdateWidget(HomeBanner oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.banners.length != widget.banners.length) {
-      _page = _startPage(widget.banners.length);
+    // 刷新过程中下发的空列表先不认，等刷新结束再说；有新列表就立刻换新的。
+    if (widget.banners.isNotEmpty || !widget.isRefreshing) {
+      _banners = widget.banners;
+    }
+    if (oldWidget.banners.length != _banners.length) {
+      _page = _startPage(_banners.length);
       if (_controller.hasClients) _controller.jumpToPage(_page);
     }
     _syncTimer();
@@ -96,7 +123,7 @@ class _HomeBannerState extends State<HomeBanner> with WidgetsBindingObserver {
   void _syncTimer() {
     _timer?.cancel();
     _timer = null;
-    if (!widget.isActive || !_foreground || widget.banners.length < 2) return;
+    if (!widget.isActive || !_foreground || _banners.length < 2) return;
     _timer = Timer.periodic(_interval, (_) {
       // 用户正在手动滑动时不抢翻页，等他松手后下一拍再继续。
       if (!_controller.hasClients ||
@@ -113,30 +140,47 @@ class _HomeBannerState extends State<HomeBanner> with WidgetsBindingObserver {
     });
   }
 
-  Widget _fallback() =>
-      Image.asset(HomeBanner._fallbackAsset, fit: BoxFit.fill);
+  /// 设计稿内置的宣传条：这一格的常驻底色。
+  ///
+  /// 本地打包资源，首帧就能解码；网络图没就绪或加载失败时用户看到的是它，
+  /// 而不是一块空白。
+  Widget _promo() => Image.asset(
+    HomeBanner._fallbackAsset,
+    fit: BoxFit.fill,
+    gaplessPlayback: true,
+  );
 
   Widget _slide(HomeBannerData banner) => GestureDetector(
     key: ValueKey('home-banner-${banner.id}'),
     behavior: HitTestBehavior.opaque,
     onTap: () => widget.onTap(banner),
-    child: Image.network(
-      banner.imageUrl,
-      fit: BoxFit.cover,
-      width: double.infinity,
-      height: double.infinity,
-      loadingBuilder: (context, child, progress) =>
-          progress == null ? child : _fallback(),
-      errorBuilder: (context, error, stackTrace) => _fallback(),
+    child: Stack(
+      fit: StackFit.expand,
+      children: [
+        _promo(),
+        // 服务端 Banner 盖在底色上：还没解码出第一帧时它不画任何东西，露出的
+        // 是底色；换图时 `gaplessPlayback` 让旧的一帧一直画到新图就绪。
+        // 这里刻意不给 `loadingBuilder`：一旦加载中就换占位图，刷新时
+        // 用户会看到「Banner → 宣传条 → Banner」的闪动。
+        Image.network(
+          banner.imageUrl,
+          fit: BoxFit.cover,
+          width: double.infinity,
+          height: double.infinity,
+          gaplessPlayback: true,
+          // 失败时同样只留底色，不额外画错误占位。
+          errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+        ),
+      ],
     ),
   );
 
   @override
   Widget build(BuildContext context) {
-    final banners = widget.banners;
+    final banners = _banners;
     final Widget content;
     if (banners.isEmpty) {
-      content = _fallback();
+      content = _promo();
     } else if (banners.length == 1) {
       content = _slide(banners.single);
     } else {

@@ -83,6 +83,9 @@ class HomePage extends GetView<MainController> {
                     banners: data.banners,
                     scale: scale,
                     isActive: controller.homeOnScreen.value,
+                    // 刷新在途时 Banner 沿用上一次的内容：这一格不能先空一下
+                    // 再回来，否则每次下拉刷新都会闪。
+                    isRefreshing: controller.overviewLoading.value,
                     onTap: controller.openBanner,
                   ),
                   if (data.offers.isNotEmpty) ...[

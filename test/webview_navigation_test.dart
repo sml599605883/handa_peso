@@ -49,5 +49,15 @@ void main() {
 
     expect(find.text('confirmation-page'), findsOneWidget);
     expect(find.text('source-page'), findsNothing);
+
+    // 换卡成功走的也是这条替换路径：栈里只允许留下一个新 H5，旧的来源页
+    // 必须已被移除。否则返回键会退到旧确认页，看起来像原地打转
+    // （reczz28Sjm17GWSd）。一次 pop 就回到首页即证明深度只有一层。
+    Get.back<void>();
+    await tester.pumpAndSettle();
+
+    expect(Get.currentRoute, '/home');
+    expect(find.text('home'), findsOneWidget);
+    expect(find.text('confirmation-page'), findsNothing);
   });
 }
