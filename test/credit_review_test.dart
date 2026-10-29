@@ -138,6 +138,57 @@ void main() {
     poller.stop();
   });
 
+  test('进度条填充宽度按真实进度取值，并处理 0/100 边界', () {
+    double widthFor(int progress) =>
+        creditReviewProgressFillWidth(trackWidth: 303, progress: progress);
+
+    // 0%：只留承载「0%」文案的起始块，文字不被裁掉。
+    expect(widthFor(0), 32);
+    expect(widthFor(-20), 32);
+    expect(widthFor(20), closeTo(60.6, 0.001));
+    expect(widthFor(50), closeTo(151.5, 0.001));
+    // 99%：宽度必须跟着数值走，几乎铺满轨道。
+    expect(widthFor(99), closeTo(299.97, 0.001));
+    // 100%：正好铺满，不溢出。
+    expect(widthFor(100), 303);
+    expect(widthFor(120), 303);
+    // 轨道未布局（宽度 0）不产生负宽度；轨道比起始块还窄时不溢出轨道。
+    expect(creditReviewProgressFillWidth(trackWidth: 0, progress: 50), 0);
+    expect(creditReviewProgressFillWidth(trackWidth: 20, progress: 0), 20);
+  });
+
+  testWidgets('等待授信页进度条填充随百分比推进到 99%', (tester) async {
+    tester.view.physicalSize = const Size(375, 812);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      GetMaterialApp(
+        home: CreditReviewPage(
+          progressDelayGenerator: () => const Duration(milliseconds: 10),
+          progressIncrementGenerator: (_) => 99,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final fill = find.byKey(const Key('credit-review-progress-fill'));
+    final track = find.byKey(const Key('credit-review-progress'));
+    expect(tester.getSize(track), const Size(303, 12));
+    // 起始：0% 只有起始块，填充贴着轨道左端。
+    expect(find.text('0%'), findsOneWidget);
+    expect(tester.getSize(fill), const Size(32, 12));
+    expect(tester.getTopLeft(fill), tester.getTopLeft(track));
+
+    await tester.pump(const Duration(milliseconds: 20));
+
+    // 文案与填充同源：数值到 99%，宽度也要到轨道 303 的 99%。
+    expect(find.text('99%'), findsOneWidget);
+    expect(tester.getSize(fill).width, closeTo(303 * 0.99, 0.01));
+    expect(tester.getSize(fill).height, 12);
+    expect(tester.getTopLeft(fill), tester.getTopLeft(track));
+  });
+
   testWidgets('等待授信页左上角返回键回到来源页', (tester) async {
     tester.view.physicalSize = const Size(375, 812);
     tester.view.devicePixelRatio = 1;

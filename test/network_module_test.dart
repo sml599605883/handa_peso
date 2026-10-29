@@ -148,6 +148,52 @@ void main() {
     });
   });
 
+  group('原卡重试', () {
+    test('按文档只发 redecorates，不发送文档里不存在的 chattinesses', () async {
+      final requests = <RequestOptions>[];
+      final client = GatewayClient(
+        GatewaySettings(
+          apiOrigin: 'http://127.0.0.1:1',
+          signSecret: 'unit-test-secret',
+          localSession: LocalSession.memory(),
+          clock: () => 1700000000000,
+          noiseDigits: (length) => '1' * length,
+        ),
+        dio: Dio()
+          ..httpClientAdapter = _StubAdapter((options) async {
+            requests.add(options);
+            return ResponseBody.fromString(
+              jsonEncode(<String, dynamic>{
+                WireFormat.statusField: 0,
+                WireFormat.noteField: 'success',
+                WireFormat.payloadField: <String, dynamic>{
+                  'proclises': 'https://h5.example/order',
+                },
+              }),
+              200,
+              headers: const <String, List<String>>{
+                Headers.contentTypeHeader: <String>[Headers.jsonContentType],
+              },
+            );
+          }),
+      );
+
+      final reply = await client.reorderExistingLoan(orderNo: 'ORDER-1000460');
+
+      final request = requests.single;
+      // 文档《原卡重试确认订单》：POST /dropcloth/cotype，表单只有一个必填
+      // 参数 redecorates；chattinesses 在全部文档里都不存在。
+      expect(request.uri.path, '/dropcloth/cotype');
+      expect(request.data, <String, dynamic>{'redecorates': 'ORDER-1000460'});
+      // 订单号不能额外泄漏到 URL 查询串里（那里只有签名公有参数）。
+      expect(
+        request.uri.queryParameters.values,
+        isNot(contains('ORDER-1000460')),
+      );
+      expect(reply.payload['proclises'], 'https://h5.example/order');
+    });
+  });
+
   group('GatewayReply', () {
     test('unwraps a success envelope', () {
       final response = GatewayReply.parse({

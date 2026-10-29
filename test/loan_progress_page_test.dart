@@ -567,6 +567,52 @@ void main() {
       );
     });
 
+    testWidgets('卡片文案不吞点击：点产品名 / 标签 / 金额都能进订单详情', (tester) async {
+      final config = _config();
+      await config.localSession.writeSessionId('session-1');
+      final adapter = _StubAdapter(
+        (options) async => ResponseBody.fromString(
+          _body(_designCards()),
+          200,
+          headers: _jsonHeaders,
+        ),
+      );
+      await _pumpLoanTab(tester, _client(config, adapter));
+
+      Future<void> expectOpensDetail(String orderNo, Finder target) async {
+        // 每次都必须从列表页出发（上一轮点完会退回外壳）。
+        expect(Get.currentRoute, AppRoutes.main);
+        await tester.tap(target);
+        await tester.pumpAndSettle();
+        expect(
+          Get.currentRoute,
+          AppRoutes.webView,
+          reason: '点 $orderNo 卡片上的文案没进订单详情',
+        );
+        expect(
+          find.textContaining('/#/FiggingJuncture?orderId=$orderNo'),
+          findsOneWidget,
+        );
+        Get.back();
+        await tester.pumpAndSettle();
+      }
+
+      // 产品名铺满产品行、数据块的标签与数值居中：这些 `RenderParagraph`
+      // 以前会把点击吞掉，只剩文案之间的空白窄条能触发跳转。
+      await expectOpensDetail(
+        '3',
+        find.descendant(of: _card('A3'), matching: find.text('Handa Peso')),
+      );
+      await expectOpensDetail(
+        '4',
+        find.descendant(of: _card('A4'), matching: find.text('Loan Amount')),
+      );
+      await expectOpensDetail(
+        '5',
+        find.descendant(of: _card('A5'), matching: find.text('Repayment')),
+      );
+    });
+
     testWidgets('卡片没下发详情地址和产品 ID 时仍然走准入接口', (tester) async {
       final config = _config();
       await config.localSession.writeSessionId('session-1');

@@ -204,6 +204,12 @@ const _location = <String, Object?>{
   'city': 'Makati',
 };
 
+/// 反地理编码失败时原生只给得出经纬度（线上抓包里的形态）。
+const _coordsOnlyLocation = <String, Object?>{
+  'latitude': '31.245621',
+  'longitude': '121.440232',
+};
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -220,6 +226,40 @@ void main() {
       expect(body['carnets'], '14.554729');
       expect(body['polyembryonies'], '121.024445');
       expect(body['marbleizes'], 'Makati');
+    });
+
+    test('falls back to the full address when the street is missing', () {
+      // 文档把 widemouthed（字段映射的 feature_name / 街道）标成必填，而原生
+      // 取的是 placemark.thoroughfare，园区/空旷坐标经常为空。
+      final body = ReportPayload.locationBody(
+        ReportLocation.fromMap(const <String, Object?>{
+          'countryCode': 'PH',
+          'country': 'Philippines',
+          'city': 'Makati',
+          'fullAddress': 'Ayala Ave, Makati, Metro Manila, Philippines',
+          'latitude': '14.554729',
+          'longitude': '121.024445',
+        }),
+      );
+
+      expect(body['widemouthed'], 'Ayala Ave, Makati, Metro Manila, Philippines');
+      // sardonic（省）在文档里可选：取不到时不发空串。
+      expect(body.containsKey('sardonic'), isFalse);
+      for (final key in ReportPayload.locationRequiredFields) {
+        expect(body[key], isNotEmpty, reason: '必填项 $key 不能为空');
+      }
+    });
+
+    test('flags a coordinate-only snapshot as not reportable', () {
+      // 反地理编码失败时原生只回经纬度：必填项不齐，整条定位上报都要跳过。
+      final location = ReportLocation.fromMap(const <String, Object?>{
+        'latitude': '31.245621',
+        'longitude': '121.440232',
+      });
+
+      expect(location.isValid, isTrue);
+      expect(location.hasCompleteAddress, isFalse);
+      expect(ReportLocation.fromMap(_location).hasCompleteAddress, isTrue);
     });
 
     test('builds the nested device payload with the documented keys', () {
@@ -406,6 +446,63 @@ void main() {
           .toList();
       expect(uploads.length, 2);
       expect(uploads.last.body['polyembryonies'], '121.024445');
+    });
+
+    test('does not post an empty required address, it retries the geocode once', () async {
+      native.snapshot = _snapshot;
+      native.location = _coordsOnlyLocation;
+      var locationCalls = 0;
+      native.onMethod = (method) {
+        if (method != 'getLocation') return;
+        locationCalls += 1;
+        // 原生每次调用都会重新做一次反地理编码：第二次成功就该补齐再上报。
+        if (locationCalls > 1) native.location = _location;
+      };
+
+      await service.reportLocationAndDevice();
+
+      expect(locationCalls, 2);
+      final body = harness.callTo('/dropcloth/farle').body;
+      for (final key in ReportPayload.locationRequiredFields) {
+        expect(body[key], isNotEmpty, reason: '必填项 $key 不能为空');
+      }
+      expect(body['psychrometry'], 'PH');
+      expect(body['eyehole'], 'Philippines');
+      expect(body['widemouthed'], 'Ayala Ave');
+      expect(body['marbleizes'], 'Makati');
+      expect(harness.hasCall('/dropcloth/unglove'), isTrue);
+    });
+
+    test('skips the location upload rather than sending empty required fields', () async {
+      // 抓包里的形态：只拿到经纬度，国家/城市/街道全空。文档把这几项标成必填，
+      // 空值会被接口审计判成缺陷，所以宁可不发这条，也不发空必填项。
+      native.snapshot = _snapshot;
+      native.location = _coordsOnlyLocation;
+
+      await service.reportLocationAndDevice();
+      await service.reportCurrentLocation();
+
+      expect(harness.hasCall('/dropcloth/farle'), isFalse);
+      // 设备详情照常上报：经纬度在它的加密载荷里，不会因为这次跳过而丢失。
+      expect(harness.hasCall('/dropcloth/unglove'), isTrue);
+    });
+
+    test('falls back to the last complete location when geocoding starts failing', () async {
+      native.snapshot = _snapshot;
+      native.location = _location;
+      await service.reportLocationAndDevice();
+
+      // 之后反地理编码失败：用本次进程里最后一次完整的定位兜底，不再发空值。
+      native.location = _coordsOnlyLocation;
+      await service.reportLocationAndDevice();
+
+      final uploads = harness.calls
+          .where((call) => call.path == '/dropcloth/farle')
+          .toList();
+      expect(uploads.length, 2);
+      expect(uploads.last.body['marbleizes'], 'Makati');
+      expect(uploads.last.body['widemouthed'], 'Ayala Ave');
+      expect(uploads.last.body['carnets'], '14.554729');
     });
 
     test(

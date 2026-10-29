@@ -52,7 +52,14 @@ abstract final class PayoutAccountDesign {
   static const double logoBoxSize = 30;
   static const double logoSize = 28;
   static const double bankNameSize = 18;
+
+  /// 勾选角标：04-01 量到 16x16，右/上边与卡片描边外沿重合，圆心落在卡片
+  /// 14 的圆角弧上（蓝湖 750x1878 原件：色块 bbox x 690..721、y 406..437，
+  /// 卡片右边界 721、上边界 406）。所以角标要画在卡片圆角裁剪之外，否则
+  /// 右上角会被切掉一块。
   static const double checkboxSize = 16;
+  static const double checkboxRightInset = 0;
+  static const double checkboxTopInset = 0;
 
   /// 底部提交按钮与页面收尾。
   static const double submitTopGap = 20;

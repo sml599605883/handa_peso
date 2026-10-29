@@ -70,6 +70,59 @@ class FakePlatformController extends PlatformInAppWebViewController {
   /// 生成新的平台 widget，实例级标记会被重置，`onLoadStop` 就会无限重入。
   bool created = false;
 
+  /// 首屏创建后是否自动派发一次 `onLoadStop`（真机成功加载的终态）。
+  ///
+  /// 设为 `false` 用来模拟「首屏一直没走完」：请求失败、弱网卡住、下载中断
+  /// 时 WebView 都不会回调完成。
+  bool autoFinishLoad = true;
+
+  /// `getTitle` 失败。iOS 侧它是一次单独的桥调用，页面不能因为取标题失败
+  /// 就把顶部进度条留在屏上。
+  bool failGetTitle = false;
+
+  /// 最近一次构建交下来的回调集合。`onLoadStart` / `onProgressChanged` /
+  /// `onReceivedError` / `shouldOverrideUrlLoading` 这些只有真机才会派发的
+  /// 生命周期都在这里，用例通过下面的 `emit*` 方法驱动。
+  PlatformInAppWebViewWidgetCreationParams? callbacks;
+
+  /// 回调里传的控制器必须是**同一个**实例：页面用 `identical` 判活，换一个包装
+  /// 对象就会被当成旧 WebView 的事件丢掉。
+  InAppWebViewController? widgetController;
+
+  InAppWebViewController get _widgetController => widgetController!;
+
+  void emitLoadStart([String? url]) =>
+      callbacks?.onLoadStart?.call(_widgetController, WebUri(url ?? currentUrl));
+
+  void emitLoadStop([String? url]) =>
+      callbacks?.onLoadStop?.call(_widgetController, WebUri(url ?? currentUrl));
+
+  void emitProgress(int progress) =>
+      callbacks?.onProgressChanged?.call(_widgetController, progress);
+
+  void emitLoadError({bool isForMainFrame = true}) =>
+      callbacks?.onReceivedError?.call(
+        _widgetController,
+        WebResourceRequest(
+          url: WebUri(currentUrl),
+          isForMainFrame: isForMainFrame,
+        ),
+        WebResourceError(
+          type: WebResourceErrorType.CANNOT_CONNECT_TO_HOST,
+          description: 'offline',
+        ),
+      );
+
+  /// 模拟一次网页发起、由原生接管（`mailto:` / `ph://` 这类）的跳转。
+  Future<NavigationActionPolicy?> emitNavigation(String url) async =>
+      await callbacks!.shouldOverrideUrlLoading!(
+        _widgetController,
+        NavigationAction(
+          isForMainFrame: true,
+          request: URLRequest(url: WebUri(url)),
+        ),
+      );
+
   int goBackCalls = 0;
 
   /// `history.back()` 被调用的次数。
@@ -99,7 +152,10 @@ class FakePlatformController extends PlatformInAppWebViewController {
   Future<WebUri?> getUrl() async => WebUri(currentUrl);
 
   @override
-  Future<String?> getTitle() async => title;
+  Future<String?> getTitle() async {
+    if (failGetTitle) throw StateError('Title is unavailable');
+    return title;
+  }
 
   @override
   Future<bool> canGoBack() async => nativeCanGoBack;
@@ -126,15 +182,22 @@ class _FakeWebViewWidget extends PlatformInAppWebViewWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 回调集合跟着控制器走：页面 rebuild 会换掉平台 widget，但控制器是同一个，
+    // 用例可以在任意一帧之后继续驱动生命周期。
+    controller.callbacks = params;
+    controller.widgetController ??=
+        params.controllerFromPlatform!(controller);
+    final widgetController = controller.widgetController!;
     if (!controller.created) {
       controller.created = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        final widgetController = params.controllerFromPlatform!(controller);
         params.onWebViewCreated?.call(widgetController);
-        params.onLoadStop?.call(
-          widgetController,
-          WebUri(controller.currentUrl),
-        );
+        if (controller.autoFinishLoad) {
+          params.onLoadStop?.call(
+            widgetController,
+            WebUri(controller.currentUrl),
+          );
+        }
       });
     }
     return const ColoredBox(color: Colors.white);

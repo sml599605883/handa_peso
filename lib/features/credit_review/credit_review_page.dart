@@ -26,6 +26,26 @@ String creditReviewProductId(Object? arguments) {
   return '';
 }
 
+/// 设计稿 04-02 里承载百分比文案的起始块宽度（轨道 303x12，文案块 32x12）。
+const double _progressChipWidth = 32.0;
+
+/// 进度条填充宽度（设计坐标，单位与 [trackWidth] 相同）。
+///
+/// 填充宽度必须由真实进度驱动，和百分比文案同源：0% 保留承载文案的起始块，
+/// 100% 正好铺满轨道（不溢出），中间按进度线性增长。只改文案不改宽度会让
+/// 「99%」停在起始位置（缺陷 reczz28SjrY3cEPW）。
+double creditReviewProgressFillWidth({
+  required double trackWidth,
+  required int progress,
+  double minWidth = _progressChipWidth,
+}) {
+  if (trackWidth <= 0) return 0;
+  final ratio = progress.clamp(0, 100) / 100;
+  // 轨道比起始块还窄时，下限退到轨道宽度，避免 clamp 的上下界反转。
+  final lower = minWidth < trackWidth ? minWidth : trackWidth;
+  return (trackWidth * ratio).clamp(lower, trackWidth);
+}
+
 class CreditReviewPage extends StatefulWidget {
   const CreditReviewPage({
     this.poller,
@@ -107,6 +127,11 @@ class _CreditReviewPageState extends State<CreditReviewPage> {
         builder: (context, constraints) {
           final scale = constraints.maxWidth / _designWidth;
           double px(num value) => value * scale;
+          // 填充与百分比文案读同一个 _progress：文字到 99% 时填充也要到 99%。
+          final progressFillWidth = creditReviewProgressFillWidth(
+            trackWidth: _progressWidth,
+            progress: _progress,
+          );
           // 返回键与其它二级页面一致：设计坐标 (14, 56)，刘海屏按安全区下移。
           final safeTop = scale == 0
               ? 0.0
@@ -143,7 +168,8 @@ class _CreditReviewPageState extends State<CreditReviewPage> {
                           ),
                         ),
                         Container(
-                          width: px(32),
+                          key: const Key('credit-review-progress-fill'),
+                          width: px(progressFillWidth),
                           height: px(_progressHeight),
                           alignment: Alignment.centerLeft,
                           padding: EdgeInsets.only(left: px(15), right: px(2)),

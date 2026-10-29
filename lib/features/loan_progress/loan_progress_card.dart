@@ -89,16 +89,25 @@ class LoanProgressCard extends StatelessWidget {
     double px(num value) => value * scale;
     final actions = item.visibleActions;
 
-    return SizedBox(
-      width: px(width),
-      height: px(_height),
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: onTap,
+    // 整张卡片是一个热区，热区必须包在内容外面。
+    //
+    // 之前热区是 `Stack` 的最底层兄弟节点：`RenderParagraph.hitTestSelf` 恒为
+    // true，Stack 命中子节点后就不再往下测，于是卡片上的文案（产品名、日期 /
+    // 金额的标签与数值、徽标文案）会把点击吞掉，只剩文案之间的空白窄条能进
+    // 订单详情（缺陷：只有右侧一小块能触发）。
+    //
+    // 改成祖先节点后，点击无论落在文案还是空白处都会经过它；按钮是它的子节点，
+    // 命中按钮时由更深一层的识别器赢得手势竞技场，仍然走 `onActionTap`。
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: SizedBox(
+        width: px(width),
+        height: px(_height),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned.fill(
               child: CustomPaint(
                 painter: _CardBodyPainter(
                   radius: px(_radius),
@@ -108,69 +117,72 @@ class LoanProgressCard extends StatelessWidget {
                 ),
               ),
             ),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            top: px(_dividerCenter - _dividerSliceHeight / 2),
-            height: px(_dividerSliceHeight),
-            child: const IgnorePointer(
-              child: Image(image: AssetImage(_dividerSlice), fit: BoxFit.fill),
-            ),
-          ),
-          Positioned(
-            left: px(_contentInset),
-            right: px(_contentInset),
-            top: px(_productTop),
-            height: px(_logoSize),
-            child: _ProductRow(item: item, scale: scale, size: px(_logoSize)),
-          ),
-          Positioned(
-            left: px(_valueInset),
-            right: px(_valueInset),
-            top: px(_valueTop),
-            height: px(_valueHeight),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _ValueBlock(
-                    label: item.dateLabel,
-                    value: item.date,
-                    scale: scale,
-                  ),
-                ),
-                SizedBox(width: px(_valueGap)),
-                Expanded(
-                  child: _ValueBlock(
-                    label: item.amountLabel,
-                    value: item.amount,
-                    scale: scale,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (actions.isNotEmpty)
             Positioned(
-              left: px(_actionInset),
-              right: px(_actionInset),
-              top: px(_actionTop),
-              height: px(_actionHeight),
-              child: _ActionStrip(
-                actions: actions,
-                scale: scale,
-                onActionTap: onActionTap,
+              left: 0,
+              right: 0,
+              top: px(_dividerCenter - _dividerSliceHeight / 2),
+              height: px(_dividerSliceHeight),
+              child: const IgnorePointer(
+                child: Image(
+                  image: AssetImage(_dividerSlice),
+                  fit: BoxFit.fill,
+                ),
               ),
             ),
-          if (item.statusLabel.isNotEmpty)
             Positioned(
-              right: 0,
-              top: px(-_badgeOverhang),
-              width: px(_badgeWidth),
-              height: px(_badgeHeight),
-              child: _StatusBadge(item: item, scale: scale),
+              left: px(_contentInset),
+              right: px(_contentInset),
+              top: px(_productTop),
+              height: px(_logoSize),
+              child: _ProductRow(item: item, scale: scale, size: px(_logoSize)),
             ),
-        ],
+            Positioned(
+              left: px(_valueInset),
+              right: px(_valueInset),
+              top: px(_valueTop),
+              height: px(_valueHeight),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _ValueBlock(
+                      label: item.dateLabel,
+                      value: item.date,
+                      scale: scale,
+                    ),
+                  ),
+                  SizedBox(width: px(_valueGap)),
+                  Expanded(
+                    child: _ValueBlock(
+                      label: item.amountLabel,
+                      value: item.amount,
+                      scale: scale,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (actions.isNotEmpty)
+              Positioned(
+                left: px(_actionInset),
+                right: px(_actionInset),
+                top: px(_actionTop),
+                height: px(_actionHeight),
+                child: _ActionStrip(
+                  actions: actions,
+                  scale: scale,
+                  onActionTap: onActionTap,
+                ),
+              ),
+            if (item.statusLabel.isNotEmpty)
+              Positioned(
+                right: 0,
+                top: px(-_badgeOverhang),
+                width: px(_badgeWidth),
+                height: px(_badgeHeight),
+                child: _StatusBadge(item: item, scale: scale),
+              ),
+          ],
+        ),
       ),
     );
   }

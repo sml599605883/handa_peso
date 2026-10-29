@@ -39,6 +39,13 @@ bool keepWebViewLoadingAfterProgress({
   return loading;
 }
 
+/// 页面顶部加载条的兜底时长。
+///
+/// `onLoadStop` / `onReceivedError` 都只覆盖「主文档走完」这一种结局：跳转被
+/// 原生接管、下载、`window.open`、弱网卡在 97% 时一条都不会来。没有兜底，
+/// 加载条就会一直挂在 H5 顶部（缺陷 reczz28SjoGTm9vy）。
+const Duration webViewLoadingFallback = Duration(seconds: 12);
+
 /// 确认用款页地址里的产品 ID。
 ///
 /// 当前服务端下发的是 `knife`（同一地址里 `redecorates` 是订单号、
@@ -104,6 +111,9 @@ class _AppWebViewPageState extends State<AppWebViewPage> {
   bool _backInFlight = false;
   bool _replacingAccount = false;
 
+  /// 顶部加载条的兜底定时器，见 [_armLoadingFallback]。
+  Timer? _loadingTimer;
+
   Uri? get _initialUri {
     final uri = Uri.tryParse(_initialUrl);
     if (uri == null ||
@@ -129,8 +139,50 @@ class _AppWebViewPageState extends State<AppWebViewPage> {
     _platform = PlatformBridge();
     _dispatcher = _createDispatcher();
     _back = H5BackHandler(closePage: _closePage);
+    // 首屏的 `onLoadStart` 不一定会来（插件只转发生命周期，不会补发）：地址
+    // 合法就先把兜底挂上，别让 `_loading` 的初值一直没人收。
+    if (_initialUri != null) _armLoadingFallback();
     AnalyticsService.logEvent('webview_open', <String, Object?>{
       'host': _initialUri?.host ?? '',
+    });
+  }
+
+  /// 每次开始加载都重挂兜底定时器。
+  void _armLoadingFallback() {
+    _loadingTimer?.cancel();
+    _loadingTimer = Timer(webViewLoadingFallback, _finishLoading);
+  }
+
+  void _cancelLoadingFallback() {
+    _loadingTimer?.cancel();
+    _loadingTimer = null;
+  }
+
+  /// 开始加载：进度条出现，兜底定时器跟着重新计时。
+  void _startLoading() {
+    if (!mounted) return;
+    _armLoadingFallback();
+    if (_loading && !_failed) return;
+    setState(() {
+      _loading = true;
+      _failed = false;
+    });
+  }
+
+  /// 收起顶部加载条的唯一出口。
+  ///
+  /// 四条收尾路径全部走这里：`onLoadStop`、`onReceivedError`、进度到 100 和
+  /// 兜底定时器；被原生接管的跳转（导航已取消，WebView 不会再有完成回调）
+  /// 也在这里收。任何一条路漏收都会让进度条一直挂在 H5 顶部，见缺陷
+  /// reczz28SjoGTm9vy。
+  void _finishLoading({bool failed = false}) {
+    _cancelLoadingFallback();
+    if (!mounted) return;
+    // 没有状态要改就别 setState：H5 的进度回调很频繁。
+    if (!_loading && (!failed || _failed)) return;
+    setState(() {
+      _loading = false;
+      if (failed) _failed = true;
     });
   }
 
@@ -338,6 +390,11 @@ class _AppWebViewPageState extends State<AppWebViewPage> {
     if (uri == null) return NavigationActionPolicy.CANCEL;
     if (_isInlineScheme(uri.scheme)) return NavigationActionPolicy.ALLOW;
 
+    // 这次导航由原生接管后取消：WebView 既不会 `onLoadStop` 也不会
+    // `onReceivedError`（主文档根本没走完），不在这里收，H5 顶部的加载条会
+    // 一直挂在屏上。先收再跳：`openTarget` 的 Future 要等目标页关闭才完成，
+    // 等它回来再收，加载条就在原生页底下多挂了一整段时间。
+    _finishLoading();
     if (uri.scheme == 'ph') {
       await _openInternal(uri.toString());
     } else {
@@ -349,10 +406,7 @@ class _AppWebViewPageState extends State<AppWebViewPage> {
   Future<void> _reload() async {
     final controller = _controller;
     if (controller == null || !identical(controller, _controller)) return;
-    setState(() {
-      _loading = true;
-      _failed = false;
-    });
+    _startLoading();
     await controller.reload();
   }
 
@@ -367,6 +421,7 @@ class _AppWebViewPageState extends State<AppWebViewPage> {
 
   @override
   void dispose() {
+    _cancelLoadingFallback();
     _controller = null;
     super.dispose();
   }
@@ -430,10 +485,7 @@ class _AppWebViewPageState extends State<AppWebViewPage> {
                       if (!mounted || !identical(controller, _controller)) {
                         return;
                       }
-                      setState(() {
-                        _loading = true;
-                        _failed = false;
-                      });
+                      _startLoading();
                     },
                     onLoadStop: (controller, url) async {
                       if (!mounted || !identical(controller, _controller)) {
@@ -442,24 +494,33 @@ class _AppWebViewPageState extends State<AppWebViewPage> {
                       // 跳转转圈一直挂到首屏出来：加载完成才收，站内跳转重复
                       // 触发时是空操作（见 `dismissNavigationLoading`）。
                       unawaited(AppNavigator.dismissNavigationLoading());
-                      final pageTitle = await controller.getTitle();
+                      // 先收顶部加载条，再取标题：`getTitle` 在 iOS 上是另一次
+                      // 平台调用，它卡住或抛错都不该把 H5 顶部的进度条留在屏上。
+                      _finishLoading();
+                      String? pageTitle;
+                      try {
+                        pageTitle = await controller.getTitle();
+                      } catch (_) {
+                        pageTitle = null;
+                      }
                       if (!mounted) return;
-                      setState(() {
-                        _loading = false;
-                        final title = pageTitle?.trim() ?? '';
-                        if (title.isNotEmpty) _title = title;
-                      });
+                      final title = pageTitle?.trim() ?? '';
+                      if (title.isEmpty) return;
+                      setState(() => _title = title);
                     },
                     onProgressChanged: (controller, progress) {
                       if (!mounted || !identical(controller, _controller)) {
                         return;
                       }
-                      setState(() {
-                        _loading = keepWebViewLoadingAfterProgress(
-                          loading: _loading,
-                          progress: progress,
-                        );
-                      });
+                      // 进度只负责收，不负责再挂：`onLoadStop` 之后 H5 还会继续
+                      // 加载图片/接口，进度回落不能把加载条重新显示出来。
+                      if (keepWebViewLoadingAfterProgress(
+                        loading: _loading,
+                        progress: progress,
+                      )) {
+                        return;
+                      }
+                      _finishLoading();
                     },
                     onReceivedError: (controller, request, error) {
                       if (!mounted ||
@@ -470,10 +531,7 @@ class _AppWebViewPageState extends State<AppWebViewPage> {
                       // 首屏打不开时不能再等加载完成，转圈立刻收掉，让用户看到
                       // 页面自己的失败提示与重试。
                       unawaited(AppNavigator.dismissNavigationLoading());
-                      setState(() {
-                        _loading = false;
-                        _failed = true;
-                      });
+                      _finishLoading(failed: true);
                     },
                     onTitleChanged: (controller, title) {
                       final value = title?.trim() ?? '';

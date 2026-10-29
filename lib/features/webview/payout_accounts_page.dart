@@ -383,11 +383,7 @@ class _PayoutAccountCard extends StatelessWidget {
                     color: AppColors.progressCardSurface,
                     child: Column(
                       children: <Widget>[
-                        _CardHeader(
-                          account: account,
-                          metrics: metrics,
-                          selected: selected,
-                        ),
+                        _CardHeader(account: account, metrics: metrics),
                         SizedBox(
                           height: metrics.size(bodyHeight),
                           child: _isCashPickup
@@ -419,6 +415,15 @@ class _PayoutAccountCard extends StatelessWidget {
                   ),
                 ),
               ),
+              // 角标压在卡片圆角裁剪和描边之上：设计稿里 16x16 的角标边与卡片
+              // 外沿重合，圆心落在 14 的圆角弧上，放在裁剪里面会被切掉右上角。
+              Positioned(
+                right: metrics.size(PayoutAccountDesign.checkboxRightInset),
+                top: metrics.size(PayoutAccountDesign.checkboxTopInset),
+                width: metrics.size(PayoutAccountDesign.checkboxSize),
+                height: metrics.size(PayoutAccountDesign.checkboxSize),
+                child: _SelectionBadge(account: account, selected: selected),
+              ),
             ],
           ),
         ),
@@ -427,16 +432,34 @@ class _PayoutAccountCard extends StatelessWidget {
   }
 }
 
+/// 卡片右上角的勾选角标（选中/未选中两态，只用切图，不画形状）。
+class _SelectionBadge extends StatelessWidget {
+  const _SelectionBadge({required this.account, required this.selected});
+
+  final PayoutAccount account;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Image.asset(
+      selected
+          ? PayoutAccountAssets.checkboxSelected
+          : PayoutAccountAssets.checkboxUnselected,
+      key: Key(
+        selected
+            ? 'payout-account-selected-${account.id}'
+            : 'payout-account-unselected-${account.id}',
+      ),
+      fit: BoxFit.fill,
+    );
+  }
+}
+
 class _CardHeader extends StatelessWidget {
-  const _CardHeader({
-    required this.account,
-    required this.metrics,
-    required this.selected,
-  });
+  const _CardHeader({required this.account, required this.metrics});
 
   final PayoutAccount account;
   final IdentityMetrics metrics;
-  final bool selected;
 
   @override
   Widget build(BuildContext context) {
@@ -472,23 +495,6 @@ class _CardHeader extends StatelessWidget {
                   ),
                 ),
               ],
-            ),
-          ),
-          Positioned(
-            right: 0,
-            top: 0,
-            width: metrics.size(PayoutAccountDesign.checkboxSize),
-            height: metrics.size(PayoutAccountDesign.checkboxSize),
-            child: Image.asset(
-              selected
-                  ? PayoutAccountAssets.checkboxSelected
-                  : PayoutAccountAssets.checkboxUnselected,
-              key: Key(
-                selected
-                    ? 'payout-account-selected-${account.id}'
-                    : 'payout-account-unselected-${account.id}',
-              ),
-              fit: BoxFit.fill,
             ),
           ),
         ],

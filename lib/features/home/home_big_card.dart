@@ -549,9 +549,14 @@ class _PeriodColumn extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        SizedBox(
-          width: 52 * scale,
+        // 设计稿的 52 只是「徽标 + 最短说明」的宽度。`coaxing` 下发的分期名
+        // 长度不定（例如 `Installment`），写死 52 会让文案在 39 像素里被硬裁
+        // 成 `Installr`；因此这里只把它当最小宽度，文案按内容撑开，整条超出
+        // 条款条宽度时再由外层 `FittedBox` 等比缩小。
+        ConstrainedBox(
+          constraints: BoxConstraints(minWidth: 52 * scale),
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Container(
@@ -575,16 +580,17 @@ class _PeriodColumn extends StatelessWidget {
                   ),
                 ),
               ),
-              Flexible(
-                child: Text(
-                  term.caption,
-                  maxLines: 1,
-                  softWrap: false,
-                  style: TextStyle(
-                    color: AppColors.homePeriodLabel,
-                    fontSize: 12 * scale,
-                    height: 14 / 12,
-                  ),
+              // 徽标与说明之间的固定间隙：内容撑开最小宽度后，`spaceBetween`
+              // 已经没有可分配的余量，两个元素会贴在一起。
+              SizedBox(width: 4 * scale),
+              Text(
+                term.caption,
+                maxLines: 1,
+                softWrap: false,
+                style: TextStyle(
+                  color: AppColors.homePeriodLabel,
+                  fontSize: 12 * scale,
+                  height: 14 / 12,
                 ),
               ),
             ],

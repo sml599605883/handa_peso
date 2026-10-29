@@ -76,6 +76,9 @@ class ReportService {
   /// 最近一次成功拿到的定位；只活在本次进程里（参考端的缓存同样不落盘）。
   ReportLocation? _lastLocation;
 
+  /// 最近一次必填项齐全的定位：反地理编码偶尔失败时用它兜底 `/dropcloth/farle`。
+  ReportLocation? _lastReportableLocation;
+
   /// 启动时调用一次：请求必要授权、登记 APNs、补报待上报的内容。
   Future<void> start() async {
     if (_started || _starting) return;
@@ -223,14 +226,20 @@ class ReportService {
   }
 
   /// 上报定位与设备详情；两者都要求登录态。
+  ///
+  /// 定位接口只有必填项齐全才发（见 [ReportPayload.locationBody]）；设备详情
+  /// 仍按原样上报，它的加密载荷里经纬度与地址是嵌套字段，缺地址不影响整条。
   Future<void> reportLocationAndDevice() async {
     if (!await _hasSession()) return;
     try {
       final location = await _locationWithFallback();
-      if (location != null && location.isValid) {
+      final reportable = await _reportableLocation(location);
+      if (reportable == null) {
+        _noteSkippedLocation(location);
+      } else {
         try {
           await gatewayClient.reportLocation(
-            body: ReportPayload.locationBody(location),
+            body: ReportPayload.locationBody(reportable),
           );
         } catch (error) {
           _log(error);
@@ -305,10 +314,14 @@ class ReportService {
   Future<void> reportCurrentLocation() async {
     if (!await _hasSession()) return;
     final location = await _locationWithFallback();
-    if (location == null || !location.isValid) return;
+    final reportable = await _reportableLocation(location);
+    if (reportable == null) {
+      _noteSkippedLocation(location);
+      return;
+    }
     try {
       await gatewayClient.reportLocation(
-        body: ReportPayload.locationBody(location),
+        body: ReportPayload.locationBody(reportable),
       );
     } catch (error) {
       _log(error);
@@ -380,12 +393,54 @@ class ReportService {
       final location = await bridge.location();
       if (location != null && location.isValid) {
         _lastLocation = location;
+        if (location.hasCompleteAddress) _lastReportableLocation = location;
       }
       return location;
     } catch (error) {
       _log(error);
       return null;
     }
+  }
+
+  /// 反地理编码失败后的重试预算。
+  ///
+  /// 申请入口会 await 一次上报，重试不能再占满一整个 [locationTimeout]，否则
+  /// 定位失败时用户要多等一倍时间；反编码正常在几百毫秒内返回。
+  static const geocodeRetryTimeout = Duration(milliseconds: 1500);
+
+  /// 取一次可以直接发 `/dropcloth/farle` 的定位。
+  ///
+  /// 原生定位成功但反地理编码失败时只回经纬度，文档要求的国家 / 国家 code /
+  /// 城市 / 街道会是空串（线上抓包里 `psychrometry` / `eyehole` /
+  /// `widemouthed` / `marbleizes` 全空就是这么来的）。原生每次调用都会重新编码，
+  /// 所以先用一小段预算重试一次；仍不完整就退回本次进程里最后一次完整的定位；
+  /// 一次都没完整过则返回 `null`，由调用方跳过整次上报——宁可这条不上报，
+  /// 也不把空必填项发给服务端。
+  Future<ReportLocation?> _reportableLocation(ReportLocation? current) async {
+    if (current != null && current.hasCompleteAddress) return current;
+    if (current != null && current.isValid) {
+      final retried = await _retryLocation();
+      if (retried != null && retried.hasCompleteAddress) return retried;
+    }
+    return _lastReportableLocation;
+  }
+
+  Future<ReportLocation?> _retryLocation() async {
+    try {
+      return await _loadLocation().timeout(geocodeRetryTimeout);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 定位必填项不全时跳过 `/dropcloth/farle`：这只是数据不完整，不是代码缺陷，
+  /// 因此只留调试信息，不往 Crashlytics 记事件。
+  void _noteSkippedLocation(ReportLocation? location) {
+    debugPrint(
+      '[HandReport] location skipped: '
+      'coordinates=${location?.isValid ?? false} '
+      'address=${location?.hasCompleteAddress ?? false}',
+    );
   }
 
   void _listenToNativeEvents() {

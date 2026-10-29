@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:handa_peso/features/home/home_big_card.dart';
 import 'package:handa_peso/features/home/home_data.dart';
@@ -137,6 +138,61 @@ void main() {
       tester.getRect(find.byKey(HomeBigCard.applyButtonKey)).top,
       closeTo(458, 0.01),
     );
+  });
+
+  testWidgets('多期分期名按内容撑开，不会被条款条裁成半截', (tester) async {
+    await _pumpCard(
+      tester,
+      _card(
+        // `coaxing` 下发的是完整分期名（截图里被裁成 `Installr`）。
+        periodTerms: const <HomePeriodTerm>[
+          HomePeriodTerm(
+            period: '2',
+            caption: 'Installment',
+            rateText: '≤0.5% / Day',
+          ),
+          HomePeriodTerm(
+            period: '3',
+            caption: 'Installment',
+            rateText: '≤0.5% / Day',
+          ),
+        ],
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+    final captions = find.text('Installment');
+    expect(captions, findsNWidgets(2));
+
+    for (var index = 0; index < 2; index++) {
+      final finder = captions.at(index);
+      final text = tester.widget<Text>(finder);
+      final paragraph = tester.renderObject<RenderParagraph>(finder);
+      // 用同一份样式量一次完整文案需要多宽：设计稿的 52 装不下 `Installment`，
+      // 写死宽度时段落只会拿到剩下的几十像素，比完整宽度窄。
+      final intrinsic = TextPainter(
+        text: TextSpan(text: text.data, style: text.style),
+        textDirection: TextDirection.ltr,
+        maxLines: 1,
+      )..layout();
+      expect(
+        intrinsic.width,
+        greaterThan(52),
+        reason: '用例前提：分期名比设计稿的 52 宽',
+      );
+      expect(
+        paragraph.size.width,
+        greaterThanOrEqualTo(intrinsic.width - 0.01),
+        reason:
+            '第 ${index + 1} 个分期名被裁断：'
+            '${paragraph.size.width} < ${intrinsic.width}',
+      );
+    }
+
+    // 文案撑开后仍在设计稿的条款条（323x58 @26,332）里，没有把卡片顶开。
+    final terms = tester.getRect(captions.first);
+    expect(terms.left, greaterThan(26));
+    expect(terms.right, lessThan(26 + 323));
   });
 
   testWidgets('点击 Apply Now 触发回调', (tester) async {

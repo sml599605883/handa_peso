@@ -81,17 +81,33 @@ abstract final class ReportPayload {
   static const _memoryTotal = 'overwarms';
   static const _memoryFree = 'ineffabilities';
 
-  /// 位置上报的请求体；文档把经纬度列为必填，缺失时由调用方跳过整次上报。
+  /// 位置上报的请求体。
+  ///
+  /// 文档《上报位置信息》把 `psychrometry` / `eyehole` / `widemouthed` /
+  /// `carnets` / `polyembryonies` / `marbleizes` 列为必填，只有 `sardonic`
+  /// （省）可选：调用方必须先确认 [ReportLocation.hasCompleteAddress]，否则
+  /// 这条请求不该发（空必填项会被接口审计判成缺陷）。可选字段取不到时不发
+  /// 空串，留给服务端按“未提供”处理。
   static Map<String, dynamic> locationBody(ReportLocation location) =>
       <String, dynamic>{
-        _province: location.province,
+        if (location.province.isNotEmpty) _province: location.province,
         _countryCode: location.countryCode,
         _country: location.country,
-        _street: location.street,
+        _street: location.streetLabel,
         _latitude: location.latitude,
         _longitude: location.longitude,
         _city: location.city,
       };
+
+  /// 位置上报的必填键；审计与测试用它确认请求体里没有空值。
+  static const locationRequiredFields = <String>[
+    _countryCode,
+    _country,
+    _street,
+    _latitude,
+    _longitude,
+    _city,
+  ];
 
   /// 风控埋点的请求体；时间戳按文档示例以秒为单位。
   static Map<String, dynamic> riskBody({

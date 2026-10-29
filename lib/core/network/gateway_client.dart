@@ -435,10 +435,16 @@ class GatewayClient extends GatewayTransport {
     );
   }
 
-  /// 用历史订单重新下单。
+  /// 用历史订单重新下单（原卡重试）。
   ///
-  /// 订单号字段按接口文档《原卡重试确认订单》取 `redecorates`——订单列表、
-  /// 换卡、H5 桥读取订单号用的也是这个字段，`chattinesses` 在文档里不存在。
+  /// 契约按接口文档《原卡重试确认订单》：`POST /dropcloth/cotype`，表单里只有
+  /// 一个必填参数 `redecorates`（订单号）；`chattinesses` 在文档里不存在，
+  /// `api_doc_get_map` 的字段映射同样是 `orderNo → redecorates`。
+  ///
+  /// 文档没有要求该接口对请求体做 AES 加密（全部 78 篇文档里只有
+  /// 《设备信息上报详细信息 [上报数据需要加密]》标了加密，且加密的是
+  /// `indulgences` 整包）。因此这里维持表单明文：客户端单方面加密会让服务端
+  /// 拿到不可解析的订单号，加密方案需要后端先给出字段名与密钥约定。
   Future<GatewayReply> reorderExistingLoan({required String orderNo}) {
     return write(
       GatewayRoutes.userReloan,

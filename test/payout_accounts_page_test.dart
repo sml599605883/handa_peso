@@ -158,6 +158,83 @@ void main() {
     );
   });
 
+  testWidgets('勾选角标贴在卡片右上角，不被卡片圆角裁掉', (tester) async {
+    tester.view.physicalSize = const Size(375, 939);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      GetMaterialApp(
+        home: PayoutAccountsPage(
+          catalog: _catalog,
+          productId: 'p1',
+          orderNo: 'o1',
+          switchAccount: ({required orderNo, required cardId}) async => '',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final bank = find.byKey(const Key('payout-account-card-bank-1'));
+    final bankRect = tester.getRect(bank);
+    final selected = find.byKey(const Key('payout-account-selected-bank-1'));
+    // 设计稿 04-01：16x16 角标，右边/上边与卡片外沿重合。
+    expect(
+      tester.getRect(selected),
+      Rect.fromLTWH(bankRect.right - 16, bankRect.top, 16, 16),
+    );
+    // 角标不能放进卡片的圆角裁剪里：放进去右上角会被切掉一块（reczz28SjhwDQe5G）。
+    expect(
+      find.descendant(
+        of: find.descendant(of: bank, matching: find.byType(ClipRRect)),
+        matching: selected,
+      ),
+      findsNothing,
+    );
+
+    // 未选中的角标用同一套几何（设计稿 E-wallet 卡片同样贴角）。
+    final wallet = find.byKey(const Key('payout-account-card-wallet-1'));
+    final walletRect = tester.getRect(wallet);
+    final unselected = find.byKey(
+      const Key('payout-account-unselected-wallet-1'),
+    );
+    expect(
+      tester.getRect(unselected),
+      Rect.fromLTWH(walletRect.right - 16, walletRect.top, 16, 16),
+    );
+  });
+
+  testWidgets('勾选角标画在卡片描边之上', (tester) async {
+    tester.view.physicalSize = const Size(375, 939);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      GetMaterialApp(
+        home: PayoutAccountsPage(
+          catalog: _catalog,
+          productId: 'p1',
+          orderNo: 'o1',
+          switchAccount: ({required orderNo, required cardId}) async => '',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final selected = find.byKey(const Key('payout-account-selected-bank-1'));
+    final stackFinder = find
+        .ancestor(of: selected, matching: find.byType(Stack))
+        .first;
+    final children = tester.widget<Stack>(stackFinder).children;
+    // 卡片 Stack 的绘制顺序：圆角裁剪的卡片内容 → 描边 → 角标。角标必须最后
+    // 画，否则描边会横穿角标右上角。
+    expect(children.length, 3);
+    expect(
+      find.descendant(of: find.byWidget(children.last), matching: selected),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('提交选中的已有账户后回传新 H5 地址并离开原生页', (tester) async {
     tester.view.physicalSize = const Size(375, 939);
     tester.view.devicePixelRatio = 1;

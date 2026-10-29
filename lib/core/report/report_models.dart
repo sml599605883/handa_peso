@@ -64,6 +64,26 @@ class ReportLocation {
   final String permissionStatus;
 
   bool get isValid => latitude.isNotEmpty && longitude.isNotEmpty;
+
+  /// `/dropcloth/farle` 的 `widemouthed`（字段映射里的 `feature_name`）。
+  ///
+  /// 原生侧这一项取的是 `placemark.thoroughfare`，空旷地带/园区坐标经常为空，
+  /// 而同一份 placemark 拼出来的 [fullAddress] 几乎总有值；文档把该字段标成
+  /// 必填，所以街道缺失时用完整地址兜底，避免把空串发上去。
+  String get streetLabel => street.isNotEmpty ? street : fullAddress;
+
+  /// 定位上报（`/dropcloth/farle`）的必填项是否齐全。
+  ///
+  /// 文档里必填的是 `psychrometry`（国家 code）、`eyehole`（国家）、
+  /// `widemouthed`（街道）、`carnets`（纬度）、`polyembryonies`（经度）、
+  /// `marbleizes`（市）；`sardonic`（省）可选。CLGeocoder 反地理编码失败时
+  /// 原生只能给出经纬度，此时不能把其余必填项以空串上报。
+  bool get hasCompleteAddress =>
+      isValid &&
+      countryCode.isNotEmpty &&
+      country.isNotEmpty &&
+      city.isNotEmpty &&
+      streetLabel.isNotEmpty;
 }
 
 /// 设备快照：上报所需的全部本机事实。
