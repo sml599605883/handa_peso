@@ -27,7 +27,14 @@ String creditReviewProductId(Object? arguments) {
 }
 
 /// 设计稿 04-02 里承载百分比文案的起始块宽度（轨道 303x12，文案块 32x12）。
+///
+/// 0% 时填充块正好 32 宽、文案右侧留 6，复刻设计稿那一帧；进度增长后文案跟着
+/// 填充块的头部一起右移，所以这个宽度同时是填充块的最小宽度。
 const double _progressChipWidth = 32.0;
+
+/// 百分比文案距填充块头部（右端）的距离，取自设计稿 04-02：文案右沿距
+/// 起始块右沿 6（750 稿 12px）。
+const double _progressLabelTrailing = 6.0;
 
 /// 进度条填充宽度（设计坐标，单位与 [trackWidth] 相同）。
 ///
@@ -171,15 +178,18 @@ class _CreditReviewPageState extends State<CreditReviewPage> {
                           key: const Key('credit-review-progress-fill'),
                           width: px(progressFillWidth),
                           height: px(_progressHeight),
-                          alignment: Alignment.centerLeft,
-                          padding: EdgeInsets.only(left: px(15), right: px(2)),
+                          alignment: Alignment.centerRight,
+                          padding: EdgeInsets.only(
+                            left: px(2),
+                            right: px(_progressLabelTrailing),
+                          ),
                           decoration: BoxDecoration(
                             gradient: AppColors.creditReviewProgressGradient,
                             borderRadius: BorderRadius.circular(px(2)),
                           ),
                           child: FittedBox(
                             fit: BoxFit.scaleDown,
-                            alignment: Alignment.centerLeft,
+                            alignment: Alignment.centerRight,
                             child: Text(
                               '$_progress%',
                               key: const Key('credit-review-percent'),

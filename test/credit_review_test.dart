@@ -174,11 +174,17 @@ void main() {
 
     final fill = find.byKey(const Key('credit-review-progress-fill'));
     final track = find.byKey(const Key('credit-review-progress'));
+    final percent = find.byKey(const Key('credit-review-percent'));
     expect(tester.getSize(track), const Size(303, 12));
     // 起始：0% 只有起始块，填充贴着轨道左端。
     expect(find.text('0%'), findsOneWidget);
     expect(tester.getSize(fill), const Size(32, 12));
     expect(tester.getTopLeft(fill), tester.getTopLeft(track));
+    // 0% 时文案落在起始块尾端，右沿距填充块右沿 6（设计稿 04-02 的几何）。
+    final startPercent = tester.getRect(percent);
+    expect(tester.getRect(fill).right - startPercent.right, closeTo(6, 0.5));
+    expect(startPercent.left, greaterThan(tester.getRect(fill).left + 5));
+    expect(startPercent.right, lessThan(tester.getRect(fill).right - 5));
 
     await tester.pump(const Duration(milliseconds: 20));
 
@@ -187,6 +193,12 @@ void main() {
     expect(tester.getSize(fill).width, closeTo(303 * 0.99, 0.01));
     expect(tester.getSize(fill).height, 12);
     expect(tester.getTopLeft(fill), tester.getTopLeft(track));
+
+    // 文案跟着填充块头部走：右沿仍距头部 6，横向明显右移且不越出轨道。
+    final endPercent = tester.getRect(percent);
+    expect(tester.getRect(fill).right - endPercent.right, closeTo(6, 0.5));
+    expect(endPercent.left - startPercent.left, greaterThan(250));
+    expect(endPercent.right, lessThanOrEqualTo(tester.getRect(track).right));
   });
 
   testWidgets('等待授信页左上角返回键回到来源页', (tester) async {
